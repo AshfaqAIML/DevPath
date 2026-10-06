@@ -9,7 +9,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  // Production (Vercel) runs PostgreSQL — DATABASE_URL must be a
+  // postgres:// connection string (pooled). Local SQLite files are
+  // NOT supported by this schema; point local .env at Postgres too.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
