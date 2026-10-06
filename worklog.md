@@ -215,3 +215,58 @@ Unresolved issues / risks & priority recommendations for next phase:
 - Roadmap steps are admin-editable only via DB/seed; an admin steps editor (per-step CRUD + reorder) would complete the content lifecycle.
 - The HttpLab response viewer truncates non-JSON bodies at 4000 chars (404 HTML pages) — fine for teaching, note if it ever matters.
 - Analytics summary does JS-side day bucketing — fine at demo scale; move to SQL groupBy if event volume grows.
+
+---
+Task ID: 5
+Agent: Z.ai Code (main agent, scheduled dev round)
+Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features). Also re-verified the original spec (upload/prompt.docx) against the live implementation.
+
+Work Log:
+- STATUS ASSESSMENT (pre-work): read worklog; dev server healthy (all 200s, zero runtime errors); QA sweep via agent-browser across home / simulators / both simulators / library / admin: all render, ZERO console errors/warnings, ESLint clean, no viewport overflow → stable → feature round per mandate.
+- SPEC COMPLIANCE re-check (user re-supplied the original prompt as upload/prompt.docx): verified live API data (15 workshops / 11 career paths / 44 mini courses / 27 guides / 3 simulators + "New" badge — DB-derived), ResourceCategoryCard props exactly match the spec list (title, description, count, icon, href, badge, badgeVariant), badge is a genuine shadcn Badge (not baked into image), Prisma Category table is the structured config layer (countLabel/icon/route/badge/badgeVariant/order/enabled/seo all admin-manageable), local icons under /public/icons/{slug}/, next/image with fill+sizes+alt. Full compliance; details in the round report.
+
+SECURITY HARDENING — admin auth (worklog's #1 outstanding upgrade, done pragmatically):
+- src/lib/platform.ts: session-token helpers — createAdminSessionToken() mints `${exp}.${HMAC-SHA256(exp, ADMIN_PASSWORD)}` (8h TTL); verifyAdminSessionToken() does timing-safe comparison + expiry check; isAdminRequest() now accepts EITHER the legacy `x-admin-key` header (programmatic/curl) OR the signed httpOnly `devpath_admin` cookie. ADMIN_COOKIE exported.
+- /api/admin/auth: POST sets the httpOnly SameSite=lax cookie (and NO LONGER returns the password in the body); GET verifies; new DELETE clears the cookie (logout).
+- AdminPanel: AuthGate → POST → cookie; state is a boolean (session restore via GET on mount); logout → DELETE; authedFetch no longer attaches the header (cookie travels automatically); ContentManager/AnalyticsTab refactored to cookie auth. sessionStorage credential REMOVED — verified in-browser: sessionStorage empty after login, cookie invisible to document.cookie.
+- curl matrix verified: wrong pw 401 → correct pw Set-Cookie (HttpOnly, SameSite=lax, Max-Age=28800) → GET authorized:true → admin APIs with cookie only 200 (incl. ?all=1 drafts) → DELETE clears → 401 after logout.
+
+NEW FEATURE 1 — SQL Query Sandbox (3rd playable simulator, activates Simulators to "3 simulators", 100 total published):
+- NEW src/lib/sql-engine.ts (~700 lines, zero dependencies, runs client-side): full tokenizer (strings w/ '' escapes, quoted idents, numbers, -- comments), recursive-descent parser and executor for SELECT [DISTINCT] items FROM table [AS alias] [INNER|LEFT [OUTER] JOIN t ON expr]* [WHERE] [GROUP BY] [HAVING] [ORDER BY expr|n|alias ASC/DESC] [LIMIT n OFFSET m]; expressions: AND/OR/NOT, = != <> < > <= >=, IS [NOT] NULL, [NOT] LIKE, [NOT] IN, [NOT] BETWEEN, + - * /, aggregates COUNT(*)/COUNT(col)/SUM/AVG/MIN/MAX, qualified refs t.col, t.* and *; NULL semantics (NULLs-first-ASC ordering like SQLite), numeric coercion, case-insensitive identifier matching while preserving original spelling for output labels; SqlError carries position + teaching hint; did-you-mean suggestions via Levenshtein for tables AND columns; ambiguity detection ("Qualify it as developers.id").
+- NEW src/lib/sql-dataset.ts: DevPath-themed teaching DB (developers 14×6, courses 16×7, enrollments 28×5 — ids line up so JOINs tell a story), 6 result-shape-verified missions (First contact → Choose columns → WHERE → ORDER BY+LIMIT → GROUP BY COUNT → 3-table JOIN, checks are value-based so any equivalent query passes), 8 one-click presets (each teaches a clause).
+- NEW src/components/platform/SqlLab.tsx (~800 lines): overlay syntax-highlighted editor (transparent textarea over highlighted <pre>, synced line-number gutter + scroll, hidden textarea scrollbar for wrap alignment, ⌘/Ctrl+Enter to run, Tab inserts 2 spaces), schema browser (expandable tables, type chips, click-to-insert queries), results table (sticky header, zebra, NULL italic, rows/cols/ms badges, empty-result teaching state), error panel (message + Line·char position + caret line under the offending text + amber hint + did-you-mean), missions mode (sidebar w/ solved checks, briefing, hint + solution reveal with "Load into editor", auto-check on every run, auto-advance, trophy chip), free-play query presets + recent-queries history (10, click to restore), copy/clear actions.
+- Integration: registry entry "sql-query-sandbox": "sql" + SimulatorKind union; SPOTLIGHT_SIM now the SQL sandbox (hero spotlight pill, registry-driven); PlatformShell dispatches SqlLab; ItemDetailDialog "Launch sandbox" CTA, GlobalSearch Play chip, ResourceItemCard halo, My Library recents all pick it up generically via the registry. All three simulators now push a recent entry on mount (pushRecent added to FlexboxSimulator + HttpLab too — direct sim launches previously missed the recents strip).
+- Seed: SQL Query Sandbox draft published + featured with rich description; applied via targeted DB patch (NO reseed — analytics + view counts preserved). prisma/seed.ts updated to match.
+- Engine validated with a 43-case scratch script (basics, aliases, LIKE/IN/BETWEEN, aggregates, GROUP BY/HAVING, DISTINCT, joins incl. LEFT with NULL padding, positional ORDER BY, comments, keyword case-insensitivity, 9 error cases with hints, all 6 mission solutions) — 43/43 after fixing one real tokenizer bug (identifiers were uppercased, corrupting alias labels) and two wrong test expectations. Scratch script kept OUT of the repo (/home/z/.scratch).
+
+NEW FEATURE 2 — Admin roadmap steps editor (completes the content lifecycle, worklog recommendation):
+- PATCH /api/resources/[id] now accepts `steps` (zod-validated array ≤30 of {title ≤120, detail ≤600, hours 0–2000}); stored as JSON string; response now returns the parsed ResourceItemView (toResourceItemView exported from platform.ts) instead of the raw row.
+- AdminPanel ContentManager: ListOrdered action button on roadmap rows (and rows with steps), StepsEditorDialog with per-step title/detail/hours inputs, move up/down, remove, add step, live "N steps · ≈Nh total" summary, validation gate, Save → PATCH → invalidate. Roadmap rows in the content table now show their step count.
+- End-to-end verified: edited Frontend Developer Roadmap 10→11 steps via the dialog UI (reorder + add + save), API returned 11 steps with the new step last, learner deep-link dialog showed the 11-step learning path (progress "2/11"), then restored to exactly the seed state (10 steps, last "Portfolio projects").
+
+STYLING POLISH:
+- ResourceItemCard: roadmap cards now surface real structure — emerald "N steps · ~Xh" chip (Milestone icon) computed from steps data (verified: Backend roadmap shows "10 steps · ~325h").
+- globals.css: branded ::selection tint (teal/28%), smooth anchor scrolling (both disabled under prefers-reduced-motion).
+- SqlLab VLM-driven refinements (7.5→8.5/10): muted type-badge colors (border/20 bg/[0.06]), bolder schema table names + more list breathing room, Run button shadow/active affordance, editor height 56→48 so results sit above the fold.
+
+Stage Summary (verification results — all via real UI interactions unless noted):
+- Cookie auth: login → console unlocked with EMPTY sessionStorage; httpOnly cookie invisible to JS; logout → gate returns. curl matrix 7/7 (see above).
+- SQL Lab: initial preset runs (14 rows, 1ms); did-you-mean error ("Unknown column 'nam'. Did you mean 'name'? developers: id, name, …"); parse error renders "Line 3 · character 28" + caret line "WHERE role = 'frontend' AND / ^"; ALL 6 missions solved via fill+Run through the UI (trophy 6/6, "All missions cleared", auto-advance observed between missions); GROUP BY+HAVING preset returns 6 topic groups; editor wraps in sync with the highlight layer on a 130-char single-line query (scrollWidth 712 = clientWidth); missions mode + homepage at 390px mobile: scrollWidth exactly 390, no overflow.
+- Hub counts: home/nav/footer all read 3 simulators; hero spotlight shows "New: the SQL Query Sandbox"; 100 published resources total; roadmap step-hour chips render in trending/picks.
+- Library recents include the SQL sandbox (pushRecent); ⌘K palette lists it with Play chip; admin Analytics tab lists sql-query-sandbox in Simulator engagement with launches/cleared events recorded (challenge_complete for all 6 missions).
+- Final sweep across /, /?category=simulators, all three simulator views, /?view=library, /?category=roadmaps: ZERO console errors/warnings. ESLint clean. dev.log all 200s.
+- VLM QA: SqlLab free play 7.5→8.5/10 after fixes; missions mode 8/10 (remaining nitpicks: dev-overlay artifact + a screenshot-caught toast, not app bugs; the "horizontal overflow" claim was disproved by direct DOM measurement).
+- QA-scripting notes for future agents: React controlled textareas need `agent-browser fill`, not raw JS value+input events; Radix Select/tabs need real clicks — use snapshot → `agent-browser click e<ref>`; `agent-browser set viewport W H` (not `viewport`), `device` needs macOS.
+
+Key artifacts added/changed this round:
+- NEW: src/lib/sql-engine.ts, src/lib/sql-dataset.ts, src/components/platform/SqlLab.tsx.
+- UPDATED: src/lib/platform.ts (session tokens + isAdminRequest cookie path + exported toResourceItemView), src/app/api/admin/auth/route.ts (cookie issue/verify/logout, no password in body), src/app/api/resources/[id]/route.ts (steps PATCH + parsed response), src/lib/simulators.ts (sql kind + spotlight), src/components/platform/{PlatformShell,AdminPanel,ResourceItemCard,FlexboxSimulator,HttpLab}.tsx, prisma/seed.ts (published SQL sandbox), src/app/globals.css (selection tint, smooth scroll), /home/z/.scratch/{sql-test.ts,publish-sql-sandbox.ts} (not in repo).
+- QA screenshots: download/qa-sqlab-{first-run,missions-complete,freemode,mobile,final}.png, qa-admin-analytics-sql.png.
+
+Unresolved issues / risks & priority recommendations for next phase:
+- Admin auth is now httpOnly-cookie + HMAC-signed + expiring, but still single-user; NextAuth credentials provider + real User accounts remain the eventual upgrade if multi-user is needed (cross-device library sync would come with it — library is still localStorage/device-local).
+- Single-route sandbox constraint unchanged: canonical routes (/masterclass …) stay DB-stored; in-app navigation uses /?category=slug.
+- Simulators count is now 3/4 published — the 4th draft (Kubernetes Cluster Simulator) has no sandbox yet; a mini-service or in-browser cluster-topology simulator would complete the set.
+- SQL engine scope: no subqueries/CTEs/window functions (deliberate teaching subset); the read-only guard blocks writes by design.
+- Analytics event volume is fine at demo scale; day bucketing is still JS-side.
+- Next ideas: sitemap.xml + per-category OG images; keyboard-shortcut hint on SqlLab ("?" is global already); export mission progress; admin CSV import.
