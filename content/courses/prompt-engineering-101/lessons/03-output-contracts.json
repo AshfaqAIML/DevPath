@@ -1,0 +1,53 @@
+{
+  "title": "Output Contracts: JSON or It Didn't Happen",
+  "slug": "03-output-contracts",
+  "objective": "After this lesson you will be able to specify machine-readable outputs (JSON schemas, enums, delimiters), parse model output defensively (fences, prose, repair), and choose the strictness level each consumer needs.",
+  "why": "Model output feeds code: routers switch on categories, UIs render fields, databases store rows. Prose answers break pipelines — 'Category: billing (I think?)' crashes parsers. Contracts convert creativity into interfaces: demand exact shapes, parse defensively anyway, and match strictness to the consumer (code needs schemas, humans need readability).",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Demand the shape, exactly" },
+    { "t": "p", "text": "Specify **keys, types, enums, and nothing-else clauses**: `Output JSON exactly {\"category\": one of [billing, shipping, returns], \"confidence\": 0-1}. No prose, no markdown, no extra keys.` Each clause deletes a failure: enums kill invented labels, types kill 'high' instead of 0.9, nothing-else kills chatty prefixes. Vague shape requests ('respond in JSON') still admit prose-wrapped JSON — exactness is the whole game." },
+    { "t": "code", "lang": "text", "code": "OUTPUT CONTRACT:\nRespond with EXACTLY this JSON object, no surrounding text:\n{\"category\": \"billing\" | \"shipping\" | \"returns\",\n \"confidence\": <number 0..1>,\n \"reason\": \"<12 words max>\"}\nForbidden: markdown fences, explanations, extra keys, null confidence.", "caption": "Contract anatomy: exact keys, enums, ranges, and explicit forbiddens" },
+    { "t": "h", "text": "Parse defensively anyway" },
+    { "t": "p", "text": "Contracts reduce violations; they don't eliminate them. The defensive parser tries, in order: direct `JSON.parse`; extract the first `{…}`/`[…]` span; strip markdown fences; repair trailing commas; and only then **quarantine with the raw text preserved** (the data-pipeline discipline from OpenDataLoader, applied to model output). Never `eval`, never silent defaults — a defaulted category is a lie with good formatting." },
+    { "t": "code", "lang": "js", "code": "// Defensive JSON extraction: direct → fenced → span → quarantine\nfunction extractJSON(raw) {\n  const attempts = [\n    () => JSON.parse(raw),\n    () => JSON.parse(raw.replace(/^```(?:json)?\\n?|\\n?```$/g, \"\").trim()),\n    () => JSON.parse(raw.slice(raw.indexOf(\"{\"), raw.lastIndexOf(\"}\") + 1)),\n  ];\n  for (const tryIt of attempts) {\n    try { return { ok: true, value: tryIt() }; } catch { /* next */ }\n  }\n  return { ok: false, raw }; // quarantine with evidence, never defaults\n}\n// Contract enforcement (keys + enums) happens AFTER parsing succeeds.", "caption": "Parse in layers, quarantine with evidence — silent defaults forbidden" },
+    { "t": "h", "text": "Strictness levels per consumer" },
+    { "t": "p", "text": "Match strictness to what reads the output. **Code paths** (routers, DB writes): strictest — enums, types, nothing-else, plus schema validation post-parse (Ch.3 of OpenDataLoader thinking). **Human review queues**: medium — structured but readable (bullets, short fields). **Exploratory/chat**: loose — readability first. Escalating strictness everywhere wastes effort and degrades quality; relaxing it on code paths breaks production." },
+    { "t": "practice", "sim": "js-playground", "title": "Break the parser, then fix the contract", "query": "function extractJSON(raw) {\n  const attempts = [\n    () => JSON.parse(raw),\n    () => JSON.parse(raw.replace(/^```(?:json)?\\n?|\\n?```$/g, '').trim()),\n    () => JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)),\n  ];\n  for (const tryIt of attempts) {\n    try { return { ok: true, value: tryIt() }; } catch (e) { /* next */ }\n  }\n  return { ok: false, raw };\n}\nconst cases = [\n  '{\"category\": \"billing\"}',\n  '```json\\n{\"category\": \"shipping\"}\\n```',\n  'I think it is {\"category\": \"returns\"} honestly',\n  'Category: billing (probably)',\n];\nfor (const c of cases) {\n  const r = extractJSON(c);\n  console.log((r.ok ? 'PARSED ' + JSON.stringify(r.value) : 'QUARANTINED ' + JSON.stringify(c)));\n}", "note": "Run it: expect PARSED ×3 (direct, fenced, embedded) then QUARANTINED for the prose one — which no contract wording can fully prevent, hence quarantine-with-evidence as the final layer." },
+    { "t": "keytakeaways", "items": ["Contracts: exact keys, enums, types, nothing-else clauses — vagueness here breaks pipelines", "Parse in layers (direct → fence → span → quarantine); never eval, never silent defaults", "Strictness follows the consumer: code strictest, review medium, chat loose"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice parser on the four cases and record which layer catches each. (b) Add a fifth case with a trailing comma ('{\"a\": 1,}') — observe quarantine, then add a repair layer (trailing-comma strip) and re-run. (c) Write the output contract for the returns decision (approved bool, reason ≤12 words, next_step enum) with two forbiddens.",
+    "hints": [
+      "Layer mapping: direct → case 1; fence-strip → case 2; span-extract → case 3; quarantine → case 4. Say it explicitly per case.",
+      "Repair layer: .replace(/,(\\s*[}\\]])/g, '$1') before parsing — insert as a new attempt between span and quarantine. Re-run: case 5 now PARSED.",
+      "Contract needs: exact keys with types, enum for next_step ([label, escalate, refund]), ≤12-word reason, forbiddens (no prose, no extra keys)."
+    ],
+    "solution": "// (a) layers: direct, fence, span, quarantine (in order).\n// (b) repair attempt: raw.replace(/,(\\s*[}\\]])/g, '$1') → case 5 PARSED.\n// (c) OUTPUT: JSON exactly {\"approved\": bool, \"reason\": \"≤12 words\",\n//     \"next_step\": \"label\"|\"escalate\"|\"refund\"}. Forbidden: prose, extra keys.",
+    "why": "Layered parsing plus contract authoring is the complete output discipline: demand exactly, accept defensively, quarantine honestly. The trailing-comma repair shows the layer list is extensible by evidence, not fixed.",
+    "code": "// Repair-layer pattern (insert before quarantine):\n// () => JSON.parse(raw.replace(/,(\\s*[}\\]])/g, '$1'))",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Respond in JSON' still yields prose-wrapped JSON. Missing contract clauses?",
+      "options": ["Nothing — models can't do JSON", "Exact keys + enums + nothing-else/forbidden clauses (no prose, no fences, no extra keys)", "Longer prompt", "More examples"],
+      "answer": 1,
+      "explain": "Shape requests without exactness admit decorated JSON. Enums kill invented labels, nothing-else kills chatty wrappers."
+    },
+    {
+      "q": "Parser should handle unparseable output by…",
+      "options": ["Defaulting to the most common category", "Quarantining with raw text preserved — silent defaults are lies with formatting", "Retrying forever", "eval()"],
+      "answer": 1,
+      "explain": "Defaults corrupt downstream silently; eval executes attacker-influenced text. Quarantine preserves evidence for tuning and audit."
+    },
+    {
+      "q": "Strict JSON schemas for exploratory chat output. Verdict?",
+      "options": ["Always correct", "Mismatched strictness: code paths need schemas, chat needs readability — escalating everywhere wastes effort and quality", "Schemas are free", "Chat needs stricter"],
+      "answer": 1,
+      "explain": "Strictness follows the consumer. Uniform strictness taxes quality where humans read and under-protects where code parses — match, don't maximize."
+    }
+  ],
+  "summary": "Demand exact shapes, parse in defensive layers, quarantine honestly, and calibrate strictness to the consumer. Contracts turn creativity into interfaces.",
+  "next": "Shapes secured — now steer behavior with examples: selection, order, and the surprising power of negatives. Next: few-shot mastery."
+}

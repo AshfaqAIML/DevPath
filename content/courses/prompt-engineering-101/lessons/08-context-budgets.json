@@ -1,0 +1,53 @@
+{
+  "title": "Context Budgets: Relevance Over Volume",
+  "slug": "08-context-budgets",
+  "objective": "After this lesson you will be able to budget context by relevance (not volume), estimate token costs with the chars/4 heuristic, dedupe and order context for recency/primacy effects, and cut context deliberately when over budget.",
+  "why": "'Just paste the whole manual' works until it doesn't: costs scale linearly, latency climbs, relevant facts drown among irrelevant ones (lost-in-the-middle), and stale context contradicts fresh. Production prompting is an economics of attention — every token must justify itself, and this lesson is the accounting.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Token math: chars/4 and dollars" },
+    { "t": "p", "text": "Estimate first: **≈1 token per 4 characters** of English prose (code/Unicode denser). A 20,000-character manual ≈ 5,000 tokens; at $X/1K input tokens, each call costs 5X — times thousands of calls. Budgets follow: reserve ~60% for retrieved/task content, ~20% instructions + examples, ~20% headroom for output. Estimates precede structures: measure with the counter before designing what fits." },
+    { "t": "code", "lang": "js", "code": "// Token/cost estimator: chars/4 heuristic + budget check (plain JS)\nfunction estimateTokens(text) { return Math.ceil(text.length / 4); }\nfunction budgetCheck(parts, budget, pricePer1k) {\n  const rows = parts.map((p) => ({ name: p.name, tokens: estimateTokens(p.text) }));\n  const total = rows.reduce((s, r) => s + r.tokens, 0);\n  return { rows, total, budget, over: total > budget,\n    costPer1kCalls: ((total / 1000) * pricePer1k * 1000).toFixed(2) + \" $/1k calls\" };\n}\n// budgetCheck([{name:'policy', text}, {name:'ticket', text}], 4000, 0.005)\n// → per-part tokens, total, over-budget flag, cost projection.", "caption": "Estimate before structuring: parts, totals, flags, projected spend" },
+    { "t": "h", "text": "Relevance ranking beats dumping" },
+    { "t": "p", "text": "Context quality beats quantity: rank candidate passages by relevance (keyword overlap, recency, source authority) and include top-k only. Three ranking rules: **recency** (fresh policy supersedes — order newest last for recency weight, Ch.4), **authority** (policy text outranks forum quotes — label sources), **diversity** (three perspectives beat three paraphrases of one — dedupe near-duplicates by overlap)." },
+    { "t": "h", "text": "Lost in the middle: position effects" },
+    { "t": "p", "text": "Models attend unevenly: **primacy** (early content) and **recency** (late content) dominate; middles blur. Exploit deliberately: instructions first (primacy for rules), the decisive evidence last (recency for judgment), supporting detail in the middle. Never bury the one critical constraint mid-prompt — position is a control surface, not an accident." },
+    { "t": "code", "lang": "js", "code": "// Context assembler: rank, dedupe, position deliberately (plain JS)\nfunction assembleContext(passages, budgetChars) {\n  const seen = new Set();\n  const ranked = passages\n    .filter((p) => p.relevance > 0.2)                       // relevance floor\n    .sort((a, b) => b.relevance - a.relevance);\n  const picked = [];\n  let used = 0;\n  for (const p of ranked) {                                 // diversity: skip near-dupes\n    const key = p.text.slice(0, 60);\n    if (seen.has(key)) continue;\n    seen.add(key);\n    if (used + p.text.length > budgetChars) break;          // hard budget cap\n    picked.push(p);\n    used += p.text.length;\n  }\n  return picked; // caller orders: rules first, evidence last (recency)\n}", "caption": "Floor, rank, dedupe, cap — relevance pipeline in twelve lines" },
+    { "t": "practice", "sim": "js-playground", "title": "Spend the budget", "query": "function estimateTokens(text) { return Math.ceil(text.length / 4); }\nfunction assemble(names, budgetChars) {\n  const picked = [];\n  let used = 0;\n  for (const p of names) {\n    if (used + p.text.length > budgetChars) break;\n    picked.push(p.name);\n    used += p.text.length;\n  }\n  return { picked, used, tokens: estimateTokens(names.map((p) => p.text).join('').slice(0, used)) };\n}\nconst passages = [\n  { name: 'policy-v3', text: 'x'.repeat(1200) },\n  { name: 'ticket', text: 'x'.repeat(400) },\n  { name: 'forum-quote', text: 'x'.repeat(2000) },\n  { name: 'old-policy-v1', text: 'x'.repeat(1200) },\n];\nconsole.log(JSON.stringify(assemble(passages, 2000)));", "note": "Run it: expect picked [policy-v3, ticket] with used 1600 (forum-quote's 2000 exceeds remaining 400 — skipped, and old-policy never reached). Budget caps are ruthless by design: rank well, because the cap keeps only the head." },
+    { "t": "keytakeaways", "items": ["Estimate with chars/4 before structuring; budget ~60/20/20 content/instructions/headroom", "Rank by relevance/recency/authority/diversity — include top-k, never dumps", "Position deliberately: rules first (primacy), decisive evidence last (recency), support middle", "Hard caps with dedupe; stale context contradicts fresh — version and prefer recency"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice assembler and explain why forum-quote is skipped (remaining budget math). (b) Reorder passages by a relevance ranking of your design (policy-v3 0.9, ticket 0.95, forum 0.3, old-v1 0.1, floor 0.2) and state the picked set under a 2000-char cap. (c) State where the decisive return-policy sentence goes (first/middle/last) and why.",
+    "hints": [
+      "Skipped math: 2000 − 1200 − 400 = 400 remaining < 2000 needed → break (hard cap, no partials). Old-v1 never evaluated.",
+      "Ranked: ticket (0.95), policy-v3 (0.9), forum (0.3); old-v1 (0.1) below floor 0.2 → dropped. Cap 2000: ticket 400 + policy 1200 = 1600, forum needs 2000 > 400 left → picked [ticket, policy-v3].",
+      "Decisive sentence last (recency for judgment); rules first (primacy); support middle. Position is control."
+    ],
+    "solution": "// (a) 400 chars remain, forum needs 2000 → hard break; old-v1 unevaluated.\n// (b) floor drops old-v1; ranked ticket+policy picked (1600/2000); forum skipped.\n// (c) decisive evidence last (recency), rules first (primacy).",
+    "why": "Budget mechanics (floors, caps, ordering) are resource allocation, the chapter's real skill: every token justified, stale excluded, decisive positioned. The math is simple; the discipline of applying it is the lesson.",
+    "code": "// Ranking + floor pattern (playground): filter, sort desc, cap loop.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Paste the whole 200-page manual' as context. Problems?",
+      "options": ["None — more is better", "Linear cost + latency, lost-in-the-middle dilution, stale contradictions — budget by relevance with floors, caps, and recency ordering", "Manuals are forbidden", "Only latency"],
+      "answer": 1,
+      "explain": "Volume taxes money, speed, and attention simultaneously. Relevance-ranked top-k with versioning beats dumps on all three axes."
+    },
+    {
+      "q": "One critical constraint must survive. Position?",
+      "options": ["Middle — chronological", "First (rules/primacy) or last (decisive/recency) — never buried mid-prompt where attention blurs", "Append randomly", "In a footnote"],
+      "answer": 1,
+      "explain": "Attention is U-shaped: primacy and recency dominate. Critical content goes where attention lives; middles hold supporting detail."
+    },
+    {
+      "q": "Old policy v1 vs new v3 both retrieved. Handling?",
+      "options": ["Include both equally", "Version, prefer recency, and label authority — stale context contradicts fresh; undated contradiction resolves randomly", "Delete v3", "Concatenate"],
+      "answer": 1,
+      "explain": "Contradiction without versioning is a coin flip. Recency preference + source labels let the model (and reviewers) resolve correctly."
+    }
+  ],
+  "summary": "Estimate (chars/4), budget (60/20/20), rank (relevance/recency/authority/diversity), position (rules first, evidence last), cap hard. Attention is money — spend it deliberately.",
+  "next": "Fitted and measured — now face the failure modes honestly: hallucination accommodation, verification patterns, and calibrated trust. Next: failing gracefully."
+}

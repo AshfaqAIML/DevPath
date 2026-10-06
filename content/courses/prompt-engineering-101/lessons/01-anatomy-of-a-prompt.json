@@ -1,0 +1,53 @@
+{
+  "title": "Anatomy of a Prompt",
+  "slug": "01-anatomy-of-a-prompt",
+  "objective": "After this lesson you will be able to decompose any prompt into its four parts (instruction, context, input, output spec), assign content to system/user/assistant roles correctly, and diagnose vague prompts by naming the missing part.",
+  "why": "Prompting fails the way SQL fails: not from bad models but from missing clauses. 'Summarize this' fails exactly like SELECT without WHERE — underspecified. Every later lesson (specificity, contracts, few-shots, decomposition) repairs one anatomical part; this lesson names the parts so every repair lands somewhere. It is also the vocabulary the entire agent cluster (LangGraph, CrewAI, RAG, MCP courses) speaks.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Four parts, one job each" },
+    { "t": "p", "text": "Every effective prompt carries four parts. **Instruction**: the verb — what to do ('classify', 'extract', 'draft'). **Context**: the background the model can't guess (role, domain, audience, constraints). **Input**: the data to work on (ticket text, product row, conversation). **Output spec**: the shape of the answer (JSON keys, length, tone, language). Missing any one, the model invents it — and invented context is where bad outputs come from." },
+    { "t": "code", "lang": "text", "code": "INSTRUCTION: Classify the support ticket into one of [billing, shipping, returns].\nCONTEXT: You triage for an online shoe store. 'Where is my stuff' is shipping.\nINPUT: \"My sneakers haven't arrived and it's been two weeks.\"\nOUTPUT: JSON exactly: {\"category\": \"<one label>\", \"confidence\": <0-1>}", "caption": "Four labeled parts — vagueness has nowhere to hide" },
+    { "t": "h", "text": "Roles: system, user, assistant" },
+    { "t": "p", "text": "Chat APIs structure messages by **role**. **System**: durable directives (who you are, rules that always hold) — set once per assistant. **User**: the per-turn request + its input data. **Assistant**: prior model turns (few-shot examples live here, Ch.4). The rule of thumb: *stable identity and rules → system; varying task and data → user.* Stuffing per-ticket data into system, or global rules into user turns, both degrade behavior — and leak context budget (Ch.8)." },
+    { "t": "code", "lang": "js", "code": "// Prompt assembler: roles assigned by stability (runs in your project)\nfunction buildMessages({ systemRules, task, input }) {\n  return [\n    { role: \"system\", content: systemRules.join(\"\\n\") },\n    // user turn carries the varying task + data, delimited explicitly:\n    { role: \"user\", content: `${task}\\n\\n--- INPUT ---\\n${input}` },\n  ];\n}\n// Delimiters (--- INPUT ---) separate instruction from data: Ch.6 explains why.", "caption": "Assemble by role: stable rules up top, varying data delimited below" },
+    { "t": "h", "text": "Diagnose by missing part" },
+    { "t": "p", "text": "Bad outputs diagnose fast with four questions: *What exactly was asked?* (instruction missing → 'summarize this'), *What couldn't it know?* (context missing → wrong domain assumptions), *What was it given?* (input missing/dirty → answers about nothing), *What shape was demanded?* (output spec missing → correct content in unusable form). Most 'model is dumb' complaints resolve to one absent part — add it, re-run, compare." },
+    { "t": "practice", "sim": "js-playground", "title": "Assemble the ticket classifier", "query": "function buildMessages(parts) {\n  return [\n    { role: 'system', content: parts.systemRules.join('\\n') },\n    { role: 'user', content: parts.task + '\\n\\n--- INPUT ---\\n' + parts.input },\n  ];\n}\nconst msgs = buildMessages({\n  systemRules: ['You triage for an online shoe store.', 'Answer with JSON only.'],\n  task: 'Classify into one of [billing, shipping, returns].',\n  input: \"My sneakers haven't arrived.\",\n});\nconsole.log(msgs.length);\nconsole.log(msgs[0].role + ': ' + msgs[0].content.split('\\n').length + ' rules');\nconsole.log(msgs[1].role + ' has delimiter: ' + msgs[1].content.includes('--- INPUT ---'));\nconsole.log(JSON.stringify(msgs.map((m) => m.role)));", "note": "Run it: expect 2, 'system: 2 rules', 'user has delimiter: true', '[\"system\",\"user\"]'. Then break it deliberately: move the input into system and notice nothing errors — role mistakes fail silently in behavior, which is why the rule of thumb matters." },
+    { "t": "keytakeaways", "items": ["Four parts: instruction (verb), context (unguessable background), input (data), output spec (shape) — vagueness is always a missing part", "System holds stable identity/rules; user holds varying task/data; assistant holds example turns", "Delimit input from instruction explicitly; diagnose bad outputs by asking which part is absent"]} ],
+  "exercise": {
+    "prompt": "The returns team complains the bot 'makes up policies'. Their prompt is: 'Handle this return request: <ticket>'. (a) Name the missing parts (two are absent). (b) Rewrite it with all four parts for a shoe store (30-day window, receipt required, final sale excluded). (c) In the playground, assemble it with buildMessages and verify roles + delimiter programmatically.",
+    "hints": [
+      "Absent: context (which policies? window? exclusions?) and output spec (what shape should the answer take — approval + reason? JSON?). Instruction and input exist.",
+      "Context: role + the three policy facts. Output spec: JSON with decision/approved (bool), reason (string), next_step. Keep each part labeled.",
+      "Assembly check mirrors practice: 2 messages, roles [system, user], delimiter present, policy facts in system, ticket in user."
+    ],
+    "solution": "// (b) rewritten (labels added, nothing else changed in meaning):\n// INSTRUCTION: Decide the return request under store policy.\n// CONTEXT: Shoe store; 30-day window; receipt required; final sale excluded.\n// INPUT: <the ticket text>\n// OUTPUT: JSON {\"approved\": bool, \"reason\": string, \"next_step\": string}\n// (c) buildMessages assembly with the policy facts in systemRules (see practice pattern).",
+    "why": "'Makes up policies' is missing-context disease: the model filled policy gaps with plausible inventions. Stating the actual policy in system converts invention into application — the single highest-leverage prompt fix there is.",
+    "code": "// Assembly checklist (playground assertions):\n// msgs.length === 2, roles [system,user], delimiter present,\n// '30-day' in system content, ticket text in user content.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Summarize this: <report>' returns a useless summary. Missing part?",
+      "options": ["Input — no report given", "Instruction precision + output spec: summarize how (length? bullets? for whom?) — 'summarize' alone underspecifies verb and shape", "Context — always context", "Nothing — models can't summarize"],
+      "answer": 1,
+      "explain": "Diagnose by part: input exists, but the verb is vague and no shape is demanded. Add length, audience, and format — then compare outputs."
+    },
+    {
+      "q": "Per-ticket text belongs in which role, and why?",
+      "options": ["System — it's important", "User — it varies per turn; system holds stable identity/rules", "Assistant — as an example", "Anywhere — roles don't matter"],
+      "answer": 1,
+      "explain": "Roles allocate by stability: system = durable directives, user = varying task + data. Misplacement wastes budget and weakens rule-following."
+    },
+    {
+      "q": "Why delimit input from instruction explicitly?",
+      "options": ["Aesthetics", "So the model can distinguish task language from data language — unmarked boundaries let injected or oddly-phrased data read as new instructions (preview of Ch.6)", "Required by APIs", "Shorter prompts"],
+      "answer": 1,
+      "explain": "Delimiters are structural, not cosmetic: they mark what is command vs content. Ch.6 shows what attacks the boundary — this lesson builds the habit early."
+    }
+  ],
+  "summary": "Instruction, context, input, output spec — four parts, roles by stability, delimiters at boundaries. Diagnose every failure by the missing part.",
+  "next": "Parts named — now sharpen the verb: concrete instructions beat clever ones. Next: specificity."
+}

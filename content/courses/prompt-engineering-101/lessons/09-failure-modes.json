@@ -1,0 +1,53 @@
+{
+  "title": "Failure Modes: Failing Gracefully",
+  "slug": "09-failure-modes",
+  "objective": "After this lesson you will be able to name the five canonical prompt failure modes, attach verification patterns to each (citations, abstention, bounds-checking, human review triggers), and calibrate trust per task instead of per model.",
+  "why": "Every prompt fails sometimes — hallucinated policies, confident misclassifications, format drift, stale answers, silent scope creep. Mature teams don't chase zero failure; they design *graceful* failure: detected, bounded, routed to humans or safe defaults with evidence. Trust is calibrated per task (money vs draft), never granted per model.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "The five canonical failures" },
+    { "t": "p", "text": "Learn this taxonomy cold — every incident maps to one: **(1) Hallucination** (fluent falsehoods: invented policies, fake citations); **(2) Misclassification** (confident wrong labels, especially edges); **(3) Format drift** (contracts decay over long sessions/updates); **(4) Staleness** (right answer to last quarter's policy); **(5) Scope creep** (helpfully answering beyond authority — refunds nobody approved). Name the mode first; fixes differ per mode." },
+    { "t": "table", "headers": ["Failure", "Signature", "Pattern"], "rows": [["Hallucination", "Plausible specifics, no source", "Scope-to-text + citations + abstention path"], ["Misclassification", "Confident wrong labels on edges", "Confidence thresholds → human review below 0.7"], ["Format drift", "Prose creeping into JSON over time", "Contract re-assertion + parser quarantine + eval regression"], ["Staleness", "Correct per outdated source", "Versioned context + recency preference + freshness dates"], ["Scope creep", "Helpful overreach beyond authority", "Enumerated powers + refusal paths + attempt logs"]] },
+    { "t": "h", "text": "Citations and abstention: the honesty pair" },
+    { "t": "p", "text": "Demand **citations** (quote the source span supporting each claim) and sanction **abstention** ({answer: unknown} when sources lack it). Together they convert hallucination from silent corruption into either verifiable claims or visible gaps — both workable. Uncited specifics in review are guilty until quoted: 'which line says that?' is the reviewer's sharpest question." },
+    { "t": "code", "lang": "js", "code": "// Post-hoc honesty audit: citations present + abstention honored (plain JS)\nfunction auditAnswer(answer, sources) {\n  const issues = [];\n  if (answer.cites) {\n    for (const c of answer.cites) {\n      const found = sources.some((s) => s.includes(c.quote));\n      if (!found) issues.push(`uncited claim: ${c.claim}`);\n    }\n  } else if (answer.text && !answer.unknown) {\n    issues.push(\"specifics without citations\");\n  }\n  if (answer.unknown && answer.text) issues.push(\"abstained yet answered\");\n  return { honest: issues.length === 0, issues };\n}\n// Run over eval outputs: honesty scored like accuracy, tracked over versions.", "caption": "Audit citations mechanically; abstention shapes checked structurally" },
+    { "t": "h", "text": "Calibrated trust: thresholds per task" },
+    { "t": "p", "text": "Trust is a **threshold policy per task value**: auto-approve low-stakes drafts (typo fixes), human-review medium (replies to frustrated customers below 0.85 confidence), human-decide high-stakes (refunds, legal) regardless of confidence. Confidence scores gate routing — which is why Ch.3 demanded numeric confidences and Ch.7's evals measure calibration (do 0.9s actually succeed 90%?)." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the honesty", "query": "function auditAnswer(answer, sources) {\n  const issues = [];\n  if (answer.cites) {\n    for (const c of answer.cites) {\n      const found = sources.some((s) => s.includes(c.quote));\n      if (!found) issues.push('uncited claim: ' + c.claim);\n    }\n  } else if (answer.text && !answer.unknown) {\n    issues.push('specifics without citations');\n  }\n  if (answer.unknown && answer.text) issues.push('abstained yet answered');\n  return { honest: issues.length === 0, issues };\n}\nconst sources = ['Returns accepted within 30 days with receipt.'];\nconsole.log(JSON.stringify(auditAnswer({ cites: [{ claim: 'window', quote: 'within 30 days' }] }, sources)));\nconsole.log(JSON.stringify(auditAnswer({ cites: [{ claim: 'window', quote: 'lifetime warranty' }] }, sources)));\nconsole.log(JSON.stringify(auditAnswer({ text: 'Full refund!' }, sources)));", "note": "Run it: expect honest, then uncited-claim, then specifics-without-citations. The auditor is deliberately dumb (substring matching) — production citation checking is harder, but the discipline (every claim quoted or flagged) ports directly." },
+    { "t": "keytakeaways", "items": ["Five modes: hallucination, misclassification, format drift, staleness, scope creep — name first, fix per mode", "Citations + sanctioned abstention convert silent corruption into verifiable claims or visible gaps", "Trust per task value with confidence thresholds; measure calibration, don't assume it"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice auditor and map each output to its failure mode (all three should be honest-or-flagged correctly). (b) Write the trust policy for a returns bot: three task tiers (auto/review/decide) with confidence cutoffs and what each tier does. (c) State which eval gold items (Ch.7) catch each of the five modes.",
+    "hints": [
+      "Outputs: honest (cited+found), uncited claim (hallucination signature), specifics-without-citations (missing-evidence signature).",
+      "Tiers: auto (drafts, acknowledged templates) / review (<0.85 confidence replies, all refunds) / decide (amounts over threshold, legal) — cutoffs stated, actions named.",
+      "Gold mapping: hallucination → citation checks; misclassification → edge labels; drift → contract gates; staleness → versioned items; creep → refusal/authority items."
+    ],
+    "solution": "// (a) honest / uncited-claim / specifics-without-citations (in order).\n// (b) auto: templated drafts; review: replies <0.85 + all refunds; decide:\n//     amounts/legal. Cutoffs + actions explicit.\n// (c) mapping per hints — every mode owns gold items; unowned modes regress silently.",
+    "why": "Coverage thinking applied to failure: every mode needs gold items, thresholds, and routing, or it regresses the week after you stop watching. Graceful failure is designed per mode, never hoped globally.",
+    "code": "// Trust-policy template (adapt cutoffs to your stakes):\n// auto < risk X; review < 0.85 or money; decide legal/large.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Answer cites 'lifetime warranty'; source lacks it. Failure + fix?",
+      "options": ["Misclassification — retrain", "Hallucination signature (uncited specifics): scope-to-text + citation demands + abstention path", "Format drift", "Staleness"],
+      "answer": 1,
+      "explain": "Plausible specifics without sources define hallucination. Citations make claims checkable; abstention gives gaps a legal shape."
+    },
+    {
+      "q": "0.62-confidence refund approval should…",
+      "options": ["Auto-approve — fast", "Route to human review: money tasks need thresholds regardless of model confidence trends", "Round up to 1.0", "Ask the customer"],
+      "answer": 1,
+      "explain": "Trust calibrates per task value: refunds route on policy, with confidence gating review depth. Auto-approving money on 0.62 is how incidents happen."
+    },
+    {
+      "q": "JSON outputs gain chatty prefixes after a model update. Mode + response?",
+      "options": ["Hallucination — new prompts", "Format drift: re-assert contracts, verify parser quarantine catches it, add a regression gold item", "Staleness", "Scope creep"],
+      "answer": 1,
+      "explain": "Drift is temporal: working contracts decay across versions. Regression gold items plus quarantine layers catch it mechanically — eval suites are drift detectors."
+    }
+  ],
+  "summary": "Name the five modes, attach citations + abstention + thresholds + quarantine per mode, and calibrate trust per task. Graceful failure is designed — per mode, measured, routed.",
+  "next": "Failure-proofed philosophy in hand — now ship a complete prompt pack: system, few-shots, evals, and the measured numbers. Next and last: the support-pack capstone."
+}

@@ -1,0 +1,53 @@
+{
+  "title": "Few-Shot Mastery: Examples That Teach",
+  "slug": "04-few-shot-mastery",
+  "objective": "After this lesson you will be able to select few-shot examples (coverage, edge cases, one negative), order them deliberately, place them in assistant turns, and know when examples beat instructions (and vice versa).",
+  "why": "Instructions describe the rule; examples demonstrate its application — including the parts rules can't state (tone, exact JSON shape, how 'other' gets used). Well-chosen examples fix more behavior per token than paragraphs of directives, and the negative example (what NOT to do, with why) prevents the single most common misbehavior class. This is the highest-leverage prompt section per line.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "What examples teach that rules can't" },
+    { "t": "p", "text": "Rules state criteria; examples show *application*: how strict 'damaged' is (scuffed box vs shattered screen), what confidence 0.9 vs 0.4 looks like, exactly how the JSON sits alone. Format-heavy tasks especially need demonstration — one input→output pair transmits length, structure, tone, and edge policy simultaneously. When behavior resists instruction after two rewrites, stop describing and start showing." },
+    { "t": "code", "lang": "text", "code": "EXAMPLE 1 (clear case):\nInput: \"Box arrived crushed, screen shattered.\"\nOutput: {\"category\": \"damaged-item\", \"confidence\": 0.97}\n\nEXAMPLE 2 (edge case — scuffed but working):\nInput: \"Small scratch on the corner, works fine.\"\nOutput: {\"category\": \"damaged-item\", \"confidence\": 0.62}\n\nNEGATIVE (do NOT do this):\nInput: \"Where is my package?\"\nBad output: {\"category\": \"damaged-item\"}  <- tracking questions are\nshipping, never damaged. Do not confuse lateness with damage.", "caption": "Clear case + edge case + labeled negative: the minimal powerful set" },
+    { "t": "h", "text": "Selection: cover, edge, negate" },
+    { "t": "p", "text": "Three to five examples suffice when chosen well: **cover** each label once (no orphan categories — uncovered labels get misused as dumping grounds), add **edge cases** at real boundaries (the scuffed box, the vague 'other'), and include **one negative** with the violated rule stated (lateness ≠ damage). More examples help to a point, then dilute: each addition costs tokens and attention on every call — curate, don't accumulate." },
+    { "t": "h", "text": "Order and placement" },
+    { "t": "p", "text": "Order matters measurably: models overweight **recent** examples (recency bias) — put the most important edge case last, and never let the final example be an outlier unless you want outlier behavior. Keep label distribution balanced (three billing examples + one shipping teaches 'when in doubt, billing'). Place examples as **assistant turns** (user input → assistant ideal output), after instructions and before the real input — the shape the model continues naturally." },
+    { "t": "code", "lang": "js", "code": "// Few-shot assembler: instructions, balanced examples, negative, live input\nfunction buildFewShot({ instructions, examples, negative, input }) {\n  const messages = [{ role: \"system\", content: instructions }];\n  for (const ex of examples) {\n    messages.push({ role: \"user\", content: \"Input: \" + ex.in });\n    messages.push({ role: \"assistant\", content: \"Output: \" + ex.out });\n  }\n  messages.push({ role: \"user\", content: \"Do NOT do this: \" + negative.bad + \" (\" + negative.why + \")\" });\n  messages.push({ role: \"user\", content: \"Input: \" + input });\n  return messages;\n}\n// Most important edge case LAST (recency); balanced labels; negative labeled.", "caption": "Assistant-turn examples the model continues; recency-weighted order" },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the example set", "query": "function auditExamples(examples, labels) {\n  const counts = {};\n  for (const ex of examples) counts[ex.label] = (counts[ex.label] || 0) + 1;\n  const missing = labels.filter((l) => !counts[l]);\n  const total = examples.length;\n  const share = Object.entries(counts).map(([l, n]) => l + ':' + Math.round((n / total) * 100) + '%');\n  return { coverage: (labels.length - missing.length) + '/' + labels.length, missing, balance: share.join(' ') };\n}\nconst labels = ['billing', 'shipping', 'returns'];\nconst setA = [{ label: 'billing' }, { label: 'billing' }, { label: 'billing' }, { label: 'shipping' }];\nconst setB = [{ label: 'billing' }, { label: 'shipping' }, { label: 'returns' }, { label: 'shipping' }];\nconsole.log(JSON.stringify(auditExamples(setA, labels)));\nconsole.log(JSON.stringify(auditExamples(setB, labels)));", "note": "Run it: setA shows 2/3 coverage (returns orphaned!) with 75% billing skew; setB shows 3/3 with rough balance. Orphan labels become dumping grounds; skew becomes default bias — audit before shipping." },
+    { "t": "keytakeaways", "items": ["Examples demonstrate application (tone, shape, edge policy) where rules describe criteria", "Select: cover every label, add true edge cases, include one labeled negative — then stop accumulating", "Most important edge last (recency), balanced labels, assistant-turn placement before live input"]} ],
+  "exercise": {
+    "prompt": "(a) Run the auditor on a 5-example set of your design for [billing, shipping, returns] with one edge case and report coverage/balance. (b) Write the negative example for the lateness-vs-damage confusion with the violated rule stated. (c) State where the examples sit in message order and which example goes last, with the recency reason.",
+    "hints": [
+      "Design: 2 billing (one edge: partial refund?), 2 shipping (one edge: vague 'where is it'), 1 returns — coverage 3/3, no label above 50%.",
+      "Negative: lateness classified as damaged, rule stated ('tracking questions are shipping, never damaged').",
+      "Order: system instructions → assistant-turn pairs → negative → live input; trickiest edge last for recency weight."
+    ],
+    "solution": "// (a) coverage 3/3, max share 40% (see hints distribution).\n// (b) NEGATIVE: Input 'Package 2 weeks late' → Bad {damaged-item} →\n//     rule: lateness is shipping, never damaged.\n// (c) pairs after instructions, live input last-but-one after negative;\n//     hardest edge final for recency bias.",
+    "why": "Selection, negation, and ordering are three independent skills; the exercise isolates each. Coverage audits prevent orphan-label dumping; recency placement steers the model's strongest bias deliberately.",
+    "code": "// Coverage checklist (playground): auditExamples(yourSet, labels).",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Returns' has no examples but the label exists. Predict the failure.",
+      "options": ["Nothing — labels self-explain", "Orphan label becomes a dumping ground: uncertain cases land in 'returns' unpredictably", "Model refuses returns", "Only billing works"],
+      "answer": 1,
+      "explain": "Undemonstrated labels absorb uncertainty. Coverage (every label shown once minimum) is the cheapest prompt insurance there is."
+    },
+    {
+      "q": "Three billing examples + one shipping. Effect?",
+      "options": ["Better billing accuracy only", "Skew becomes default bias: uncertain inputs drift billing — balance labels deliberately", "No effect", "Faster responses"],
+      "answer": 1,
+      "explain": "Example distribution is a prior. Imbalance teaches 'when in doubt, pick the majority' — audit shares, don't just count examples."
+    },
+    {
+      "q": "Where does the negative example go, and why labeled?",
+      "options": ["First, unlabeled", "After pairs, before live input, WITH the violated rule stated — labeling converts a confusing counter-signal into a boundary lesson", "After the live input", "Negatives never help"],
+      "answer": 1,
+      "explain": "Unlabeled counter-examples confuse (is this what TO do?). The stated rule ('tracking is shipping, never damaged') makes the negative teach the boundary, not blur it."
+    }
+  ],
+  "summary": "Cover every label, edge the boundaries, negate the classic confusion (labeled), order the hardest last, place in assistant turns. Examples demonstrate; rules describe — use both, audit always.",
+  "next": "Single prompts behave — now split hard jobs: decomposition, chaining, and checklists that keep multi-step work honest. Next: divide and conquer."
+}

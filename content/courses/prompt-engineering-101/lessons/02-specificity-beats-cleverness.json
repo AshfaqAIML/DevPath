@@ -1,0 +1,53 @@
+{
+  "title": "Specificity Beats Cleverness",
+  "slug": "02-specificity-beats-cleverness",
+  "objective": "After this lesson you will be able to rewrite vague instructions as concrete ones (verbs, constraints, formats, audiences, examples of done), and predict how each added constraint shrinks the output space.",
+  "why": "Prompt folklore obsesses over magic phrases ('think step by step', personas, pleading). Measured gains come from boring specificity: what to do, to what, in what form, for whom, and what good looks like. Each concrete constraint eliminates a class of wrong outputs — specificity compounds while cleverness decorates.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Vague verbs, concrete verbs" },
+    { "t": "p", "text": "'Handle', 'process', 'deal with', 'look at' are not instructions — each admits a dozen behaviors. Replace with the actual operation: *classify into [A,B,C]*, *extract {fields}*, *draft a 40-word reply offering X*, *list three risks ordered by severity*. If you cannot name the verb, you don't know the task yet — and neither does the model." },
+    { "t": "code", "lang": "text", "code": "VAGUE:  Handle this complaint: <ticket>\nSHARP:  Classify this complaint into [late-delivery, damaged-item,\n        wrong-item, other]. Output JSON {\"category\": ..., \"refund_due\": true|false}.\n        refund_due is true only for damaged-item and wrong-item.", "caption": "Same ticket, different verbs: one admits anything, one admits an answer" },
+    { "t": "h", "text": "Constraints are output-space surgery" },
+    { "t": "p", "text": "Every constraint deletes wrong answers: **format** (JSON keys, max words, bullets), **audience** (new hire vs counsel — vocabulary and depth follow), **scope** (answer from this text only), **tone** (apologetic but firm). Add constraints until the remaining space holds only acceptable outputs — then stop: over-constraining (seven formats, three tones) degrades compliance as the model juggles competing demands." },
+    { "t": "code", "lang": "text", "code": "Draft a reply to this damaged-item complaint.\n- 40 words max. Apologetic but firm tone.\n- Offer exactly one remedy: prepaid return label.\n- Never promise refunds or timelines.\n- Audience: frustrated first-time buyer.", "caption": "Four constraints, each deleting a failure class (rambling, over-promising, wrong register)" },
+    { "t": "h", "text": "Show done: the gold example" },
+    { "t": "p", "text": "One **gold example** (input → ideal output) beats three paragraphs of description for format-heavy tasks: it demonstrates length, structure, tone, and edge handling simultaneously. Place it after instructions, labeled, in the same shape as real inputs. Gold examples are few-shot's unit form — Ch.4 multiplies them." },
+    { "t": "practice", "sim": "js-playground", "title": "Score the specificity", "query": "function specificityScore(prompt) {\n  let score = 0;\n  const checks = [\n    [/classify|extract|draft|list|decide/i, 'concrete verb'],\n    [/\\{[^}]*\\}|json/i, 'output shape'],\n    [/\\d+\\s*(words|max|items|bullets)/i, 'size bound'],\n    [/never|only|must|exactly/i, 'hard constraint'],\n    [/audience|for a |tone/i, 'audience/tone'],\n  ];\n  for (const [re, label] of checks) if (re.test(prompt)) { score++; }\n  return { score: score + '/5', prompt: prompt.slice(0, 40) + '...' };\n}\nconst vague = 'Handle this complaint: ...';\nconst sharp = 'Classify into [late, damaged]. Output JSON {\"category\":...}. Max 40 words. Never promise refunds. Audience: first-time buyer.';\nconsole.log(JSON.stringify(specificityScore(vague)));\nconsole.log(JSON.stringify(specificityScore(sharp)));", "note": "Run it: expect 0/5 vs 5/5. The scorer is a heuristic lens, not truth — use it to audit your own prompts before shipping, then graduate to real evals (Ch.7)." },
+    { "t": "keytakeaways", "items": ["Name the verb (classify/extract/draft/decide) — vague verbs admit anything", "Constraints delete failure classes: format, size, scope, tone, audience — add until only good outputs fit", "One gold example demonstrates what paragraphs can't (format, length, edge handling)", "Over-constraining degrades compliance — stop when the space holds only acceptable answers"]} ],
+  "exercise": {
+    "prompt": "(a) Take 'Write something about our return policy' and rewrite it with a concrete verb, JSON output shape, size bound, one hard constraint, and an audience. (b) Run both versions through specificityScore in the playground and report scores. (c) State which added constraint deletes the most dangerous failure for a returns bot, and why.",
+    "hints": [
+      "Verb: 'Draft a 50-word FAQ answer…'. Shape: JSON {answer, sources}. Bound: 50 words. Hard constraint: 'Never invent policy beyond the text below'. Audience: anxious first-time returner.",
+      "Expect vague ≈ 0–1/5, sharp 5/5. If yours scores 4, name the missing check and add it.",
+      "'Never invent policy' (scope-to-text) deletes hallucinations — the costliest failure (wrong refunds, legal exposure) dwarfs tone or length misses."
+    ],
+    "solution": "// (a) sharp rewrite:\n// 'Draft a 50-word FAQ answer about returns for an anxious first-time\n//  returner. Output JSON {\"answer\": string}. Never state policy not\n//  present in the text below. [TEXT]'\n// (b) vague 0/5 → sharp 5/5 (see practice scorer).\n// (c) scope-to-text: hallucinated policy is the expensive failure.",
+    "why": "The exercise converts the lesson into a repeatable audit: score → rewrite → rescore. Scope constraints dominate because their failures (invented policy, wrong money) cost orders more than style misses.",
+    "code": "// Audit loop (playground): score(vague) → rewrite → score(sharp).",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Handle this complaint' fails. The core defect?",
+      "options": ["Too short", "'Handle' admits a dozen behaviors — no concrete verb, so the task is unspecified", "Missing please", "Too polite"],
+      "answer": 1,
+      "explain": "Vague verbs underspecify the operation. Name it (classify/extract/draft/decide) and the output space collapses to answerable."
+    },
+    {
+      "q": "Which constraint deletes the costliest failure for a policy bot?",
+      "options": ["Max 40 words", "Apologetic tone", "Scope-to-text ('never state policy beyond the text') — kills hallucinations with money/legal exposure", "Audience label"],
+      "answer": 2,
+      "explain": "Failures price differently: invented policy costs refunds and trust; length/tone misses cost polish. Constrain the expensive failures first."
+    },
+    {
+      "q": "Seven formats + three tones in one prompt. Risk?",
+      "options": ["Better compliance", "Over-constraining: competing demands degrade following — constrain until only good outputs fit, then stop", "Longer outputs", "None"],
+      "answer": 1,
+      "explain": "Specificity compounds to a point, then competes with itself. Minimal sufficient constraints beat maximal ones."
+    }
+  ],
+  "summary": "Concrete verbs, deleting constraints, one gold example — specificity compounds, cleverness decorates. Audit every prompt with the scorer before shipping.",
+  "next": "Sharp words need reliable shapes: JSON contracts, delimiters, and parsers that survive model creativity. Next: output contracts."
+}

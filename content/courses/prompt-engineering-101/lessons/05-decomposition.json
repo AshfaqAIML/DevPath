@@ -1,0 +1,54 @@
+{
+  "title": "Decomposition: Divide and Conquer",
+  "slug": "05-decomposition",
+  "objective": "After this lesson you will be able to split compound tasks into staged prompts (extract → decide → draft), chain them with explicit handoffs, and add checklist verification that catches skipped steps.",
+  "why": "'Read this ticket, decide the policy, check history, draft the reply, and log it' fails as one prompt the way a five-table join without aliases fails — too many jobs, one breath. Decomposition gives each step its own instruction, its own output contract, and its own verifiable handoff. Reliability comes from staging, and staging is a design skill, not a model upgrade.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Split by verb, not by hope" },
+    { "t": "p", "text": "Decompose along **verbs**: extract (pull facts), decide (classify/policy), draft (write), verify (check). Each stage gets the full four-part treatment (Ch.1) at small scope — and small scopes follow instructions dramatically better than compound ones. The split test: if you can't name each stage's output contract, you haven't split, you've just reworded." },
+    { "t": "code", "lang": "text", "code": "MONOLITH: Read the ticket, check policy + history, decide, reply, log. (5 jobs, 1 breath)\n\nSTAGED:\n  S1 extract: ticket -> {order_id, issue, dates} (JSON, Ch.3 contract)\n  S2 decide:  facts + policy text -> {approved, reason} (JSON)\n  S3 draft:   decision + tone rules -> reply text (<=60 words)\n  S4 verify:  reply + checklist -> {pass, fixes[]} (JSON)\nEach stage independently testable, re-runnable, and replaceable.", "caption": "Verbs become stages; stages get contracts; contracts enable checks" },
+    { "t": "h", "text": "Handoffs: explicit, typed, logged" },
+    { "t": "p", "text": "Stages connect through **handoffs**: S1's JSON feeds S2's input slot, nothing else. Handoffs must be typed (the contract from Ch.3), logged (each stage's in/out persisted for debugging), and minimal (pass facts, not raw tickets — narrowed context per stage also saves budget, Ch.8). A stage that needs the original ticket alongside S1's output signals a bad split — re-cut until handoffs suffice." },
+    { "t": "code", "lang": "js", "code": "// Staged runner: typed handoffs, logged, independently re-runnable\nasync function runPipeline(callModel, ticket, policyText) {\n  const log = [];\n  const s1 = await callModel(\"extract\", { ticket });          // -> {order_id, issue, dates}\n  log.push([\"extract\", s1]);\n  const s2 = await callModel(\"decide\", { facts: s1, policyText }); // -> {approved, reason}\n  log.push([\"decide\", s2]);\n  const s3 = await callModel(\"draft\", { decision: s2 });       // -> reply text\n  log.push([\"draft\", s3]);\n  const s4 = await callModel(\"verify\", { reply: s3 });        // -> {pass, fixes}\n  log.push([\"verify\", s4]);\n  return { final: s4.pass ? s3 : { needsFix: s4.fixes }, log };\n}\n// Swap any stage's prompt without touching others; replay from any log entry.", "caption": "Handoffs typed, logged, minimal — stages as replaceable units" },
+    { "t": "h", "text": "Checklists: verification as a stage" },
+    { "t": "p", "text": "The verify stage runs a **checklist** against the draft: approved-decision stated? remedy exactly one? ≤60 words? no promised timelines? forbidden phrases absent? Checklists convert 'be careful' (ignored) into testable assertions (enforced) — and failed checks route back to re-draft with the specific fix, not a vague 'try again'." },
+    { "t": "code", "lang": "js", "code": "// Checklist verifier (deterministic code beats model judgment for mechanics)\nfunction verifyReply(reply, decision) {\n  const fixes = [];\n  if (reply.split(/\\s+/).length > 60) fixes.push(\"over 60 words\");\n  if (/refund|timeline|guarantee/i.test(reply) && !decision.approved) fixes.push(\"promises without approval\");\n  if (!reply.toLowerCase().includes(decision.key || \"label\")) fixes.push(\"missing return-label offer\");\n  return { pass: fixes.length === 0, fixes };\n}\n// Mechanics (length, phrases) in code; judgment (tone, correctness) to the model.", "caption": "Verify mechanics deterministically; reserve the model for judgment" },
+    { "t": "practice", "sim": "js-playground", "title": "Run the checklist", "query": "function verifyReply(reply, decision) {\n  const fixes = [];\n  if (reply.split(/\\s+/).length > 60) fixes.push('over 60 words');\n  if (/refund|timeline|guarantee/i.test(reply) && !decision.approved) fixes.push('promises without approval');\n  if (!reply.toLowerCase().includes('label')) fixes.push('missing return-label offer');\n  return { pass: fixes.length === 0, fixes };\n}\nconst good = 'Sorry about the damage. Your prepaid return label is attached; send the item back and we will proceed.';\nconst bad = 'We guarantee a full refund within a short timeline, no label needed, sorry for everything in this long message that keeps going past sixty words easily and keeps going further beyond the limit with extra filler words added here please note that this response is intentionally verbose and repetitive to trigger the length check reliably every single time it runs in the playground today';\nconsole.log(JSON.stringify(verifyReply(good, { approved: false })));\nconsole.log(JSON.stringify(verifyReply(bad, { approved: false })));", "note": "Run it: expect {pass:true} then {pass:false} with two fixes (length + unapproved promise). Mechanics verify in code — fast, free, deterministic — while tone and correctness stay model-judged." },
+    { "t": "keytakeaways", "items": ["Split by verbs (extract/decide/draft/verify), each with its own output contract", "Handoffs typed, logged, minimal — a stage needing raw inputs signals a bad split", "Verify with checklists: mechanics in deterministic code, judgment to the model; failures route back with specific fixes"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice verifier on a reply of your design that fails exactly one check; report which. (b) Split 'triage + respond + log a billing dispute' into three stages with per-stage output contracts. (c) State which checks go in code vs model judgment, with one example each.",
+    "hints": [
+      "Craft a reply failing exactly one check: e.g. 61+ words but otherwise clean (length), or promise-free but missing 'label' (offer). Report the single fix.",
+      "Stages: extract (amounts/dates → JSON) → decide (policy → {adjust, reason}) → draft+verify (reply + checklist). Contracts per stage, handoffs named.",
+      "Code: length, forbidden phrases, required offer keywords. Model: tone appropriateness, reason correctness, policy interpretation."
+    ],
+    "solution": "// (a) single-failure reply + reported fix (see hints).\n// (b) extract {amounts, dates} → decide {adjust, reason} → draft reply + verify {pass, fixes}.\n// (c) code: mechanics (length/phrases/keywords); model: tone, reasons, policy reading.",
+    "why": "Decomposition is designed twice: once in stages, once in verification assignment. Code-vs-model split by check type is the reliability insight — determinism where possible, judgment where necessary.",
+    "code": "// Single-failure probe pattern (playground): craft, run, report the one fix.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Five-job monolith prompt underperforms. First move?",
+      "options": ["Bigger model", "Split by verbs into staged prompts with per-stage output contracts and typed handoffs", "More examples", "Lower temperature"],
+      "answer": 1,
+      "explain": "Compound scope defeats instruction-following before model quality matters. Staging gives each job its own contract, handoff, and testability."
+    },
+    {
+      "q": "Stage 2 needs the raw ticket plus Stage 1's output. Meaning?",
+      "options": ["Normal — pass everything everywhere", "Bad split: handoffs should suffice; re-cut until each stage needs only its inputs", "Add more context", "Merge the stages"],
+      "answer": 1,
+      "explain": "Handoff insufficiency diagnoses decomposition failure. Well-cut stages consume typed handoffs only — raw-input hunger means the boundary is wrong."
+    },
+    {
+      "q": "Word-count and forbidden-phrase checks belong…",
+      "options": ["In model judgment", "In deterministic code — mechanics verify free and exactly; reserve the model for tone/correctness judgment", "Nowhere", "In the system prompt only"],
+      "answer": 1,
+      "explain": "Deterministic where possible (mechanics), model where necessary (judgment). Code checks run fast, free, and identically every time."
+    }
+  ],
+  "summary": "Verbs become stages, stages get contracts, handoffs stay typed/logged/minimal, checklists verify (code for mechanics, model for judgment). Reliability is staged, not wished.",
+  "next": "Staged work behaves — now bound it: scope limits, injection defense, and refusals with grace. Next: guardrails."
+}

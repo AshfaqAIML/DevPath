@@ -1,0 +1,52 @@
+{
+  "title": "Capstone: The Support Prompt Pack",
+  "slug": "10-support-pack-capstone",
+  "objective": "After this lesson you will be able to ship a complete, measured prompt pack (system prompt, few-shot set, output contracts, eval gold set with scores, guardrails, and budget accounting) for a support assistant — the portfolio artifact this course builds toward and the on-ramp to the RAG/agent courses.",
+  "why": "Courses end with artifacts, not chapters: a prompt pack is shippable, reviewable, and improvable — and it plugs directly into LangGraph/CrewAI/RAG courses as the reasoning core inside agents. This walkthrough performs the full assembly once, with numbers, so your capstone project repeats it on your own domain.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The pack: six components, one version" },
+    { "t": "p", "text": "A **prompt pack v1.0** contains: (1) system prompt (identity, scope rules, refusal shapes, abstention path); (2) few-shot set (coverage-audited, one negative, hardest last); (3) output contracts per stage (classify/decide/draft JSON); (4) gold eval set (15 items: 6 happy, 6 edge, 3 attacks) with baseline scores; (5) guardrails (triage router, scope sentences, logging); (6) budget sheet (tokens/call, monthly projection). Versioned together — prompts, examples, and evals change as one unit, never separately." },
+    { "t": "code", "lang": "text", "code": "PACK v1.0 — shoe-store returns triage (illustrative numbers)\n system: identity + 30-day/receipt/final-sale policy + scope-to-POLICY + unknown-path\n few-shot: 4 pairs (billing/shipping/returns/damaged-edge) + lateness negative\n contracts: classify {category, confidence} / decide {approved, reason} / draft ≤60w\n gold: 15 items (6 happy, 6 edge, 3 attacks) — baseline 12/15 (0.80)\n guardrails: triage router + refusal shapes + attempt logging\n budget: ~1,100 tokens/call ≈ $0.0055 → ~$165/mo at 1k calls/day", "caption": "Six components, one version number, measured baseline" },
+    { "t": "h", "text": "Assemble in order, measure throughout" },
+    { "t": "p", "text": "Build sequence with gates: system + contracts first (Ch.1–3) → few-shots to fix observed misses (Ch.4, added for measured gaps, not upfront bulk) → guardrails (Ch.6) → gold set + baseline score (Ch.7) → budget sheet (Ch.8) → failure-mode review (Ch.9: which modes own gold items?). Each step's output feeds the next; the baseline score (12/15) is the number every future iteration must beat on the same set." },
+    { "t": "h", "text": "The findings memo (your capstone's shape)" },
+    { "t": "p", "text": "Deliver findings like the SQL capstones: what the baseline shows (3 misses: 2 edge confusions, 1 attack slip), what each miss teaches (which lesson's fix), what ships now vs next (negatives added, trigram-equivalent deferred prompt work), and the honesty section (abstention rate, refusal log summary, calibration note). Measured, cited, improvable — the artifact that gets you hired or promoted, not just graded." },
+    { "t": "practice", "sim": "js-playground", "title": "Score the pack baseline", "query": "function scorePack(results) {\n  const byKind = {};\n  for (const r of results) {\n    byKind[r.kind] = byKind[r.kind] || { pass: 0, total: 0 };\n    byKind[r.kind].total++;\n    if (r.pass) byKind[r.kind].pass++;\n  }\n  const total = results.length;\n  const passed = results.filter((r) => r.pass).length;\n  return { overall: passed + '/' + total, byKind };\n}\nconst baseline = [\n  { kind: 'happy', pass: true }, { kind: 'happy', pass: true },\n  { kind: 'happy', pass: true }, { kind: 'happy', pass: true },\n  { kind: 'happy', pass: true }, { kind: 'happy', pass: true },\n  { kind: 'edge', pass: true }, { kind: 'edge', pass: true },\n  { kind: 'edge', pass: true }, { kind: 'edge', pass: false },\n  { kind: 'edge', pass: true }, { kind: 'edge', pass: false },\n  { kind: 'attack', pass: true }, { kind: 'attack', pass: true },\n  { kind: 'attack', pass: false },\n];\nconst s = scorePack(baseline);\nconsole.log(s.overall);\nconsole.log('edge: ' + s.byKind.edge.pass + '/' + s.byKind.edge.total);\nconsole.log('attack: ' + s.byKind.attack.pass + '/' + s.byKind.attack.total);", "note": "Run it: expect 12/15 overall, edge 4/6, attack 2/3. Per-kind breakdowns (not just the headline) direct the next iteration: edges need examples, the attack needs guardrails." },
+    { "t": "keytakeaways", "items": ["Pack = system + few-shots + contracts + gold/scores + guardrails + budget, versioned as one unit", "Build in gate order; baseline everything on the same set; improve single variables", "Memo: misses with lessons, ship-now vs next, honesty section — measured and improvable"]} ],
+  "exercise": {
+    "prompt": "(a) Run the baseline scorer and state which kind needs examples vs guardrails. (b) Draft your capstone domain (not shoes): the four-part system prompt skeleton with your policy facts. (c) List your 15 gold items by kind with one-line expectations each (not full text — the plan, graded on coverage thinking).",
+    "hints": [
+      "Edges 4/6 → few-shot examples (boundary teaching); attack 2/3 → guardrails (scope/triage). Per-kind scores prescribe different fixes — that prescription is the skill.",
+      "System skeleton: identity + scope sentences + abstention path + refusal shapes; policy facts from YOUR domain (library fines? course refunds?).",
+      "Gold plan: 6 happy (core behaviors), 6 edge (boundaries + negatives), 3 attacks (injection, scope-push, confusion) — each with expected behavior, not prose."
+    ],
+    "solution": "// (a) edges → examples; attack slip → guardrails (per-kind prescription).\n// (b) domain system skeleton with real policy facts (your domain).\n// (c) 15-item plan by kind with behavioral expectations (coverage thinking).",
+    "why": "Per-kind prescription (examples vs guardrails by failure kind) is triage applied to evaluation — the capstone's planning skill. Domain transfer (shoes → yours) proves the method travels.",
+    "code": "// Capstone skeleton checklist: system / shots / contracts / gold / guards / budget.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Baseline 12/15 with edge 4/6, attack 2/3. Next iteration priorities?",
+      "options": ["More happy-path examples", "Edge examples for boundary misses + guardrail work for the attack slip — per-kind scores prescribe different fixes", "Bigger model", "Lower temperature"],
+      "answer": 1,
+      "explain": "Per-kind breakdowns direct iteration: edges need teaching (examples), attacks need defense (scope/triage). Aggregate-only views prescribe nothing."
+    },
+    {
+      "q": "Teammate edits few-shots without re-running evals. Risk?",
+      "options": ["None — examples are safe", "Unmeasured drift: pack components version together; example changes need same-set re-scoring or regressions hide", "Faster shipping", "Better coverage"],
+      "answer": 1,
+      "explain": "Version-as-unit discipline: prompts, examples, evals change together with recorded scores. Silent example edits are unmeasured bets."
+    },
+    {
+      "q": "This pack feeds a RAG agent next. What transfers directly?",
+      "options": ["Nothing — agents differ", "Contracts, eval gold sets, guardrails, and budget sheets plug into agent nodes; retrieval supplies the context slot the pack already structures", "Only the system prompt", "Only budgets"],
+      "answer": 1,
+      "explain": "The pack is agent infrastructure: node prompts reuse contracts/evals, guardrails wrap tool calls, budgets scale per retrieved context. Prompt engineering compounds into agent engineering."
+    }
+  ],
+  "summary": "Six components, one version, gated build order, per-kind iteration, honest memo. The pack is shippable, improvable, and agent-ready — course complete, assessment next.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship your own prompt pack capstone — and step into the agent cluster."
+}
