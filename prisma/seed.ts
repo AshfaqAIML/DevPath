@@ -216,8 +216,8 @@ const resourceItems: SeedItem[] = [
 }));
 resourceItems.push({ title: "Design Tokens Field Guide", level: "Intermediate", duration: "15 min read", tags: "design,reference", published: false });
 
-// The CSS Flexbox Simulator ships as a real playable experience — the other
-// simulators remain drafts until their sandboxes are built.
+// Two simulators ship as real playable experiences — the remaining drafts wait
+// for their sandboxes to be built.
 const simulatorItems: SeedItem[] = [
   {
     title: "CSS Flexbox Simulator",
@@ -228,9 +228,17 @@ const simulatorItems: SeedItem[] = [
     description:
       "A hands-on flexbox sandbox: flip every axis control, watch the layout react live, then prove it in challenge mode. Generates the exact CSS you built.",
   },
+  {
+    title: "HTTP Request/Response Lab",
+    level: "Intermediate",
+    tags: "http,networking,interactive",
+    featured: true,
+    published: true,
+    description:
+      "A live HTTP lab wired to DevPath's own API: build real requests — methods, headers, bodies, query params — and study genuine status codes, response headers and JSON payloads. Six guided missions included.",
+  },
   { title: "SQL Query Sandbox", level: "Beginner", tags: "sql,database,interactive", published: false },
   { title: "Kubernetes Cluster Simulator", level: "Advanced", tags: "kubernetes,devops,interactive", published: false },
-  { title: "HTTP Request/Response Lab", level: "Intermediate", tags: "http,networking,interactive", published: false },
 ];
 
 async function main() {

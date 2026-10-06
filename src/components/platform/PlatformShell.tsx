@@ -17,10 +17,12 @@ import { CategoryExplorer } from "./CategoryExplorer";
 import { AdminPanel } from "./AdminPanel";
 import { MyLibraryView } from "./MyLibraryView";
 import { FlexboxSimulator } from "./FlexboxSimulator";
+import { HttpLab } from "./HttpLab";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
 import { categoryHref, trackEvent, useCategories, type CategoriesPayload } from "./platform-data";
+import { PLAYABLE_SIMULATORS } from "@/lib/simulators";
 import type { CategoryView, ResourceItemView } from "@/lib/platform";
 
 interface PlatformShellProps {
@@ -133,7 +135,11 @@ export function PlatformShell({
           ) : view === "library" ? (
             <MyLibraryView categoriesData={categoriesData} />
           ) : view === "simulator" && simulatorItem && simulatorCategory ? (
-            <FlexboxSimulator item={simulatorItem} category={simulatorCategory} />
+            PLAYABLE_SIMULATORS[simulatorItem.slug] === "http" ? (
+              <HttpLab item={simulatorItem} category={simulatorCategory} />
+            ) : (
+              <FlexboxSimulator item={simulatorItem} category={simulatorCategory} />
+            )
           ) : activeCategory ? (
             <CategoryExplorer
               key={activeCategory.slug}

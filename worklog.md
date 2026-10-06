@@ -159,3 +159,59 @@ Unresolved issues / risks & priority recommendations for next phase:
 - Roadmap steps are admin-editable only via DB/seed today; an admin steps editor (drag-to-reorder, per-step CRUD) would complete the content lifecycle.
 - Analytics: consider aggregating simulator_view/challenge_complete in the admin analytics tab charts (events are recorded; the tab currently groups by type only).
 - Dev-server note for future agents: after `bun run db:push`, the running server needs its Prisma client reloaded — bump the PRISMA_CACHE_KEY in src/lib/db.ts (and restart if schema types changed) before assuming code bugs.
+
+---
+Task ID: 4
+Agent: Z.ai Code (main agent, scheduled dev round)
+Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features).
+
+Work Log:
+- STATUS ASSESSMENT (pre-work): read worklog; dev server healthy (all 200s). Investigated recurring `POST /api/analytics 400` lines in dev.log — confirmed they were pre-fix artifacts from round 3's QA; direct curl tests of simulator_view/challenge_complete return 200. Cleaned leftover test events (5 deleted). Full QA sweep (homepage / simulators category / simulator / library / admin): all render, ZERO console errors → stable → feature round per mandate.
+- Chose focus from worklog's own next-phase list: the HTTP Request/Response Lab simulator (recommended "request builder + visual exchange timeline"), admin analytics chart upgrade, styling polish.
+
+NEW FEATURE 1 — HTTP Request/Response Lab (2nd playable simulator, activates Simulators to "2 simulators"):
+- `src/lib/simulators.ts`: registry now maps slugs to a SimulatorKind union ("flexbox" | "http"); added simulatorKind() + SPOTLIGHT_SIM constant (hero spotlight is registry-driven now, not hardcoded).
+- `prisma/seed.ts`: HTTP Request/Response Lab published + featured with rich description; applied a targeted DB patch (no full reseed — preserved analytics + view counts); slug `http-request-response-lab`.
+- NEW `src/components/platform/HttpLab.tsx` (~1000 lines): sends REAL same-origin requests to DevPath's own API, so every status code/header/JSON studied is genuine.
+  - Free play: method segmented control (GET emerald / POST amber / PATCH orange / DELETE rose), URL input (Enter sends, same-origin guard with toast), endpoint library presets (8 chips incl. deliberate 400/401/404 teaching presets), collapsible header-row editor (enable toggles + add/remove, Content-Type preset), JSON body textarea with live validity indicator + Format button (POST/PATCH only).
+  - Response viewer: color-coded status line (2xx emerald / 3xx amber / 4xx-5xx rose) with ms + byte size, request echo line, "What this means" teaching callout (left-accent style after VLM feedback) with per-code explanations (200/201/204/400/401/403/404/405/429/500), collapsible response headers, JSON body with line numbers + custom regex syntax highlighting (keys teal / strings emerald / numbers amber / literals rose — React nodes, no innerHTML), copy button.
+  - Exchange timeline: last 30 exchanges, click-to-reselect, clear; each row shows method chip + path + status + ms.
+  - Missions mode: 6 guided missions (first-contact GET 200 → query params → sort+limit → trigger a 400 → 401 without admin key → 404 ghost hunt), auto-checked against the landing exchange, hint reveal (AnimatePresence), auto-advance on solve, trophy progress chip, progress persisted via library-store simProgress.
+  - Analytics: simulator_view on mount, challenge_complete per mission (existing event types — no API changes needed).
+- PlatformShell: dispatches HttpLab vs FlexboxSimulator via PLAYABLE_SIMULATORS kind.
+- HomeView hero spotlight now shows "New: the HTTP Request/Response Lab" via SPOTLIGHT_SIM.
+
+NEW FEATURE 2 — Admin analytics tab upgrade (worklog recommendation):
+- `getAnalyticsSummary` (platform.ts): + daily (7-day calendar buckets), + simulators (per-slug simulator_view + challenge_complete aggregation).
+- AdminPanel AnalyticsTab: 6 stat cards now (Total events / Category views / Item views / Searches / Sim launches / Missions cleared), full-width "Activity — last 7 days" bar chart (today highlighted in solid teal gradient, hover titles, weekday labels), "Simulator engagement" card (per-sim launches/cleared + avg missions-cleared-per-launch metric), recent events now full-width.
+
+BUGS FOUND & FIXED DURING QA:
+1. Simulator engagement card showed "600% of launches cleared at least one mission" — completes/views exceeds 100% because one launch can clear many missions. Reworded to "N missions cleared per launch on average" (honest metric, no cap hack).
+2. (Cosmetic per VLM) status code oversized vs body, teaching box competed with body → status text-3xl→2xl font-extrabold, teaching line became left-accent callout at lower opacity, endpoint-library→headers spacing mt-4→mt-5.
+
+STYLING POLISH:
+- JSON syntax highlighting with line numbers (custom safe tokenizer), method/status color system (no blue anywhere), status-bar hairline on the response card, mission list with check circles + line-through solved titles + active teal state, hint callout in amber.
+
+Stage Summary (verification results — agent-browser end-to-end, all via real UI interactions):
+- Homepage: spotlight shows the HTTP lab; hub/nav/footer all read "2 simulators"; HTTP lab in Editor's picks; 0 console errors after full scroll.
+- HTTP Lab free play: Send → real 200 OK with 47ms/size, JSON highlighted with line numbers, teaching line, timeline #1; "Invalid → 400" preset → 400 Bad Request + "Client error" chip + validation teaching line; timeline accumulates.
+- Missions: solved ALL 6 via real clicks (GET categories → 200; ?q=docker filtered to Docker items; sort=popular&limit=5; POST {} → 400; GET /api/analytics → 401; ghost-town → 404) — 6/6 "All clear!", auto-advance between missions, toasts, trophy chip filled.
+- Integration: simulators category "2 simulators · 2 shown"; item dialog "Launch sandbox" → lab view; ⌘K palette "http" → both results with Play chip → deep-links into the lab; library recents include the HTTP lab.
+- Admin analytics: 6 stat cards (Sim launches 2, Missions cleared 6), 7-day chart renders with "today" bar, simulator engagement lists both sims with per-launch metric, recent events feed live.
+- Mobile 390px: no horizontal overflow (scrollWidth exactly 390).
+- VLM QA: free mode 8.5/10, missions 9/10, mobile 7.5/10 (remaining nitpicks are dev-overlay artifacts + toast caught mid-animation, not UI bugs). Improvements from VLM applied (callout, status size, spacing).
+- ESLint clean; dev.log all 200s (the three 400s are the mission-4 teaching requests — expected); zero console errors across every view.
+
+Key artifacts added/changed this round:
+- NEW: `src/components/platform/HttpLab.tsx`.
+- UPDATED: `src/lib/simulators.ts` (kind union + SPOTLIGHT_SIM), `prisma/seed.ts` (HTTP lab published), `src/lib/platform.ts` (daily + simulators in analytics summary), `src/components/platform/PlatformShell.tsx` (sim dispatch), `src/components/platform/HomeView.tsx` (registry-driven spotlight), `src/components/platform/AdminPanel.tsx` (analytics tab overhaul).
+- QA screenshots: download/qa-httplab-{freemode,missions-complete,mobile,light,final}.png, qa-admin-analytics.png, qa-home-before.png.
+
+Unresolved issues / risks & priority recommendations for next phase:
+- Admin auth still demo-grade (shared password + header key) → NextAuth credentials + httpOnly session cookies remains the top upgrade.
+- localStorage library is device-local → lift saved/completed/stepProgress/simProgress behind a User model if cross-device sync is wanted.
+- Single-route constraint unchanged; canonical routes (/masterclass etc.) still DB-stored, query-param routing in-app.
+- Third simulator candidate: SQL Query Sandbox (in-browser SQL engine or a SQLite mini-service behind the gateway). The registry + "Launch sandbox" CTA + palette integration make each new sandbox ~1 component away.
+- Roadmap steps are admin-editable only via DB/seed; an admin steps editor (per-step CRUD + reorder) would complete the content lifecycle.
+- The HttpLab response viewer truncates non-JSON bodies at 4000 chars (404 HTML pages) — fine for teaching, note if it ever matters.
+- Analytics summary does JS-side day bucketing — fine at demo scale; move to SQL groupBy if event volume grows.

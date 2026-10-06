@@ -235,11 +235,57 @@ export async function getAnalyticsSummary() {
     take: 20,
   });
   const totalEvents = await db.analyticsEvent.count();
+
+  // 7-day activity: bucket events per calendar day (JS-side; demo scale)
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
+  since.setDate(since.getDate() - 6);
+  const weekEvents = await db.analyticsEvent.findMany({
+    where: { createdAt: { gte: since } },
+    select: { createdAt: true },
+  });
+  const dayKeys: string[] = [];
+  const dayMap = new Map<string, number>();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    dayKeys.push(key);
+    dayMap.set(key, 0);
+  }
+  for (const e of weekEvents) {
+    const key = new Date(e.createdAt).toISOString().slice(0, 10);
+    if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + 1);
+  }
+
+  // Simulator engagement: views + mission/challenge completions per sim slug
+  const [simViews, simCompletes] = await Promise.all([
+    db.analyticsEvent.groupBy({
+      by: ["slug"],
+      where: { type: "simulator_view" },
+      _count: { _all: true },
+    }),
+    db.analyticsEvent.groupBy({
+      by: ["slug"],
+      where: { type: "challenge_complete" },
+      _count: { _all: true },
+    }),
+  ]);
+
   return {
     categoryViews: byCategory.map((b) => ({ slug: b.slug, views: b._count._all })),
     typeCounts: byType.map((b) => ({ type: b.type, count: b._count._all })),
     recent,
     totalEvents,
+    daily: dayKeys.map((date) => ({ date, count: dayMap.get(date) ?? 0 })),
+    simulators: [...new Set([...simViews.map((s) => s.slug), ...simCompletes.map((s) => s.slug)])]
+      .filter((s): s is string => !!s)
+      .map((slug) => ({
+        slug,
+        views: simViews.find((s) => s.slug === slug)?._count._all ?? 0,
+        completes: simCompletes.find((s) => s.slug === slug)?._count._all ?? 0,
+      })),
   };
 }
 

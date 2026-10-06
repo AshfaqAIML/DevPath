@@ -23,6 +23,7 @@ import {
   Lock,
   LogOut,
   MousePointerClick,
+  Play,
   Plus,
   Save,
   Search,
@@ -84,6 +85,8 @@ type AnalyticsSummary = {
   typeCounts: { type: string; count: number }[];
   recent: { id: string; type: string; slug: string | null; label: string | null; createdAt: string }[];
   totalEvents: number;
+  daily: { date: string; count: number }[];
+  simulators: { slug: string; views: number; completes: number }[];
 };
 
 const ADMIN_KEY_STORAGE = "devpath-admin-key";
@@ -1050,28 +1053,79 @@ function AnalyticsTab({
   const typeCount = (type: string) =>
     data?.typeCounts.find((t) => t.type === type)?.count ?? 0;
   const maxViews = Math.max(1, ...(data?.categoryViews.map((v) => v.views) ?? [1]));
+  const maxDaily = Math.max(1, ...(data?.daily.map((d) => d.count) ?? [1]));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const weekTotal = data?.daily.reduce((a, d) => a + d.count, 0) ?? 0;
 
   const stats = [
     { label: "Total events", value: data?.totalEvents ?? 0, icon: Activity },
     { label: "Category views", value: typeCount("category_view"), icon: Eye },
-    { label: "Card clicks", value: typeCount("card_click"), icon: MousePointerClick },
+    { label: "Item views", value: typeCount("item_view"), icon: MousePointerClick },
     { label: "Searches", value: typeCount("search"), icon: Search },
+    { label: "Sim launches", value: typeCount("simulator_view"), icon: Play },
+    { label: "Missions cleared", value: typeCount("challenge_complete"), icon: Star },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border bg-card p-5">
+          <div key={s.label} className="rounded-2xl border bg-card p-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 {s.label}
               </p>
-              <s.icon aria-hidden className="size-4 text-muted-foreground" />
+              <s.icon aria-hidden className="size-3.5 text-muted-foreground" />
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums">{s.value}</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums">{s.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* 7-day activity chart */}
+      <div className="rounded-2xl border bg-card p-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Activity — last 7 days</h3>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {weekTotal} events this week
+          </span>
+        </div>
+        <div className="mt-4 flex h-36 items-end gap-2 sm:gap-3" role="img" aria-label="Bar chart of analytics events per day for the last seven days">
+          {data?.daily.map((d) => {
+            const isToday = d.date === todayKey;
+            const pct = Math.max(3, (d.count / maxDaily) * 100);
+            const label = new Date(`${d.date}T00:00:00`).toLocaleDateString(undefined, {
+              weekday: "short",
+            });
+            return (
+              <div key={d.date} className="group flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
+                  {d.count}
+                </span>
+                <div className="flex w-full flex-1 items-end">
+                  <div
+                    title={`${d.count} events on ${d.date}`}
+                    style={{ height: `${pct}%` }}
+                    className={cn(
+                      "w-full rounded-md transition-all duration-500",
+                      isToday
+                        ? "bg-gradient-to-t from-teal-600 to-teal-400"
+                        : "bg-gradient-to-t from-teal-500/40 to-teal-500/25 group-hover:from-teal-500/60 group-hover:to-teal-500/40"
+                    )}
+                  />
+                </div>
+                <span
+                  className={cn(
+                    "text-[10px] font-medium",
+                    isToday ? "text-teal-600 dark:text-teal-400" : "text-muted-foreground"
+                  )}
+                >
+                  {isToday ? "today" : label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -1104,33 +1158,73 @@ function AnalyticsTab({
           </ul>
         </div>
 
-        {/* Recent events */}
+        {/* Simulator engagement */}
         <div className="rounded-2xl border bg-card p-5">
-          <h3 className="text-sm font-semibold">Recent events</h3>
-          <div className="mt-4 max-h-72 space-y-2.5 overflow-y-auto pr-1">
-            {(data?.recent ?? []).length === 0 ? (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                No events recorded yet — browse the platform to generate some.
-              </p>
-            ) : (
-              data?.recent.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 text-xs"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      {e.type}
-                    </span>
-                    <span className="truncate font-medium">{e.label ?? e.slug ?? "—"}</span>
+          <h3 className="text-sm font-semibold">Simulator engagement</h3>
+          {(data?.simulators ?? []).length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted-foreground">
+              No simulator activity yet — launch a sandbox to generate events.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-4">
+              {data?.simulators.map((sim) => {
+                const maxSim = Math.max(1, ...data.simulators.map((s) => s.views));
+                return (
+                  <li key={sim.slug} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                        <Play aria-hidden className="size-3 shrink-0 text-teal-500" />
+                        <span className="truncate font-mono text-[11px]">{sim.slug}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {sim.views} launches · {sim.completes} cleared
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-teal-600 to-teal-400 transition-all duration-500"
+                        style={{ width: `${Math.max(2, (sim.views / maxSim) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {sim.views > 0
+                        ? `${(sim.completes / sim.views).toFixed(1)} missions cleared per launch on average`
+                        : "no launches yet"}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Recent events */}
+      <div className="rounded-2xl border bg-card p-5">
+        <h3 className="text-sm font-semibold">Recent events</h3>
+        <div className="mt-4 max-h-72 space-y-2.5 overflow-y-auto pr-1">
+          {(data?.recent ?? []).length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted-foreground">
+              No events recorded yet — browse the platform to generate some.
+            </p>
+          ) : (
+            data?.recent.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 text-xs"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {e.type}
                   </span>
-                  <time className="shrink-0 text-muted-foreground" dateTime={e.createdAt}>
-                    {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
-                  </time>
-                </div>
-              ))
-            )}
-          </div>
+                  <span className="truncate font-medium">{e.label ?? e.slug ?? "—"}</span>
+                </span>
+                <time className="shrink-0 text-muted-foreground" dateTime={e.createdAt}>
+                  {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+                </time>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
