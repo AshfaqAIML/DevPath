@@ -56,6 +56,14 @@ model ResourceItem {
   // JSON array of structured steps for roadmap-style items:
   // [{ "title": "...", "detail": "...", "hours": 12 }]
   steps       String    @default("")
+  // Learning track for courses — one of the registry keys in src/lib/tracks.ts
+  // (Frontend | Backend | Data | DA/DS | AI | SDET | Tools). Powers the track
+  // filter on the Courses explorer and track chips on cards/dialogs/search.
+  track        String?
+  // Planned lesson count from the catalog plan (shows as "N lessons" for
+  // catalog-only courses). Live counts from the Lesson table always win once
+  // real content is authored — see getItems().
+  plannedLessons Int?
   published   Boolean   @default(false)
   featured    Boolean   @default(false)
   order       Int       @default(0)

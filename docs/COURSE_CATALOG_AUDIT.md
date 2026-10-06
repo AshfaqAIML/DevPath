@@ -1,21 +1,56 @@
 # Course Catalog Audit — DevPath
 
-Audited: 2026-10-06 · Source of truth: `prisma/seed.ts` + live `/api/resources?category=courses`
+Audited: 2026-10-06 (updated same day: second course batch + tracks) · Source of truth: `prisma/seed.ts` + `prisma/course-batch-2.ts` + live `/api/resources?category=courses`
 Reference pattern studied: resources.criodo.com/?tab=courses (product pattern only — all DevPath
 content is independently authored; no proprietary text, examples, quizzes or branding copied).
 
 ## Totals
 
-- **44 published courses** (+1 draft: Zig Fundamentals) in the `courses` category.
-- Level split: 22 Beginner / 11 Intermediate / 11 Advanced (seed cycles levels).
-- Course content status: **2 of 44 have complete lesson content today**
+- **85 published courses** (+1 draft: Zig Fundamentals) in the `courses` category:
+  44 original + **41 added in the 2026-10-06 user-specified batch** (SQL Fundamentals, Node.js
+  Fundamentals and Docker Fundamentals already existed and were updated in place — Docker as
+  "Docker Foundations" — instead of duplicated).
+- Every course now carries a **learning track** (DB `track` column) and a **planned lesson count**
+  (`plannedLessons`): Frontend 21 · Backend 27 · Data 7 · DA/DS 3 · AI 9 · SDET 7 · Tools 11.
+  Tracks power the Courses explorer filter chips, card/dialog/search chips, admin editing and
+  the CSV export; search matches track names too ("backend" finds the Backend track).
+- Course content status: **2 of 85 have complete lesson content today**
   (`typescript-in-2-hours`, 8 lessons + final assessment + capstone project;
   `sql-fundamentals`, 10 lessons + 12-question assessment + capstone project +
   49 lesson quiz questions, 192 minutes, 765 XP — every example query runs in
-  the SQL Query Sandbox via the `practice` block deep-links). The remaining 42
+  the SQL Query Sandbox via the `practice` block deep-links). The remaining 83
   are catalog entries awaiting content — the content engine
   (`Course`/`Lesson` models + APIs + renderer) is built and each new course is
   ~1 content file away.
+
+## Second batch (2026-10-06) — user-specified additions
+
+All catalog-only (planned lessons from the user's list; durations derived at ~15 min/lesson):
+
+SQL Intermediate (DA/DS 10) · SQL Advanced (DA/DS 10) · OpenDataLoader PDF (AI 5) ·
+API Testing with Postman (SDET 10) · TypeScript Fundamentals (Frontend 10) ·
+Git for Beginners: Visual Learning (Tools 10) · Build an AI Interview Coach with LangChain
+(Backend 8) · Interactive React Workshop (Frontend 10) · React Fundamentals (Frontend 9) ·
+Tailwind CSS Fundamentals (Frontend 10) · DSA Fundamentals by Visualization (Backend 10) ·
+Low Level Design (Backend 4) · AI for Backend Developers (Backend 6) · High Level Design
+(Backend 10) · Data Visualization & Analysis (Data 11) · Database Sharding (Backend 6) ·
+Circuit Breaker Pattern (Backend 5) · CQRS & Event Sourcing (Backend 6) ·
+Load Balancing Strategies (Backend 5) · Distributed Caching (Backend 6) ·
+Consensus Algorithms (Backend 5) · Database Indexing Deep Dive (Backend 5) ·
+SQL Window Functions (Data 6) · GraphQL vs REST (Backend 6) · WebSocket Essentials (Backend 5) ·
+OAuth 2.0 & OIDC (Backend 6) · Webhook Design Patterns (Backend 5) ·
+LangGraph for E-commerce (AI 10) · CrewAI: E-commerce Agent Teams (AI 10) ·
+RAG Agents for E-commerce (AI 10) · MCP & Tool Use for E-commerce (AI 10) ·
+Production AI Agents (AI 10) · Agent Harnesses for Developers (AI 10) ·
+Prompt Engineering 101 (AI 10) · Selenium WebDriver for E-Commerce Testing (SDET 10) ·
+Playwright for E-Commerce Testing (SDET 10) · JMeter Performance Testing for E-Commerce
+(SDET 10) · E-Commerce Test Automation: The Practitioner's Playbook (SDET 9) ·
+Spring AI for E-Commerce (AI 8) · Full-Stack AI Agents: Java, Spring Boot & React (Backend 8) ·
+Python, Pandas, ML & GenAI for E-Commerce (Data 8)
+
+Track normalization applied: the batch's "AI/ML" label maps to the **AI** track.
+Batch data lives in `prisma/course-batch-2.ts` (shared by seed + the idempotent live
+patch `content/patches/add-course-batch-2.ts`).
 
 ## Domain grouping (from the discovered catalog)
 

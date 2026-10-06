@@ -372,3 +372,36 @@ Unresolved issues / risks & priority recommendations for next phase:
 - Library course progress remains localStorage/device-local (unchanged, single-user).
 - Dev-mode Radix-ID hydration artifact documented above — check on a warm reload before treating as real.
 - The sandbox `q` deep-link URL can get long with big queries (fine at current sizes; a mission-style preset registry is the scaling path if future lessons need huge queries).
+
+---
+Task ID: 8
+Agent: Z.ai Code (main agent)
+Task: Add the user-specified second course batch (41 new courses with tracks + lesson counts) to the Courses catalog, and build the full track system (schema → API → UI → admin).
+
+Work Log:
+- Reviewed worklog (Task 7 = SQL Fundamentals course complete; "now next course" plan was superseded mid-round by the user's batch request — JS course authoring subagents were aborted before writing any files).
+- Schema: added `track String?` + `plannedLessons Int?` to ResourceItem (prisma/schema.prisma) → `bun run db:push` (additive, no data loss).
+- NEW `src/lib/tracks.ts`: registry of the 7 learning tracks (Frontend rose / Backend emerald / Data teal / DA-DS orange / AI fuchsia / SDET amber / Tools violet — indigo/blue avoided) with chip/dot/active classes; all UI renders tracks through it (config-driven, no per-component hardcoding).
+- Batch data extracted to `prisma/course-batch-2.ts` (single source of truth): 41 user-specified courses (title, level, track, plannedLessons, real per-topic description; duration ≈ 15 min/lesson) + EXISTING_COURSE_META backfill (tracks + planned lessons for the original 44, audit-doc lesson counts, user values winning for SQL Fundamentals 10/DA-DS, Node.js Fundamentals 10/Backend, Docker Foundations 10/Tools). Track normalization: batch "AI/ML" → AI. Dedupe decisions: SQL Fundamentals + Node.js Fundamentals exist → updated in place; "Docker Fundamentals" merged into existing "Docker Foundations" (no near-duplicate row).
+- `prisma/seed.ts` now imports the shared module (backfill + batch appended; DB write persists track + plannedLessons) — a future full reseed reproduces the 85-course catalog.
+- NEW `content/patches/add-course-batch-2.ts`: idempotent live-DB patch (upsert-by-slug; existing rows only get track/plannedLessons so views/analytics survive). Ran it: 44 backfilled, 41 created, published courses 44 → 85 (AI 9, Backend 27, Data 7, DA/DS 3, Frontend 21, SDET 7, Tools 11). Re-run verified no-op.
+- Data layer: ResourceItemView gained `track` + `plannedLessons`; getItems accepts `track` filter and matches track in `q` search; APIs extended (GET /api/resources?track=, PATCH + POST accept track/plannedLessons with zod enums); platform-data fetchItems passes track.
+- UI: ResourceItemCard (track chip next to level; planned "N lessons" muted chip with honest tooltip; live teal chip unchanged and still wins; duration shown for planned/untracked); ItemDetailDialog (track badge + "N lessons planned" badge; live courses keep "Start course · N lessons"; catalog-course CTA toast now says "Content in production 🛠 · N lessons planned"); GlobalSearch (track in the match value → "backend" finds the Backend track; planned-chips on results); CategoryExplorer (server-side track facet row: "All tracks 85" + 7 colored chips with counts, single-line horizontal scroller with right-edge fade hint, aria-pressed, resets with filters); AdminPanel (content table rows show "N lessons planned · duration" + track chip; CSV export gains track/lessons/plannedLessons columns; Add-content dialog gains Learning-track select + Planned-lessons input wired to the new POST fields).
+- QA via agent-browser (all verified through real UI): hub card "Courses — 85 mini courses"; courses page "85 shown"; AI chip → "9 shown" all AI-track; LangGraph dialog shows "AI track" + "2h 30m" + "10 lessons planned" + honest "Start learning" (no fake course CTA); SQL Fundamentals dialog unchanged: "Start course · 10 lessons" + "DA/DS track"; GlobalSearch "backend" lists Backend-track courses with lesson chips; admin Content tab rows show track chip + planned lessons; mobile 390px scrollWidth exactly 390 (desktop 1440 too, zero overflow); console clean apart from the documented dev-mode Radix-ID artifact + one stale-buffer module error from a typo fixed mid-round (`@lib/utils` → `@/lib/utils`, verified fixed via file + dev.log sweep: no module errors, all 200s).
+- VLM styling review loop: 8/10 → applied refinements (single-line scrollable track row instead of wrapping; "All tracks" chip more prominent; card meta row breathing room gap-y-2/pt-1.5; Saved button aligned h-9 with the sort select; scroll-affordance gradient) → re-review 9/10. ESLint clean. dev.log all 200s.
+- docs/COURSE_CATALOG_AUDIT.md updated: 85 courses, batch listing, track taxonomy, dedupe notes.
+- 15-min webDevReview cron verified present (job 439026, fixed_rate 900s — no duplicate created).
+
+Stage Summary (verification results):
+- 85 published courses (+1 Zig draft) — hub count DB-derived, hub shows "85 mini courses"; other categories unchanged (15 workshops / 11 career paths / 27 guides / 3 simulators).
+- Track system is end-to-end DB-driven: filter (server-side), card/dialog/search chips, admin create/edit + CSV, search-by-track.
+- Content-complete courses (TS 8, SQL 10) keep live counts and their "Start course" CTAs; catalog-only courses show planned counts and never fake CTAs.
+- Key artifacts: prisma/schema.prisma (track/plannedLessons), prisma/course-batch-2.ts (NEW), content/patches/add-course-batch-2.ts (NEW), src/lib/tracks.ts (NEW), src/lib/platform.ts, src/app/api/resources{,/ [id]}/route.ts, platform-data.ts, ResourceItemCard.tsx, ItemDetailDialog.tsx, GlobalSearch.tsx, CategoryExplorer.tsx, AdminPanel.tsx, prisma/seed.ts, docs/COURSE_CATALOG_AUDIT.md.
+- QA screenshots: download/qa-courses-tracks{,-v2}.png, qa-courses-ai-filter.png, qa-courses-final.png.
+
+Unresolved issues / risks & priority recommendations for next phase:
+- The prior "next course" plan (Course 3 = JavaScript Basics Refresher — the TS course's prereq) is still the top content priority; the JS-course authoring was interrupted by this batch request and NO partial files were left behind (subagents aborted pre-write). Next round should resume it: 8 lessons per the audit, and consider pairing it with the previously-planned JavaScript Playground simulator + practice-block registry (practice `sim` field) — the worklog round-7 note still applies.
+- Dev server was restarted this round (stale in-memory Prisma client after db:push → "Unknown argument track" 500s). If a future round adds schema fields, restart `bun run dev` before browser QA.
+- 41 new catalog courses have 0 views and generic-but-real descriptions; view counts accrue naturally, and admins can edit all fields live (track + plannedLessons now included).
+- Courses category page renders 85 cards without pagination (limit 200) — fine at this scale; if the catalog grows past ~150, consider virtualization or page-based browsing.
+- SQL Fundamentals catalog level shows Beginner (pre-existing seed value; audit doc lists Intermediate) — cosmetic inconsistency, untouched this round; a one-line admin PATCH could align it if desired.

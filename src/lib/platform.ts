@@ -41,6 +41,10 @@ export type ResourceItemView = {
   level: string;
   duration: string | null;
   tags: string[];
+  /** Learning track (Frontend | Backend | Data | DA/DS | AI | SDET | Tools) — courses */
+  track: string | null;
+  /** Planned lessons from the catalog plan (null when unset). Live counts win. */
+  plannedLessons: number | null;
   /** Structured roadmap milestones (empty for non-roadmap content) */
   steps: StepView[];
   published: boolean;
@@ -127,6 +131,8 @@ export const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemVi
   level: i.level,
   duration: i.duration,
   tags: i.tags ? i.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+  track: i.track ?? null,
+  plannedLessons: i.plannedLessons ?? null,
   steps: parseSteps(i.steps),
   published: i.published,
   featured: i.featured,
@@ -142,6 +148,7 @@ export async function getItems(opts: {
   q?: string;
   level?: string;
   sort?: string;
+  track?: string;
   includeDrafts?: boolean;
   featured?: boolean;
   limit?: number;
@@ -156,6 +163,9 @@ export async function getItems(opts: {
   if (opts.level && opts.level !== "All") {
     where.level = opts.level;
   }
+  if (opts.track && opts.track !== "All") {
+    where.track = opts.track;
+  }
   if (opts.featured) {
     where.featured = true;
   }
@@ -166,6 +176,7 @@ export async function getItems(opts: {
       { title: { contains: opts.q } },
       { description: { contains: opts.q } },
       { tags: { contains: opts.q } },
+      { track: { contains: opts.q } },
     ];
     void q;
   }
@@ -196,6 +207,8 @@ export async function getItems(opts: {
 
   return items.map((i) => ({
     ...toResourceItemView(i, i.category),
+    // Live authored lessons always win over the catalog plan; catalog-only
+    // courses fall back to the planned count (displayed as "N lessons").
     lessonCount: lessonMap.get(i.slug) ?? 0,
   }));
 }

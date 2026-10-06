@@ -19,6 +19,7 @@ export async function fetchItems(params: {
   q?: string;
   level?: string;
   sort?: string;
+  track?: string;
   all?: boolean;
   adminKey?: string;
 }): Promise<ItemsPayload> {
@@ -26,6 +27,7 @@ export async function fetchItems(params: {
   if (params.category) sp.set("category", params.category);
   if (params.q) sp.set("q", params.q);
   if (params.level && params.level !== "All") sp.set("level", params.level);
+  if (params.track && params.track !== "All") sp.set("track", params.track);
   if (params.sort) sp.set("sort", params.sort);
   if (params.all) sp.set("all", "1");
   const headers: Record<string, string> = {};

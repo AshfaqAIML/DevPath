@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
       q: sp.get("q") ?? undefined,
       level: sp.get("level") ?? undefined,
       sort: sp.get("sort") ?? undefined,
+      track: sp.get("track") ?? undefined,
       includeDrafts,
       limit: sp.get("limit") ? Math.min(Number(sp.get("limit")) || 200, 200) : undefined,
     });
@@ -31,6 +32,8 @@ const createSchema = z.object({
   level: z.enum(["Beginner", "Intermediate", "Advanced"]).default("Beginner"),
   duration: z.string().max(30).optional(),
   tags: z.string().max(120).default(""),
+  track: z.enum(["Frontend", "Backend", "Data", "DA/DS", "AI", "SDET", "Tools"]).optional(),
+  plannedLessons: z.number().int().min(0).max(99).optional(),
   published: z.boolean().default(false),
   featured: z.boolean().default(false),
 });
@@ -65,6 +68,8 @@ export async function POST(req: NextRequest) {
         level: body.level,
         duration: body.duration ?? null,
         tags: body.tags,
+        track: body.track ?? null,
+        plannedLessons: body.plannedLessons ?? null,
         published: body.published,
         featured: body.featured,
         category: { connect: { id: category.id } },

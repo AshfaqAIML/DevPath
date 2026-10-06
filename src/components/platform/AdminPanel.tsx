@@ -81,6 +81,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
+import { TRACKS, trackChip } from "@/lib/tracks";
 import type { CategoryView, ResourceItemView, StepView } from "@/lib/platform";
 import { fetchItems, type CategoriesPayload } from "./platform-data";
 
@@ -584,12 +585,15 @@ function ContentManager({
   };
 
   const exportCsv = () => {
-    const header = ["title", "category", "level", "duration", "published", "featured", "views", "tags", "slug"];
+    const header = ["title", "category", "level", "track", "duration", "lessons", "plannedLessons", "published", "featured", "views", "tags", "slug"];
     const rows = items.map((i) => [
       i.title,
       i.categoryTitle,
       i.level,
+      i.track ?? "",
       i.duration ?? "",
+      String(i.lessonCount ?? 0),
+      i.plannedLessons != null ? String(i.plannedLessons) : "",
       i.published ? "yes" : "no",
       i.featured ? "yes" : "no",
       String(i.views),
@@ -780,7 +784,9 @@ function ContentManager({
                       <p className="truncate text-xs text-muted-foreground">
                         {item.steps.length > 0
                           ? `${item.steps.length} steps`
-                          : (item.duration ?? item.tags.slice(0, 2).join(", "))}
+                          : item.categorySlug === "courses"
+                            ? `${(item.lessonCount ?? 0) > 0 ? item.lessonCount : item.plannedLessons ?? 0} lessons${(item.lessonCount ?? 0) > 0 ? " live" : " planned"}${item.duration ? ` · ${item.duration}` : ""}`
+                            : (item.duration ?? item.tags.slice(0, 2).join(", "))}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -790,9 +796,22 @@ function ContentManager({
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[11px] font-normal">
-                        {item.level}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant="outline" className="text-[11px] font-normal">
+                          {item.level}
+                        </Badge>
+                        {item.track && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium",
+                              trackChip(item.track)
+                            )}
+                            title={`${item.track} track`}
+                          >
+                            {item.track}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -948,6 +967,8 @@ function AddItemDialog({
   const [description, setDescription] = React.useState("");
   const [categorySlug, setCategorySlug] = React.useState(categories[0]?.slug ?? "");
   const [level, setLevel] = React.useState("Beginner");
+  const [track, setTrack] = React.useState("none");
+  const [plannedLessons, setPlannedLessons] = React.useState("");
   const [duration, setDuration] = React.useState("");
   const [tags, setTags] = React.useState("");
   const [published, setPublished] = React.useState(true);
@@ -965,6 +986,10 @@ function AddItemDialog({
           description: description.trim(),
           categorySlug,
           level,
+          track: track !== "none" ? track : undefined,
+          plannedLessons: plannedLessons.trim()
+            ? Math.max(0, Math.min(99, Number(plannedLessons.trim()) || 0))
+            : undefined,
           duration: duration.trim() || undefined,
           tags: tags.trim(),
           published,
@@ -976,6 +1001,8 @@ function AddItemDialog({
         onOpenChange(false);
         setTitle("");
         setDescription("");
+        setTrack("none");
+        setPlannedLessons("");
         setDuration("");
         setTags("");
         setPublished(true);
@@ -1064,6 +1091,40 @@ function AddItemDialog({
                 onChange={(e) => setTags(e.target.value)}
                 placeholder="wasm,systems"
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Learning track</Label>
+              <Select value={track} onValueChange={setTrack}>
+                <SelectTrigger aria-label="Learning track">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No track</SelectItem>
+                  {TRACKS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Drives the track filter and chips on course cards.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-planned-lessons">Planned lessons</Label>
+              <Input
+                id="new-planned-lessons"
+                value={plannedLessons}
+                onChange={(e) => setPlannedLessons(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="e.g. 8"
+                inputMode="numeric"
+              />
+              <p className="text-xs text-muted-foreground">
+                Catalog plan only — authored lessons always win.
+              </p>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">

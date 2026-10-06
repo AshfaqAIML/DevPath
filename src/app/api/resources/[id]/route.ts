@@ -15,6 +15,8 @@ const patchSchema = z.object({
   title: z.string().min(2).max(120).optional(),
   description: z.string().max(600).optional(),
   level: z.enum(["Beginner", "Intermediate", "Advanced"]).optional(),
+  track: z.enum(["Frontend", "Backend", "Data", "DA/DS", "AI", "SDET", "Tools"]).nullable().optional(),
+  plannedLessons: z.number().int().min(0).max(99).nullable().optional(),
   published: z.boolean().optional(),
   featured: z.boolean().optional(),
   /** Roadmap milestones — replaces the full ordered list when provided. */

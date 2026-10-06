@@ -99,10 +99,13 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
                   i.categorySlug === "simulators" && isPlayableSimulator(i.slug);
                 const isCourse =
                   i.categorySlug === "courses" && (i.lessonCount ?? 0) > 0;
+                const liveLessons = i.lessonCount ?? 0;
+                const plannedLessons =
+                  liveLessons === 0 ? i.plannedLessons ?? 0 : 0;
                 return (
                   <CommandItem
                     key={i.id}
-                    value={`${i.title} ${i.tags.join(" ")} ${i.level} ${c.title}`}
+                    value={`${i.title} ${i.tags.join(" ")} ${i.level} ${i.track ?? ""} ${c.title}`}
                     onSelect={() => {
                       trackEvent("item_view", i.slug, i.title);
                       go(
@@ -137,7 +140,20 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
                     )}
                     {isCourse && (
                       <span className="ml-auto rounded border border-orange-500/40 bg-orange-500/10 px-1.5 py-px text-[10px] font-semibold text-orange-600 dark:text-orange-300">
-                        {i.lessonCount} lessons
+                        {liveLessons} lessons
+                      </span>
+                    )}
+                    {!isCourse && plannedLessons > 0 && (
+                      <span
+                        title={`${plannedLessons} lessons planned — content in production`}
+                        className="ml-auto rounded border bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground"
+                      >
+                        {plannedLessons} lessons
+                      </span>
+                    )}
+                    {i.track && !isCourse && !playable && plannedLessons === 0 && (
+                      <span className="ml-auto rounded border bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                        {i.track}
                       </span>
                     )}
                   </CommandItem>

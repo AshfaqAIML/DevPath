@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Bookmark,
   ChevronRight,
+  Layers,
   ListFilter,
   Loader2,
   Route,
@@ -32,6 +33,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
+import { TRACKS, trackStyles } from "@/lib/tracks";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import type { CategoryView, ResourceItemView } from "@/lib/platform";
 import { fetchItems, trackEvent, type CategoriesPayload, type ItemsPayload } from "./platform-data";
@@ -65,9 +67,21 @@ export function CategoryExplorer({
 
   const [q, setQ] = React.useState("");
   const [level, setLevel] = React.useState<(typeof LEVELS)[number]>("All");
+  const [track, setTrack] = React.useState<string>("All");
   const [sort, setSort] = React.useState<(typeof SORTS)[number]["value"]>("featured");
   const [savedOnly, setSavedOnly] = React.useState(false);
   const [selected, setSelected] = React.useState<ResourceItemView | null>(null);
+
+  // Track facets — derived from the SSR-fetched unfiltered list, so the
+  // chips show stable per-track totals regardless of active filters.
+  const trackCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const i of initialItems) {
+      if (i.track) counts.set(i.track, (counts.get(i.track) ?? 0) + 1);
+    }
+    return counts;
+  }, [initialItems]);
+  const hasTracks = trackCounts.size > 0;
 
   const hydrated = useLibraryHydrated();
   const saved = useLibrary((s) => s.saved);
@@ -89,10 +103,10 @@ export function CategoryExplorer({
   }, [debouncedQ, live.slug]);
 
   const { data, isFetching } = useQuery<ItemsPayload>({
-    queryKey: ["items", live.slug, debouncedQ, level, sort],
-    queryFn: () => fetchItems({ category: live.slug, q: debouncedQ, level, sort }),
+    queryKey: ["items", live.slug, debouncedQ, level, sort, track],
+    queryFn: () => fetchItems({ category: live.slug, q: debouncedQ, level, sort, track }),
     initialData:
-      debouncedQ === "" && level === "All" && sort === "featured"
+      debouncedQ === "" && level === "All" && sort === "featured" && track === "All"
         ? { items: initialItems }
         : undefined,
     placeholderData: (prev) => prev,
@@ -240,7 +254,7 @@ export function CategoryExplorer({
               size="sm"
               onClick={() => setSavedOnly((v) => !v)}
               aria-pressed={savedOnly}
-              className="h-8 gap-1.5 rounded-lg px-3 text-xs"
+              className="h-9 gap-1.5 rounded-lg px-3 text-xs"
             >
               <Bookmark aria-hidden className={cn("size-3.5", savedOnly && "fill-current")} />
               Saved
@@ -263,6 +277,61 @@ export function CategoryExplorer({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Track facets (courses) — DB-driven, rendered from the tracks registry.
+            Single-line horizontal scroll keeps the toolbar compact at every width;
+            the right-edge fade hints that more chips are off-screen. */}
+        {hasTracks && (
+          <div className="relative w-full">
+            <div
+              role="group"
+              aria-label="Filter by track"
+              className="-mt-1 flex w-full items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+            <button
+              type="button"
+              onClick={() => setTrack("All")}
+              aria-pressed={track === "All"}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                track === "All"
+                  ? "border-primary/60 bg-primary/10 text-foreground"
+                  : "border-border bg-muted/40 text-foreground/80 hover:border-foreground/30 hover:text-foreground"
+              )}
+            >
+              <Layers aria-hidden className="size-3" />
+              All tracks
+              <span className="tabular-nums opacity-60">{initialItems.length}</span>
+            </button>
+            {TRACKS.filter((t) => trackCounts.has(t)).map((t) => {
+              const ts = trackStyles[t];
+              const active = track === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTrack(active ? "All" : t)}
+                  aria-pressed={active}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? ts.active
+                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                  )}
+                >
+                  <span aria-hidden className={cn("size-1.5 rounded-full", ts.dot)} />
+                  {t}
+                  <span className="tabular-nums opacity-60">{trackCounts.get(t)}</span>
+                </button>
+              );
+            })}
+            </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-r from-transparent to-background"
+            />
+          </div>
+        )}
       </div>
 
       {/* Items grid */}
@@ -284,6 +353,7 @@ export function CategoryExplorer({
           onReset={() => {
             setQ("");
             setLevel("All");
+            setTrack("All");
             setSort("featured");
             setSavedOnly(false);
           }}

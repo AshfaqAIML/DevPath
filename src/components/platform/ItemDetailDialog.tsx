@@ -17,6 +17,7 @@ import {
   Clock,
   Eye,
   Hourglass,
+  Layers,
   Play,
   Route,
   Sparkles,
@@ -34,6 +35,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getAccent } from "@/lib/accent";
 import { cn } from "@/lib/utils";
+import { trackChip } from "@/lib/tracks";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import { isPlayableSimulator, simulatorViewHref } from "@/lib/simulators";
 import type { ResourceItemView, StepView } from "@/lib/platform";
@@ -71,6 +73,10 @@ export function ItemDetailDialog({ item, onOpenChange }: ItemDetailDialogProps) 
   const a = getAccent(item.categoryAccent);
   const isSimulator = item.categorySlug === "simulators";
   const playable = isSimulator && isPlayableSimulator(item.slug);
+  // Live authored lessons drive the Start-course CTA; the planned count only
+  // shows as catalog metadata for content-in-production courses.
+  const liveLessons = item.lessonCount ?? 0;
+  const plannedLessons = liveLessons === 0 ? item.plannedLessons ?? 0 : 0;
 
   return (
     <Dialog open={!!item} onOpenChange={onOpenChange}>
@@ -110,10 +116,30 @@ export function ItemDetailDialog({ item, onOpenChange }: ItemDetailDialogProps) 
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
+            {item.track ? (
+              <Badge
+                variant="outline"
+                className={cn("gap-1.5 font-medium", trackChip(item.track))}
+                title={`${item.track} learning track`}
+              >
+                <Layers aria-hidden className="size-3" />
+                {item.track} track
+              </Badge>
+            ) : null}
             {item.duration ? (
               <Badge variant="outline" className="gap-1.5 font-normal">
                 <Clock aria-hidden className="size-3" />
                 {item.duration}
+              </Badge>
+            ) : null}
+            {plannedLessons > 0 ? (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal"
+                title={`${plannedLessons} lessons planned — full lesson content in production`}
+              >
+                <BookOpen aria-hidden className="size-3" />
+                {plannedLessons} lessons planned
               </Badge>
             ) : null}
             {item.featured ? (
@@ -212,10 +238,16 @@ export function ItemDetailDialog({ item, onOpenChange }: ItemDetailDialogProps) 
                 className="gap-2 sm:flex-1"
                 onClick={() => {
                   toast({
-                    title: isSimulator ? "Sandbox in the lab 🧪" : "Enrolled 🎉",
+                    title: isSimulator
+                      ? "Sandbox in the lab 🧪"
+                      : plannedLessons > 0
+                        ? "Content in production 🛠"
+                        : "Enrolled 🎉",
                     description: isSimulator
                       ? `“${item.title}” is being built — the Flexbox sandbox is live today.`
-                      : `“${item.title}” is now on your learning queue.`,
+                      : plannedLessons > 0
+                        ? `“${item.title}” has ${plannedLessons} lessons planned — full lesson content is being authored, and this course is on your learning queue.`
+                        : `“${item.title}” is now on your learning queue.`,
                   });
                   onOpenChange(false);
                 }}

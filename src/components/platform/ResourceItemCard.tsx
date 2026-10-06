@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Bookmark, BookOpen, Check, Clock, Eye, Milestone, Play, Sparkles } from "lucide-react";
+import { Bookmark, BookOpen, Check, Clock, Eye, Layers, Milestone, Play, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
+import { trackChip } from "@/lib/tracks";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import { isPlayableSimulator } from "@/lib/simulators";
 import type { ResourceItemView } from "@/lib/platform";
@@ -32,8 +33,12 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
   // Roadmap cards surface their real structure: step count + total hours
   const stepCount = item.steps.length;
   const stepHours = item.steps.reduce((s, st) => s + (st.hours ?? 0), 0);
-  // Courses with real content surface their live lesson count
+  // Courses with real authored content surface their live lesson count;
+  // catalog-only courses fall back to the planned count from the catalog.
   const lessonCount = item.lessonCount ?? 0;
+  const plannedLessons = lessonCount === 0 ? item.plannedLessons ?? 0 : 0;
+  const showDuration =
+    item.duration != null && lessonCount === 0 && stepCount === 0;
 
   return (
     <div
@@ -84,13 +89,27 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
       )}
 
       <div className="relative flex items-start justify-between gap-2">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium",
-            levelClass
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium",
+              levelClass
+            )}
+          >
+            {item.level}
+          </span>
+          {item.track && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium",
+                trackChip(item.track)
+              )}
+              title={`${item.track} track`}
+            >
+              <Layers aria-hidden className="size-3" />
+              {item.track}
+            </span>
           )}
-        >
-          {item.level}
         </span>
         <span className="flex items-center gap-1.5">
           {!item.published && (
@@ -129,7 +148,7 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
         {item.description}
       </p>
 
-      <div className="relative mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1 text-[11px] text-muted-foreground">
+      <div className="relative mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-1.5 text-[11px] text-muted-foreground">
         {lessonCount > 0 ? (
           <span
             className="inline-flex items-center gap-1 rounded-full border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 font-medium text-teal-700 dark:text-teal-300"
@@ -146,7 +165,16 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
             <Milestone aria-hidden className="size-3" />
             {stepCount} steps{stepHours > 0 ? ` · ~${stepHours}h` : ""}
           </span>
-        ) : item.duration ? (
+        ) : plannedLessons > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 font-medium text-muted-foreground"
+            title={`${plannedLessons} lessons planned — full lesson content in production`}
+          >
+            <BookOpen aria-hidden className="size-3" />
+            {plannedLessons} lessons
+          </span>
+        ) : null}
+        {showDuration && item.duration ? (
           <span className="inline-flex items-center gap-1">
             <Clock aria-hidden className="size-3" />
             {item.duration}

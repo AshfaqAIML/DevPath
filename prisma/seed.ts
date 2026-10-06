@@ -12,17 +12,13 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-type SeedItem = {
-  title: string;
-  level?: "Beginner" | "Intermediate" | "Advanced";
-  duration?: string;
-  tags?: string;
-  featured?: boolean;
-  published?: boolean;
-  description?: string;
-  /** Roadmap milestones rendered as the step-graph in the item dialog */
-  steps?: { title: string; detail: string; hours?: number }[];
-};
+// Course batch data (2nd batch + track/lesson backfill) is shared with the
+// idempotent live-DB patch script — one source of truth, no drift.
+import {
+  EXISTING_COURSE_META,
+  courseBatch2Seeded,
+  type SeedItem,
+} from "./course-batch-2";
 
 const masterclassItems: SeedItem[] = [
   { title: "Full-Stack Systems Design Masterclass", level: "Advanced", duration: "6h 30m", tags: "architecture,systems,fullstack", featured: true },
@@ -195,6 +191,21 @@ const courseItems: SeedItem[] = [
   tags: "course,focused,practical",
   featured: i === 0 || i === 27,
 }));
+
+// Track + planned-lesson backfill for the original 44-course catalog
+// (data lives in ./course-batch-2.ts, shared with the live patch script).
+for (const item of courseItems) {
+  const meta = EXISTING_COURSE_META[item.title];
+  if (meta) {
+    item.track = meta.track;
+    item.plannedLessons = meta.plannedLessons;
+  }
+}
+// Second course batch — user-specified catalog additions (2026-10-06).
+for (const item of courseBatch2Seeded()) {
+  courseItems.push(item);
+}
+
 // SQL Fundamentals ships with complete lesson content
 // (content/courses/sql-fundamentals/) — its catalog copy describes the real course.
 const sqlFundamentals = courseItems.find((c) => c.title === "SQL Fundamentals");
@@ -365,6 +376,8 @@ async function main() {
           duration: item.duration ?? null,
           tags: item.tags ?? "",
           steps: item.steps ? JSON.stringify(item.steps) : "",
+          track: item.track ?? null,
+          plannedLessons: item.plannedLessons ?? null,
           published: item.published ?? true,
           featured: item.featured ?? false,
           order: i,

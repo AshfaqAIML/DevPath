@@ -1,0 +1,178 @@
+{
+  "title": "Values, Types and the var / let / const Story",
+  "slug": "01-values-types-variables",
+  "objective": "After this lesson you will be able to name JavaScript's value types, predict typeof's quirks and arithmetic coercion results on sight, and choose var, let or const while explaining hoisting and the temporal dead zone.",
+  "why": "Almost every 'weird JavaScript' bug you will meet in production is a type-system bug wearing a disguise: a string that came from a form field and quietly turned addition into concatenation, a NaN that slipped through a validation because someone used the wrong isNaN, a 0.1 + 0.2 that never equals 0.3, or a var that leaked out of a loop and let three callbacks share one variable. Refresher-level confidence here is not about reciting a type list — it is about predicting, before you run the code, exactly what the interpreter will do with the values you hand it. This lesson rebuilds that prediction machine, then closes the var/let/const chapter with the hoisting model that explains the classic loop bug.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Two kinds of values: seven primitives and everything else" },
+    { "t": "p", "text": "The entire language has exactly two categories of values. **Primitives** — `string`, `number`, `bigint`, `boolean`, `undefined`, `symbol` and `null` — are simple, immutable values that copy by value. **Objects** — everything else, including plain objects, arrays, functions, dates and regular expressions — are reference values that copy by reference (Lesson 3 is devoted to what that costs you). Crucially, *variables have no type at all* — values do, and a variable is just a label you can re-point at a different kind of value whenever you like, which is what makes JavaScript *dynamically typed* and is the reason TypeScript exists. Line four below also hands you your first quirk: `typeof`, the runtime's type probe, lies about one of the seven primitives — and it is not the only entry with a story:" },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "let answer = 42;          // currently holds a number\nanswer = 'forty-two';      // now a string — legal, no complaint, no warning\nanswer = null;             // now null\nconsole.log(typeof answer); // \"object\" — welcome to the course",
+      "caption": "Dynamic typing in three lines — and the first quirk on line four",
+      "highlight": [4]
+    },
+    { "t": "table", "headers": ["Expression", "Returns", "What is going on"], "rows": [
+      ["typeof null", "\"object\"", "A 1995 engine bug, now permanent law — test with `value === null` instead"],
+      ["typeof NaN", "\"number\"", "NaN is a numeric value (the IEEE float for 'invalid result')"],
+      ["typeof [] and typeof {}", "\"object\"", "Arrays are objects — the real array test is `Array.isArray(x)`"],
+      ["typeof function () {}", "\"function\"", "Spec convenience: callable objects get their own typeof string"],
+      ["typeof 10n", "\"bigint\"", "One of the two types added after 1995 (symbol is the other)"],
+      ["typeof Symbol('id')", "\"symbol\"", "Unique, immutable keys for object properties"],
+      ["typeof undeclaredName", "\"undefined\"", "Does not throw — the one safe probe for undeclared bindings"]
+    ] },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "typeof null is 'object' — know it, never trust it",
+      "text": "The first JavaScript engine tagged values internally, and null's tag collided with the object tag. The fix would break decades of working code that checks for it, so the specification preserves the lie. Reliable null test: value === null. typeof stays useful for the other six primitives — just never for null."
+    },
+    { "t": "h", "text": "Numbers: one type, and it is a float" },
+    { "t": "p", "text": "There is no int — every number in JavaScript is an IEEE 754 64-bit floating point value. For integers that means exact arithmetic up to 2^53 − 1 (`Number.MAX_SAFE_INTEGER`, 9007199254740991); past it, values start aliasing. For decimals it means binary fractions that cannot exactly represent 0.1 or 0.2, so their sum lands one ULP away from 0.3. And for invalid math there is a designated sentinel — NaN, 'not a number' — which, by IEEE design, is not equal to *anything, itself included*:" },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "console.log(0.1 + 0.2);                                  // 0.30000000000000004\nconsole.log(0.1 + 0.2 === 0.3);                           // false\nconsole.log(Math.abs(0.1 + 0.2 - 0.3) < Number.EPSILON);  // true — the honest compare\n\nconsole.log(NaN === NaN);                                 // false — IEEE 754, by design\nconsole.log(typeof NaN);                                  // \"number\"\nconsole.log(Number.isNaN('NaN'));                         // false — the string is not the NaN value\nconsole.log(Number.isNaN('NaN' - 1));                     // true — that subtraction really is NaN\n\nconsole.log(9007199254740992 === 9007199254740992 + 1);   // true — past the safe integer cliff",
+      "caption": "Every line here is a real production bug someone has shipped — run it and check the comments"
+    },
+    { "t": "p", "text": "Two checks deserve their exact names. The **global `isNaN`** converts its argument to a number *first*, so `isNaN('NaN')` and even `isNaN('')` are true — it answers 'is this NaN after coercion?'. **`Number.isNaN`** answers the literal question 'is this value the number NaN?' with no conversion. For money and decimals, the production habits are: compare with a tolerance (`Math.abs(a - b) < Number.EPSILON` for tiny values, a chosen epsilon for real-world data), keep integer counts as integers, and let the currency pros store cents. NaN's self-inequality is also why it can hide in data: every `x === NaN` check ever written is dead code — `Number.isNaN` or `Object.is` are the only working probes." },
+    { "t": "h", "text": "Coercion: + is the special case" },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "console.log('1' + 1);     // \"11\" — + prefers strings when either side is one\nconsole.log('1' - 1);     // 0    — - has one job: numbers, both sides coerced\nconsole.log('2' * '3');   // 6    — same for * / %\n\nconsole.log([] + []);     // \"\" — both arrays stringify to \"\", then concatenate\nconsole.log([] + {});     // \"[object Object]\" — the classic interview one-liner\nconsole.log([1, 2] + [3]); // \"1,23\" — [1,2] becomes \"1,2\", then meets \"3\"\nconsole.log(Number('42') + 8); // 50 — conversion you can read at review time",
+      "caption": "Six coercions you should be able to predict cold"
+    },
+    { "t": "p", "text": "The rule behind the mess: **+ is overloaded** — if either operand is a string (after objects convert themselves to primitives), it concatenates; otherwise it adds. Every other arithmetic operator has a single numeric job and runs ToNumber on both sides, so `'1' - 1` coerces where `'1' + 1` does not. Objects coerced by + go through `toString` (arrays join, plain objects say `[object Object]`) — which is where `[] + []` becomes `'' + ''`.\n\nThe professional habit is simple and boring: **make conversions explicit**. User input from forms, URLs, localStorage and JSON is a string until you say otherwise — `Number(input)` (or `parseInt` with a radix, or unary `+`) at the boundary, then arithmetic you can trust. Implicit coercion is fine to *read*; never make reviewers *decode* it." },
+    { "t": "h", "text": "var, let and const: the real differences" },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "console.log(typeof legacy); // \"undefined\" — var exists up here, value not yet\nvar legacy = 'old';\n\ntry {\n  console.log(shiny);   // never runs\n  let shiny = 'new';    // from its declaration's start to this line: the dead zone\n} catch (e) {\n  console.log(e.name);  // \"ReferenceError\"\n}",
+      "caption": "var answers 'undefined' before its line; let throws instead — same engine, two policies",
+      "highlight": [1, 6]
+    },
+    { "t": "p", "text": "Both declarations are **hoisted** — the engine registers every binding in a pre-execution pass. The policies differ in *initialization*: `var` bindings are immediately initialized to `undefined`, so touching them early yields `undefined`. `let` and `const` bindings exist but stay **uninitialized** from the top of their scope to the declaration line — that window is the **temporal dead zone (TDZ)**, and reading from it throws a `ReferenceError`. 'Hoisted but uninitialized' is the precise mental model — not 'not hoisted'. Redeclaration rules follow the same split: two `var x` in one scope silently merge; two `let` (or `const`) is a `SyntaxError` before a line runs." },
+    { "t": "table", "headers": ["", "var", "let", "const"], "rows": [
+      ["Scope", "function", "block", "block"],
+      ["Redeclare in same scope", "allowed, silently", "SyntaxError", "SyntaxError"],
+      ["Reassign", "allowed", "allowed", "TypeError"],
+      ["Read before the declaration line", "undefined (initialized early)", "ReferenceError (TDZ)", "ReferenceError (TDZ)"]
+    ] },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const user = { name: 'Maya' };\nuser.role = 'frontend';        // works — const binds the NAME, not the object's contents\nconsole.log(user.role);        // \"frontend\"\n\nconst frozen = Object.freeze({ tier: 'pro' });\ntry { frozen.tier = 'enterprise'; } catch (e) { console.log(e.name); } // \"TypeError\" in strict mode\nconsole.log(frozen.tier);      // \"pro\" — and freeze is shallow anyway",
+      "caption": "const prevents user = otherObject, never user.role = 'x'",
+      "highlight": [2]
+    },
+    { "t": "p", "text": "`const` means the *binding* is constant — the variable name always points at the same reference — while the object behind that reference remains fully mutable. Reassigning `user = {...}` throws a `TypeError`; `user.role = 'x'` is ordinary, legal mutation. If you need write protection, it is a separate, opt-in tool: `Object.freeze` — which throws in strict mode (the playground's mode), silently no-ops in sloppy mode, and famously protects only the top level. House style for modern code, and this course: **`const` by default, `let` when you genuinely reassign, `var` never** — the next block shows the bug that made that consensus." },
+    { "t": "h", "text": "The loop bug that sold everyone on let" },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const varFns = [];\nfor (var i = 0; i < 3; i++) varFns.push(() => i);\n\nconst letFns = [];\nfor (let j = 0; j < 3; j++) letFns.push(() => j);\n\nconsole.log(varFns.map((f) => f())); // [3, 3, 3] — one shared i\nconsole.log(letFns.map((f) => f())); // [0, 1, 2] — a fresh j per iteration",
+      "caption": "Identical loops, one binding vs three: the classic callback-shared-var bug",
+      "highlight": [2, 5]
+    },
+    { "t": "p", "text": "The `var` loop has *one* `i` for the whole function; all three closures capture that same storage slot, and by the time anyone calls them it holds 3. The `let` loop creates a **fresh binding per iteration**, so each closure captures its own `j`. This is a preview of closures (Lesson 7): what a function captures is a *binding*, not a snapshot of a value — and `var`'s function-wide binding is exactly the wrong granularity for loops. It is also the single most cited argument in the var retirement debate, and after seeing it run, you have earned the right to be smug about it in code review." },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "The typeof safari — predict every line",
+      "query": "const zoo = [\n  [\"undefined\", typeof undefined],\n  [\"null\", typeof null],\n  [\"42\", typeof 42],\n  [\"NaN\", typeof NaN],\n  [\"'hi'\", typeof 'hi'],\n  [\"true\", typeof true],\n  [\"Symbol('id')\", typeof Symbol('id')],\n  [\"10n\", typeof 10n],\n  [\"() => {}\", typeof (() => {})],\n  [\"Math.max\", typeof Math.max],\n  [\"[1, 2]\", typeof [1, 2]],\n  [\"{ role: 'dev' }\", typeof { role: 'dev' }],\n];\nfor (const row of zoo) console.log(row[0] + ' -> ' + row[1]);",
+      "note": "Predict all twelve before running — two of them lie. Expected output, in order: undefined -> undefined, null -> object, 42 -> number, NaN -> number, 'hi' -> string, true -> boolean, Symbol('id') -> symbol, 10n -> bigint, () => {} -> function, Math.max -> function, [1, 2] -> object, { role: 'dev' } -> object. The two lies: null reports 'object' (the 1995 tag bug) and NaN reports 'number' (it is a number — the invalid one)."
+    },
+    { "t": "keytakeaways", "title": "Lesson 1 in five lines", "items": [
+      "JavaScript has seven primitives (string, number, bigint, boolean, undefined, symbol, null) and one reference category: object — arrays and functions included",
+      "typeof lies twice worth memorizing: typeof null is 'object' (test with value === null) and functions report 'function' while arrays report 'object'",
+      "+ concatenates when either side is a string; all other arithmetic operators coerce both sides to numbers — convert form input with Number() at the boundary",
+      "0.1 + 0.2 !== 0.3 because binary floats cannot represent those decimals; compare with Math.abs(a - b) < Number.EPSILON, and probe NaN only with Number.isNaN",
+      "var is function-scoped, initialized to undefined at hoist time, and shares one binding across loop iterations; let/const are block-scoped and throw ReferenceError in the temporal dead zone — const blocks reassignment of the binding, never mutation of the object"
+    ] },
+    {
+      "t": "interview",
+      "q": "Why does typeof null return 'object', and how do you reliably detect null?",
+      "a": "The first JavaScript engine represented values as a tagged union, and null was stored as a NULL pointer whose tag bits collided with the object tag — so typeof read the tag and answered 'object'. A spec fix was proposed and withdrawn in 2013 because the web already depended on the behavior; it is now guaranteed forever by the ECMAScript standard. Detection: strict equality, value === null — exact, cheap, and unambiguous, since nothing else is === null. Complementary tools: Array.isArray for the array test that typeof cannot give you, and the combined null-or-undefined check x == null (one of the two legitimate == uses). The framing that lands in interviews: typeof is a coarse instrument with one documented lie; you keep it for the other six primitives and for the one thing it uniquely does — probing an undeclared binding without throwing."
+    }
+  ],
+  "exercise": {
+    "prompt": "Standup quiz: a teammate pasted `const input = '42'` and now two functions disagree — one computed '428' from `input + 8`, the other 34 from `input - 8`, and code review is stuck on whether `input == 42` counts as a bug. Settle it with evidence: write a script that logs `input + 8`, `input - 8` and `Number(input) + 8` with labels, then `input == 42` and `input === 42`. Close the floating-point argument too: log whether `0.1 + 0.2 === 0.3`, and one epsilon-safe comparison that returns the answer humans expect.",
+    "hints": [
+      "+ concatenates when either operand is a string, while - coerces both sides to numbers — both functions are 'right' per the rules, and Number(input) is how you make the intent explicit.",
+      "== converts the string to a number before comparing, === refuses to compare across types at all — decide which one the call site meant before picking.",
+      "Math.abs(0.1 + 0.2 - 0.3) < Number.EPSILON is the standard tolerance comparison — it evaluates to true."
+    ],
+    "solution": "const input = '42';\n\nconsole.log('input + 8 =', input + 8);               // '428' — the string wins with +\nconsole.log('input - 8 =', input - 8);               // 34    — numeric coercion kicks in\nconsole.log('Number(input) + 8 =', Number(input) + 8); // 50  — conversion made explicit\n\nconsole.log('input == 42:', input == 42);   // true  — == coerced '42' to 42\nconsole.log('input === 42:', input === 42); // false — types differ, no coercion\n\nconst total = 0.1 + 0.2;\nconsole.log('0.1 + 0.2 === 0.3:', total === 0.3); // false\nconsole.log('epsilon check:', Math.abs(total - 0.3) < Number.EPSILON); // true",
+    "why": "The evidence trail is the whole point: '428' and 34 are both correct answers to different questions, which is precisely why implicit coercion gets banned in style guides — Number(input) at the boundary states the question once. The ==/=== pair shows the actual decision: if '42' from a form is meant as a number, convert it and use ===; if the type difference is a bug, === catches it instead of papering over it. And the epsilon line is the floating-point version of the same discipline: never ask === of a computed decimal — ask whether the difference is smaller than a tolerance you chose.",
+    "code": "// Run me in the DevPath JavaScript Playground\nconst input = '42';\n\n// TODO 1: log input + 8, input - 8 and Number(input) + 8, each with a label\n// TODO 2: log input == 42 and input === 42\n// TODO 3: log whether 0.1 + 0.2 === 0.3, then log an epsilon-safe comparison\n//         that evaluates to true",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Which of these is NOT one of JavaScript's seven primitive types?",
+      "options": [
+        "bigint",
+        "symbol",
+        "array",
+        "undefined"
+      ],
+      "answer": 2,
+      "explain": "The seven primitives are string, number, bigint, boolean, undefined, symbol and null. An array is an object — the language's one reference category — which is why typeof [] answers 'object' and the honest array test is Array.isArray(x).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "What does console.log([] + []) print?",
+      "options": [
+        "[] — the arrays combine element-wise",
+        "An empty string — both operands convert to primitives ('' and ''), then + concatenates them",
+        "0 — the arrays convert to numbers",
+        "TypeError — arrays cannot be added"
+      ],
+      "answer": 1,
+      "explain": "+ with two objects first converts each to a primitive via toString: an empty array stringifies to '', so the expression becomes '' + '', which is ''. The same pipeline gives [] + {} the value '[object Object]' — plain objects have the default toString. Objects never element-wise-add; if you see + between non-primitives, think 'string coming'.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "console.log(count); let count = 10; — what happens?",
+      "options": [
+        "Prints undefined — let is hoisted and initialized like var",
+        "Prints 10 — the declaration moves up with its value",
+        "ReferenceError — count is hoisted but uninitialized until its declaration line; reading it in the temporal dead zone throws",
+        "SyntaxError — the file refuses to run at all"
+      ],
+      "answer": 2,
+      "explain": "let and const ARE hoisted — the binding is registered in the pre-execution pass — but it stays uninitialized from the top of the scope to the declaration. That window is the temporal dead zone, and reading from it is a runtime ReferenceError, not a SyntaxError: the file runs fine up to that line. var's contrasting policy (initialized to undefined immediately) is why the same code with var prints undefined.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why does 0.1 + 0.2 === 0.3 evaluate to false?",
+      "options": [
+        "0.1 and 0.2 cannot be represented exactly as binary fractions, so their stored values are slightly off — and their sum lands on 0.30000000000000004, one float apart from the stored 0.3",
+        "A JavaScript bug that was fixed in ES2020 — upgrade and it is true",
+        "=== never compares decimals; only integers compare exactly",
+        "0.3 is stored as a string when written literally"
+      ],
+      "answer": 0,
+      "explain": "IEEE 754 64-bit floats store numbers as binary fractions, and neither 0.1 nor 0.2 is exactly representable — each carries a tiny representation error that the addition then compounds. The fix is not a better ===; it is a tolerance: Math.abs(0.1 + 0.2 - 0.3) < Number.EPSILON evaluates to true. Every language using these floats (Python, Ruby, Java doubles) has the same behavior — JavaScript just gets photographed with it more often.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You find this in legacy code: console.log(status); var status = 'ready'; — and it does not crash. What printed, and why?",
+      "options": [
+        "ReferenceError — status is used before it exists",
+        "undefined — the var declaration was hoisted and the binding initialized to undefined, but the assignment still runs on its original line",
+        "'ready' — the whole statement, value included, moved to the top",
+        "null — undeclared bindings default to null"
+      ],
+      "answer": 1,
+      "explain": "var bindings are registered AND initialized to undefined during the hoisting pass; only the assignment executes in place. So the read succeeds with undefined — the dangerous kind of failure, because nothing crashes and the undefined quietly flows into whatever consumes it. This is the debugging pattern to recognize: 'worked but printed undefined' means a var (or an object property) read too early — while a ReferenceError there would mean let/const in their dead zone.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "JavaScript values come in exactly two categories — seven immutable primitives and one mutable-by-reference object category — and variables are untyped labels you can re-point freely. typeof reports the categories with two documented lies (null says 'object', NaN says 'number'), + concatenates when either side is a string while the other arithmetic operators coerce everything to numbers, floats cannot represent 0.1 or 0.2 exactly, and NaN equals nothing, including itself — so tolerance comparisons and Number.isNaN are your honest tools. var is hoisted-early-and-shared-per-function; let and const live block-scoped in the temporal dead zone until their declaration line; const freezes the binding, never the object. The loop bug — three closures sharing one var — is the closing argument for the const-by-default, var-never convention.",
+  "next": "Values are the nouns; functions are the verbs — and JavaScript gives you three different ways to write them, with different hoisting, different this rules and different personalities. Next lesson: function declarations vs expressions, arrow functions, default and rest parameters, and the one this mental model that finally makes the classic 'callback lost my this' bug predictable instead of mystical."
+}

@@ -1,0 +1,369 @@
+{
+  "title": "Truthiness, Equality and the Nullish Family",
+  "slug": "06-truthiness-equality-nullish",
+  "objective": "After this lesson you will be able to recite the exact falsy list, predict any == comparison (and explain why you will write === anyway), and choose deliberately between ||, ?? and ?. so that 0, empty strings and missing data stop causing silent bugs.",
+  "why": "Every 'impossible' JavaScript bug has one of this lesson's rules underneath it: a 0 or an empty string treated as 'not provided', a == that coerced two unrelated values into equality, a crash on user.profile.name when the profile was simply missing. The rules are small — one falsy list, one coercion algorithm, two modern operators — but they are implicit and everywhere: every if, every && and ||, every default value, every object access on data you did not build. Making them explicit is the difference between guessing and predicting, and once you can predict, the famous 'JavaScript is weird' jokes stop being warnings and become a checklist you run while reading code.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "The falsy list — all seven of them"
+    },
+    {
+      "t": "p",
+      "text": "Whenever JavaScript needs a boolean — an `if` condition, a `filter` predicate, the left side of `&&` — it converts the value with `Boolean()`. Exactly **seven** values convert to false. Everything else — *everything* else, including `\"0\"`, `\"false\"`, `\" \"`, `[]` and `{}` — is truthy:"
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Falsy value",
+        "Type (per typeof)",
+        "Where you will meet it"
+      ],
+      "rows": [
+        [
+          "`false`",
+          "boolean",
+          "the real one"
+        ],
+        [
+          "`0` and `-0`",
+          "number",
+          "counts, indexes, percentages — the classic silent bug"
+        ],
+        [
+          "`0n`",
+          "bigint",
+          "big counters (rare, but on the list)"
+        ],
+        [
+          "`\"\"` — empty string",
+          "string",
+          "form inputs before the user types"
+        ],
+        [
+          "`null`",
+          "object (yes, really)",
+          "intentional emptiness — see below"
+        ],
+        [
+          "`undefined`",
+          "undefined",
+          "absence — not set, not returned, not passed"
+        ],
+        [
+          "`NaN`",
+          "number",
+          "failed number conversions: `Number(\"abc\")`"
+        ]
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "The famous truthy surprises — every line prints true",
+      "code": "console.log(Boolean(\"0\"), Boolean(\"false\"), Boolean(\" \")); // true true true\nconsole.log(Boolean([]), Boolean({}));                      // true true\nconsole.log(Boolean(new Date(0)));                         // true\n\nif ([]) console.log(\"an empty array is truthy!\");\nif (\"0\") console.log('the STRING \"0\" is truthy!');"
+    },
+    {
+      "t": "p",
+      "text": "The pattern behind the surprises: a **string** is falsy only when it is completely empty — `\"0\"` and `\"false\"` have characters, so they are truthy. A **number** is falsy only when it is `0` or `NaN`. And an **object is never falsy** — `[]` and `{}` are objects, and no object, however empty-looking, converts to false. That last rule is why `if (list)` cannot tell you whether a list has elements: an empty array passes the test. For collections, test what you mean: `list.length > 0`. (One historical footnote you will hit eventually: `typeof null` is `\"object\"` — a 1995 decision kept forever for compatibility. `null` is falsy regardless.)"
+    },
+    {
+      "t": "h",
+      "text": "Where truthiness bites: && and ||"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "|| as a default swallows 0, \"\" and NaN — legal values, not absences",
+      "highlight": [
+        10,
+        11
+      ],
+      "code": "// && and || return OPERANDS, not booleans:\nconsole.log(null && \"right\");   // null   — left is falsy, left wins\nconsole.log(\"left\" || \"right\"); // \"left\" — left is truthy, left wins\nconsole.log(0 || \"default\");    // \"default\"\nconsole.log(1 && \"then\");       // \"then\"\n\n// The classic default-value bug — 0 is a legitimate value here:\nconst timeout = 0;                 // 'fire immediately', said the user\nconst effective = timeout || 3000; // 3000 — the user's 0 was erased!\nconsole.log(effective);            // 3000"
+    },
+    {
+      "t": "p",
+      "text": "Internalize the mechanics once: `a && b` returns `a` if `a` is falsy, otherwise `b`; `a || b` returns `a` if `a` is truthy, otherwise `b`. They *select values*, they do not produce booleans — which is exactly what makes them useful for guards and defaults. The bug is semantic, not mechanical: `||` treats every falsy left side as 'missing', but for numbers, strings and booleans, falsy values are often **real data** — a timeout of 0, an empty label, a disabled flag of `false`. (True default parameters are narrower than they look: `function f(v = 1)` fires only when the argument is `undefined` — `f(null)` passes `null` straight through. The dangerous pattern is the hand-rolled `x || default` in the function body.)"
+    },
+    {
+      "t": "callout",
+      "variant": "danger",
+      "title": "The || default-value bug",
+      "text": "Config and options objects are the classic crime scene: `const retries = options.retries || 3` — the user who asked for zero retries gets three. The 2015-era fix everyone wrote was `options.retries !== undefined ? options.retries : 3`. Since ES2020 there is one operator for exactly that question: `options.retries ?? 3`. It fills the default only for null and undefined — the two values that genuinely mean 'absent'."
+    },
+    {
+      "t": "h",
+      "text": "== vs ===: coercion and the professional rule"
+    },
+    {
+      "t": "p",
+      "text": "`==` compares **values with type conversion**; `===` requires the same type and never converts. The coercion rules behind `==` are long, but the comparisons you will actually meet in code review are these — and every one is verified:"
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Comparison",
+        "== result",
+        "What happens"
+      ],
+      "rows": [
+        [
+          "`\"1\" == 1`",
+          "**true**",
+          "the string is converted to the number 1"
+        ],
+        [
+          "`null == undefined`",
+          "**true**",
+          "the one cross-type pair that equals — both mean 'empty'"
+        ],
+        [
+          "`NaN == NaN`",
+          "**false**",
+          "NaN equals nothing, not even itself (use Number.isNaN)"
+        ],
+        [
+          "`\"\" == 0`",
+          "**true**",
+          "the empty string converts to 0"
+        ],
+        [
+          "`\"0\" == 0`",
+          "**true**",
+          "the string \"0\" converts to 0"
+        ],
+        [
+          "`false == 0`",
+          "**true**",
+          "false converts to 0"
+        ],
+        [
+          "`null == 0`",
+          "**false**",
+          "null only equals undefined — nothing else"
+        ],
+        [
+          "`[] == \"\"`",
+          "**true**",
+          "the array converts to its string form, \"\""
+        ],
+        [
+          "`\"1\" === 1`",
+          "**false**",
+          "=== does not convert — different types, done"
+        ]
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The professional rule follows directly from that table: **always write `===`**, and treat every `==` you meet as a question mark. The single sanctioned exception is the nullish idiom — `x == null` — which is true exactly when `x` is `null` **or** `undefined` and nothing else (`0`, `\"\"` and `false` all fail it, as the table shows). It is the only `==` that passes most teams' lint rules, because it answers a precise question in half the typing:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "`x == null` is the idiomatic 'is it nullish?' test — the only == that passes review",
+      "code": "const maybeUser = null;\n\nif (maybeUser == null) {\n  console.log(\"missing user: null OR undefined — one check\");\n}\n\n// The strict version needs two comparisons for the same meaning:\nif (maybeUser === null || maybeUser === undefined) {\n  console.log(\"same answer, more typing\");\n}"
+    },
+    {
+      "t": "h",
+      "text": "null vs undefined — assigned emptiness vs absence"
+    },
+    {
+      "t": "p",
+      "text": "The two 'empty' values have different jobs. **undefined** is the engine saying *nothing here*: a declared-but-unassigned variable, a function with no return, a property that does not exist, an argument that was not passed. **null** is a human saying *deliberately empty* — cleared, not-yet-loaded, 'no value on purpose'. The division of labor keeps diagnostics honest: an undefined you did not expect is a wiring mistake (you never set it); a null you did not expect means someone set it to nothing. JSON understands this split — it has `null` but no `undefined` at all, which is the next lesson's headline. And `typeof` tells them apart except for its one famous lie: `typeof null` is `\"object\"`."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "undefined: the engine's default · null: a developer's decision",
+      "code": "let notAssignedYet;            // undefined — the engine's default state\nconst cleared = null;           // null — someone chose 'empty'\n\nfunction findUser(id) {\n  return id === 1 ? { name: \"Ada\" } : undefined; // 'no result' by convention\n}\nconsole.log(findUser(2));       // undefined\nconsole.log(cleared == null);   // true  — the nullish idiom\nconsole.log(typeof null);       // \"object\" — a 1995 bug we live with forever\nconsole.log(typeof undefined);  // \"undefined\""
+    },
+    {
+      "t": "h",
+      "text": "The nullish family: ?? and ?."
+    },
+    {
+      "t": "p",
+      "text": "ES2020 added two operators built around one idea: *only `null` and `undefined` mean 'missing'*. That is the **nullish** pair, and every other falsy value — 0, `\"\"`, `NaN`, `false` — passes through them untouched. The table is the whole difference from `||`:"
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Left side is…",
+        "left || default",
+        "left ?? default",
+        "Verdict"
+      ],
+      "rows": [
+        [
+          "`0`",
+          "default",
+          "**`0`**",
+          "0 is falsy but not nullish — a real value"
+        ],
+        [
+          "`\"\"`",
+          "default",
+          "**`\"\"`**",
+          "empty string kept by ??"
+        ],
+        [
+          "`NaN`",
+          "default",
+          "**`NaN`**",
+          "kept by ?? (test with Number.isNaN separately)"
+        ],
+        [
+          "`false`",
+          "default",
+          "**`false`**",
+          "booleans pass through ??"
+        ],
+        [
+          "`null`",
+          "default",
+          "default",
+          "nullish — both agree"
+        ],
+        [
+          "`undefined`",
+          "default",
+          "default",
+          "nullish — both agree"
+        ]
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "?? keeps every falsy-but-real value and fills only null / undefined",
+      "code": "const settings = { retries: 0, label: \"\" };\n\nconst retries = settings.retries ?? 3;        // 0 — kept!\nconst label = settings.label ?? \"none\";       // \"\" — kept!\nconst host = settings.host ?? \"localhost\";    // \"localhost\" — filled\nconsole.log(retries, JSON.stringify(label), host);"
+    },
+    {
+      "t": "p",
+      "text": "Optional chaining is the same philosophy applied to *access*: `a?.b` evaluates to `undefined` when `a` is null or undefined — instead of throwing `TypeError: Cannot read properties of null` — and **`b` is never even evaluated** when the chain short-circuits. It comes in three forms: property (`user?.profile`), call (`save?.()`), and computed (`user?.[key]`). Chained access short-circuits at the first nullish link: `user?.profile.theme` is safe even if `user` is null — the rest of the chain simply never runs."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "`a?.b` yields undefined when a is nullish — and b is never evaluated",
+      "code": "const user = { name: \"Ada\", profile: null };\n\nconsole.log(user.profile?.theme);           // undefined — no crash\nconsole.log(user.settings?.theme);          // undefined — missing property too\nconsole.log(user.profile?.theme ?? \"dark\"); // \"dark\" — the dream team\n\n// Calls and computed access work the same way:\nconst log = null;\nconsole.log(log?.(\"hi\"));                   // undefined — call skipped\nconst key = \"theme\";\nconsole.log(user.profile?.[key]);           // undefined\n\n// Proof that the right side never runs:\nlet getters = 0;\nconst obj = { get theme() { getters++; return \"light\"; } };\nconsole.log(obj?.theme, getters);           // \"light\" 1 — evaluated\nconsole.log(user.profile?.theme, getters);  // undefined 1 — NOT evaluated again"
+    },
+    {
+      "t": "p",
+      "text": "Two caveats keep `?.` honest. First, it checks **nullish only**: `fn?.()` where `fn` is the number 5 still throws a TypeError — 5 is not nullish, so the engine tries to call it. Second, it is a null-guard, not an error handler: sprinkling `?.` over every access turns loud crashes into silent `undefined`s that surface somewhere else entirely — often as a blank screen with no error. The disciplined pattern is to use `?.` and `??` together at **boundaries** where absence is a legitimate state (API payloads, optional config, partial caches), and to let genuinely-broken invariants crash loudly:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "?. finds the data, ?? fills the holes — and note that \"\" survived: that is the point",
+      "code": "function renderBadge(user) {\n  const name = user?.nickname ?? \"anonymous\"; // nullish only\n  const score = user?.score ?? 0;\n  return `${name}: ${score}`;\n}\n\nconsole.log(renderBadge(null));                // \"anonymous: 0\"\nconsole.log(renderBadge({ nickname: \"\", score: 0 })); // \": 0\" — \"\" survived\n\n// If an empty nickname should ALSO mean 'anonymous', that is a\n// separate, deliberate decision — that is || territory:\nconst name = user?.nickname || \"anonymous\";   // \"\" would become \"anonymous\""
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "?. is not a try/catch",
+      "text": "`user.profile?.name` protects against profile being null or undefined. It does NOT protect against profile being a string, or name being a getter that throws — and it does not validate anything. It is a nullish check, full stop. When you find yourself writing `a?.b?.c?.d?.e`, the real bug is usually upstream: some producer is handing you data shaped differently than you believe. Fix the shape, then the chain of question marks disappears."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "The equality lab",
+      "query": "// Predict EVERY line before running. Then check yourself.\nconsole.log(1 == \"1\");            // ?\nconsole.log(1 === \"1\");           // ?\nconsole.log(null == undefined);   // ?\nconsole.log(null === undefined);  // ?\nconsole.log(NaN == NaN);          // ?\n\nconst speed = 0;\nconsole.log(speed || 60);         // ?\nconsole.log(speed ?? 60);         // ?\n\nconst user = { name: \"Ada\", profile: null };\nconsole.log(user.profile?.theme ?? \"dark\");   // ?\nconsole.log(user.settings?.theme ?? \"unset\"); // ?\nconsole.log(Boolean(\"0\"), Boolean([]));      // ?",
+      "note": "Exact output, in order: `true`, `false`, `true`, `false`, `false`, `60`, `0`, `dark`, `unset`, `true true`. If any line surprises you, the table for it is in this lesson — find it before moving on. The two that trip most people: `NaN == NaN` is false (NaN equals nothing, including itself), and `speed ?? 60` keeps the 0 because 0 is falsy but not nullish."
+    },
+    {
+      "t": "interview",
+      "q": "== vs === — explain the difference and justify the one place you would still use ==.",
+      "a": "=== compares type and value with no conversion; == converts operands to common types first, following the abstract equality algorithm — so \"1\" == 1, \"\" == 0, false == 0 and [] == \"\" are all true, which is why codebases and linters (eqeqeq) default to ===. The exception I would defend in review: `x == null`, because that comparison is true only for null and undefined — 0, \"\" and false all fail it — making it a precise, terse 'is it nullish?' check. Everything else gets ===, and any other == in the diff gets rewritten. Mentioning that Object.is is the third comparator (treating NaN as equal to itself and 0 as distinct from -0) earns bonus points."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "The falsy list is exactly seven values: false, 0, -0, 0n, \"\", null, undefined, NaN — everything else is truthy, including \"0\", \"false\", \" \" and every object/array",
+        "&& and || select and return operands, not booleans — `a || default` erases 0, \"\" and NaN just as effectively as it erases null",
+        "Write === everywhere; the one sanctioned exception is `x == null`, which is true only for null and undefined",
+        "null is deliberate emptiness; undefined is absence (the engine's 'not set'); typeof null is \"object\" — history, not truth",
+        "?? fills defaults only for null/undefined; ?. reads through null/undefined to a safe undefined — use them as a pair at boundaries where absence is a real state, not as a blanket silence-the-crash tool"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "Fix `pageSettings` so all three calls behave. The function reads a table's config: rows per page, a label, and the owner's name. Rules: `rows` of 0 is valid (show everything at once) and defaults to 25 only when missing; `label` of \"\" is valid and defaults to \"results\" only when missing; `owner` may be entirely absent — then show \"anonymous\"; and the whole `input` may be null. Verify: `pageSettings({ rows: 0, label: \"hits\", owner: { name: \"Ada\" } })` → \"0 hits — Ada\"; `pageSettings(null)` → \"25 results — anonymous\"; `pageSettings({ rows: 50 })` → \"50 results — anonymous\".",
+    "hints": [
+      "The bug is that || cannot tell '0' from 'missing'. Ask yourself for each field: is a falsy-but-real value acceptable here? If yes, the operator is ??, not ||.",
+      "The crash on the owner line is an access problem: input.owner.name throws when input is null OR when owner is missing. Optional chaining handles both in one expression: input?.owner?.name.",
+      "Assemble each field as `input?.field ?? default` — and note that pageSettings(null) now works because every access short-circuits to undefined, which ?? fills."
+    ],
+    "solution": "function pageSettings(input) {\n  const rows = input?.rows ?? 25;       // 0 survives — only nullish gets the default\n  const label = input?.label ?? \"results\";\n  const owner = input?.owner?.name ?? \"anonymous\";\n  return `${rows} ${label} — ${owner}`;\n}\n\nconsole.log(pageSettings({ rows: 0, label: \"hits\", owner: { name: \"Ada\" } }));\n// \"0 hits — Ada\"\nconsole.log(pageSettings(null));\n// \"25 results — anonymous\"\nconsole.log(pageSettings({ rows: 50 }));\n// \"50 results — anonymous\"",
+    "why": "Every fix is a decision about what 'missing' means. rows: 0 and label: \"\" are real data, so their defaults must fire only on nullish — that is ??, and it is why the first test's 0 survives where the || version erased it. The owner chain uses ?. twice: input?.owner survives a null input, and .name is only reached when owner actually exists. This is the shape of nearly every real config-merging function: nullish operators at the boundary, strict code inside. Note what we did NOT do: `input?.rows || 25` — that version fails the first test by turning the deliberate 0 into 25.",
+    "code": "function pageSettings(input) {\n  const rows = input.rows || 25;        // ← erases a legitimate 0\n  const label = input.label || \"results\";\n  const owner = input.owner.name;       // ← crashes when owner (or input) is missing\n  return `${rows} ${label} — ${owner}`;\n}\n\nconsole.log(pageSettings({ rows: 0, label: \"hits\", owner: { name: \"Ada\" } }));\nconsole.log(pageSettings(null));\nconsole.log(pageSettings({ rows: 50 }));",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Which of these values are truthy: \"0\", [], {}?",
+      "options": [
+        "None — they are all classic falsy values",
+        "Only \"0\" — empty arrays and objects are falsy",
+        "Only [] and {} — every object-ish value is truthy but strings must be non-empty",
+        "All three — the string has characters, and no object (even empty) is ever falsy"
+      ],
+      "answer": 3,
+      "difficulty": "easy",
+      "explain": "The falsy list is exactly false, 0, -0, 0n, \"\", null, undefined, NaN. \"0\" is a non-empty string; [] and {} are objects, and object-to-boolean conversion always yields true. That is why `if (list)` cannot detect an empty list — check list.length instead."
+    },
+    {
+      "q": "const pageSize = input.pageSize || 25; — what happens when input.pageSize is 0?",
+      "options": [
+        "pageSize is 0 — || preserves numbers",
+        "pageSize is 25 — 0 is falsy, so the default fires and erases the user's choice",
+        "pageSize is 25 — || throws on 0 and falls back",
+        "pageSize is undefined"
+      ],
+      "answer": 1,
+      "difficulty": "medium",
+      "explain": "|| treats every falsy left side as 'missing', and 0 is falsy. When 0 is a legal value — page sizes, timeouts, retry counts — the fix is ??, which defaults only for null and undefined. This one-character difference is one of the most common real-world JavaScript bugs."
+    },
+    {
+      "q": "Which comparisons evaluate to true?",
+      "options": [
+        "null == undefined and NaN == NaN",
+        "\"1\" == 1 and null == undefined",
+        "null == 0 and undefined == 0",
+        "\"1\" === 1 and [] == \"\""
+      ],
+      "answer": 1,
+      "difficulty": "medium",
+      "explain": "\"1\" == 1 converts the string to a number; null == undefined is the one sanctioned cross-type equality. The rest fail: NaN equals nothing (including itself), null and undefined equal no other value under ==, [] == \"\" is actually true but \"1\" === 1 is false — and the answer pairs it with a false statement, so the option fails as a whole."
+    },
+    {
+      "q": "const delay = settings.delay ?? 100; — which value of settings.delay results in delay being 100?",
+      "options": [
+        "0",
+        "\"\" (empty string)",
+        "false",
+        "null or undefined"
+      ],
+      "answer": 3,
+      "difficulty": "medium",
+      "explain": "?? fills the default only for the nullish values, null and undefined. 0, \"\" and false are falsy but REAL, so they pass straight through — delay would be 0, \"\" or false respectively. That precision is the entire reason ?? exists next to ||."
+    },
+    {
+      "q": "const a = null; const result = a?.b.c; — what is result?",
+      "options": [
+        "TypeError: cannot read 'c' of undefined",
+        "undefined — the whole chain short-circuits at the first nullish link",
+        "null",
+        "It depends on whether b exists on null's prototype"
+      ],
+      "answer": 1,
+      "difficulty": "hard",
+      "explain": "Optional chaining short-circuits the ENTIRE remaining chain: a is nullish, so a?.b is undefined and .c is never even evaluated — no throw, result is undefined. This is also the danger: a typo deep in a long ?. chain becomes a silent undefined instead of an error. Guard at boundaries, not everywhere."
+    }
+  ],
+  "summary": "Truthiness is a seven-member club — false, 0, -0, 0n, \"\", null, undefined, NaN — and everything else, including \"0\" and every object, is truthy. && and || select and return operands, so `x || default` silently erases legitimate falsy values like 0 and \"\"; ?? defaults only for null and undefined, and ?. reads through them to a safe undefined (short-circuiting the whole chain and never evaluating what follows). === is the default comparison because == coerces: \"1\" == 1, \"\" == 0, false == 0 and null == undefined are all true, while NaN equals nothing — the one defensible == is the `x == null` nullish idiom. null is deliberate emptiness, undefined is absence, and choosing between || and ?? is always the same question: for this field, is a falsy value real data or not?",
+  "next": "You can now guard data as it flows in — but what happens when it is not merely nullish but *wrong*: malformed JSON, a port number that is \"http\", a file that does not exist? JavaScript's answer is control flow you can see: throw, try / catch / finally, and Error objects with names, messages, stacks and causes. The next lesson covers the full error lifecycle plus the JSON round-trip and every surprise it holds — dropped undefineds, null holes, Dates that come back as strings — and the guarded-parse pattern that keeps all of it from reaching your users."
+}
