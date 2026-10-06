@@ -1,0 +1,63 @@
+{
+  "title": "Capstone Walkthrough: Performance Audit",
+  "slug": "10-performance-audit-capstone",
+  "objective": "After this lesson you will be able to run a full performance audit — inventory slow queries, EXPLAIN each, rank by impact (frequency × cost), apply rewrites and indexes in priority order, verify every arrow, and deliver findings plus guardrails — ready for the final assessment and your own audit project.",
+  "why": "Courses 1–9 taught moves; audits are the job. A performance audit is bounded, evidence-driven, and shippable: N queries in, measured wins plus prevention rules out. This walkthrough performs a miniature audit on the catalog's own dashboard queries — the exact rehearsal your capstone project scales up.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The audit brief and its budget" },
+    { "t": "p", "text": "Brief: *'Three dashboard queries timeout under load; find the wins worth shipping this week.'* Budget: four hours, no schema redesigns (indexes and rewrites only), every claim measured. Scoping is the first skill: audits without budgets become rewrites of everything; budgets force impact-ranked priorities — frequency × per-run cost, biggest product first." },
+    { "t": "h", "text": "Suspect 1 — leaderboard with scalar + OFFSET" },
+    { "t": "p", "text": "Per-course totals via correlated scalar, ordered by the computed count, page 30 via OFFSET. Plan: per-row probes (N executions), TEMP B-TREE over all courses, linear skip of 580 rows. Fix sequence: flatten to grouped derived table (Ch.3), keyset on (total, id) (Ch.3), composite on the FK iff probes still scan (Ch.2). Expected: the case-study curve — seconds to tenths." },
+    { "t": "code", "lang": "sql", "code": "-- Audit exhibit A: the shape (real SQLite/PostgreSQL)\n-- BEFORE: SELECT c.title,\n--   (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) AS total\n-- FROM courses c ORDER BY total DESC LIMIT 20 OFFSET 580;\n-- AFTER: WITH per_course AS (\n--   SELECT course_id, COUNT(*) AS total FROM enrollments GROUP BY course_id)\n-- SELECT c.title, COALESCE(p.total, 0) AS total\n-- FROM courses c LEFT JOIN per_course p ON p.course_id = c.id\n-- WHERE (COALESCE(p.total, 0), c.id) < (?, ?)\n-- ORDER BY total DESC, c.id DESC LIMIT 20;", "caption": "Exhibit A: flatten + keyset — the case-study moves, compressed" },
+    { "t": "h", "text": "Suspect 2 — OR search across columns" },
+    { "t": "p", "text": "Topic-or-role search with leading wildcards on both sides: unindexable twice over. Fix in two horizons: this week, sargabilize (exact/prefix match) and split OR into UNION ALL with disjoint guards (Ch.3); documented follow-up, trigram/full-text search for genuine substring needs (honest scoping — the audit says what it defers, with the reason)." },
+    { "t": "h", "text": "Suspect 3 — fanout-inflated rollup" },
+    { "t": "p", "text": "Per-role average hours computed *after* joining enrollments: fanout weights multi-enrolled developers multiply (Ch.5/Intermediate). Fix: aggregate developers alone first (CTE), join enrollments only where needed — or recognize the metric never needed the join at all. Impact-ranked third (correctness inflected as performance: wrong fast is still wrong)." },
+    { "t": "code", "lang": "sql", "code": "-- Audit exhibit B: fanout-weighted average (real SQLite/PostgreSQL)\n-- BEFORE (inflated): SELECT d.role, AVG(d.hours_studied)\n-- FROM developers d JOIN enrollments e ON e.developer_id = d.id GROUP BY d.role;\n-- AFTER (correct): SELECT role, AVG(hours_studied) FROM developers GROUP BY role;\n-- Lesson: the fastest fix is deleting the unnecessary join.", "caption": "Exhibit B: the join was the bug — removal beats optimization" },
+    { "t": "h", "text": "Ranking and the deliverable" },
+    { "t": "p", "text": "Rank by impact: suspect 1 (every load, seconds) → suspect 3 (wrong numbers, trust) → suspect 2 (occasional search). Deliverable structure: per-suspect baseline plan + timing, change, re-plan + timing, guardrail (keyset contract, sargability rule, review-checklist entry from Ch.9). Plus the deferred list with reasons — audits earn trust by scoping visibly." },
+    { "t": "practice", "query": "SELECT role, AVG(hours_studied) AS avg_hours, COUNT(*) AS devs FROM developers GROUP BY role ORDER BY avg_hours DESC;", "note": "Run this correct-by-construction rollup in the sandbox — no join, no fanout possible. Contrast it mentally with the joined version: same intent, inflated numbers. Deleting joins is an optimization." },
+    { "t": "keytakeaways", "items": ["Scope audits: bounded time, rewrites+indexes only, impact-ranked (frequency × cost)", "Apply the course in order: EXPLAIN (1), rewrite shapes (3), index proof (2), verify arrows", "Correctness defects (fanout) outrank speed defects — wrong fast is still wrong", "Deliver baselines, changes, verifications, guardrails — plus an explicit deferred list"]} ],
+  "exercise": {
+    "prompt": "Mini-audit rehearsal on the stalled-learners report: (a) sandbox the flat shape and record rows/timing feel; (b) write the three-suspect treatment for real SQLite/PostgreSQL — baseline EXPLAIN shape, one rewrite, one index decision with justification; (c) draft the guardrail line that prevents regression (which Ch.9 checklist entry, enforced how?).",
+    "hints": [
+      "Sandbox flat: per-developer completions via GROUP BY + HAVING SUM(completed) = 0 — the preservation baseline every rewrite must match row-for-row.",
+      "Treatment: EXPLAIN the grouped join (probes? sorts?), flatten anything correlated (none here — note its absence as a finding), composite on (developer_id) iff probes scan, keyset if paginated.",
+      "Guardrail example: 'Paginated reports use keyset bookmarks — enforced by Ch.9 review checklist item, verified by EXPLAIN showing no OFFSET skip in CI-visible slow-query log.'"
+    ],
+    "solution": "-- (a) sandbox baseline (flat — run here; record counts)\n-- per-developer completions + stalled filter (see lesson shapes)\n-- (b) treatment: EXPLAIN → probes SEARCH? sort needed? → minimal index → re-verify\n-- (c) guardrail: keyset-only pagination + sargability review items on this report's file.",
+    "why": "The rehearsal scales down the audit loop to one report: baseline, treatment, guardrail. Performing it small is what makes the full capstone tractable — audits are fractal.",
+    "code": "-- Sandbox baseline (flat — run here)\nSELECT d.name, COUNT(*) AS started, SUM(e.completed) AS done\nFROM developers d JOIN enrollments e ON e.developer_id = d.id\nGROUP BY d.id HAVING SUM(e.completed) = 0;\n\n-- Treatment + guardrail (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Three slow queries, four hours, no schema redesigns. How do you order the work?",
+      "options": ["Alphabetical", "Impact-ranked: frequency × per-run cost, biggest product first — within a fixed scope", "Hardest first", "All indexes first, then look"],
+      "answer": 1,
+      "explain": "Audits are budgeted: impact ranking spends hours where users feel them. Scope (rewrites+indexes only) prevents redesign sprawl; the deferred list preserves honesty."
+    },
+    {
+      "q": "A rollup is both slow AND inflated after a join. Which do you fix first?",
+      "options": ["Speed — users complain about waiting", "Correctness (fanout) — wrong fast is still wrong; then the speed", "Neither — delete the report", "Add caching"],
+      "answer": 1,
+      "explain": "Inflated numbers erode trust that speed can't restore. Remove/isolate the fanout first (often deleting the join), then optimize the correct shape."
+    },
+    {
+      "q": "Your fix works but the ticket reappears in three months with the old shape back. What was missing?",
+      "options": ["More indexes", "Guardrails: documented contracts (keyset rule, checklist entries) that prevent regression — performance without prevention rots", "Faster hardware", "A different engine"],
+      "answer": 1,
+      "explain": "Wins without contracts decay as new code repeats old shapes. The deliverable includes prevention: rules, checklist items, and the deferred list with reasons."
+    },
+    {
+      "q": "When is 'defer to trigram/FTS later' the right audit call on substring search?",
+      "options": ["Never — always build it now", "When the budget covers sargabilize+split wins now, and genuine substring needs exceed LIKE's capability — scoped openly with reasons, not silently dropped", "When tables are small", "Only in PostgreSQL"],
+      "answer": 1,
+      "explain": "Audits earn trust by visible scoping: ship this week's wins, name next quarter's project with its justification. Deferred-with-reasons beats silent omission and gold-plating alike."
+    }
+  ],
+  "summary": "Audit = scope, baseline, impact-rank, rewrite-then-index per suspect, verify every arrow, deliver findings + guardrails + deferred list. The capstone scales this loop to your own audit — course complete, assessment next.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then perform the performance audit capstone — and close with interview prep."
+}

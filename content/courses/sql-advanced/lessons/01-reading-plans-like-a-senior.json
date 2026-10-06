@@ -1,0 +1,63 @@
+{
+  "title": "Reading Plans Like a Senior",
+  "slug": "01-reading-plans-like-a-senior",
+  "objective": "After this lesson you will be able to run EXPLAIN QUERY PLAN (SQLite) and EXPLAIN (PostgreSQL), decode SCAN vs SEARCH vs TEMP B-TREE vs nested loops, and trace any slow query to the exact operation that dominates its cost.",
+  "why": "Intermediate SQL taught you to add an index and re-check the plan. Advanced SQL starts where that recipe ends: plans with five operations where only one matters, join orders that explode silently, and sorts hiding inside innocent-looking queries. Seniors don't guess at performance — they read the plan the way mechanics listen to engines, and this lesson is the vocabulary.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The plan is the query's confession" },
+    { "t": "p", "text": "Every query you write is a *request*; the **plan** is what the database actually decided to do. Two identical-looking queries can have wildly different plans, and the same query can change plans as data grows. `EXPLAIN QUERY PLAN` (SQLite) and `EXPLAIN [ANALYZE]` (PostgreSQL) reveal the strategy: which tables are scanned, which indexes are used, in what order joins run, and where sorting happens. Performance work without plans is superstition." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite: the two-word performance habit\nEXPLAIN QUERY PLAN\nSELECT d.name, COUNT(e.id) AS n\nFROM developers d\nLEFT JOIN enrollments e ON e.developer_id = d.id\nGROUP BY d.id\nORDER BY n DESC;\n\n-- Real PostgreSQL: EXPLAIN shows cost; ANALYZE adds measured reality\n-- EXPLAIN SELECT … ;             (estimated costs, no execution)\n-- EXPLAIN (ANALYZE, BUFFERS) … ; (executes: actual rows + cache hits)", "caption": "Ask first, always: same habit in both engines, richer output in PG" },
+    { "t": "h", "text": "The three words that matter most" },
+    { "t": "p", "text": "SQLite plans revolve around three operations. **`SCAN t`** reads the whole table — fine for 14 teaching rows, the prime suspect at 14 million. **`SEARCH t USING INDEX …`** performs targeted hops — the healthy shape. **`USE TEMP B-TREE FOR ORDER BY/GROUP BY`** materializes a sort — sometimes unavoidable (top-N over computed values), sometimes a missing index waving at you." },
+    { "t": "table", "headers": ["Plan node", "Meaning", "Verdict"], "rows": [["SCAN table", "Read every row, filter as you go", "Suspicious on large tables — needs justification"], ["SEARCH … USING INDEX i (cond)", "Hop to matching rows via index i", "Healthy — check the cond uses the right columns"], ["USE TEMP B-TREE FOR ORDER BY", "Sort rows in a temporary structure", "Necessary for computed sorts; fixable for plain-column sorts"], ["USE TEMP B-TREE FOR GROUP BY", "Hash/sort grouping", "Normal for aggregates; composite indexes can remove it"], ["COMPOUND QUERY (left/right)", "Set-op branches execute separately", "Optimize each branch independently (Ch.3 shapes)"]] },
+    { "t": "h", "text": "Join order: the silent multiplier" },
+    { "t": "p", "text": "For multi-table queries the plan lists join order inside-out: the outer loop runs once per row, the inner loop probes per outer row. Cost ≈ outer rows × inner probe cost — so the planner wants the *most selective* table outside. When plans go wrong here, the symptom is a tiny table driving a giant one (or a missing index turning each probe into a scan). Read join order as nested loops in your head until the shape justifies itself." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite: which side drives? read the plan's nesting\nEXPLAIN QUERY PLAN\nSELECT d.name, c.title\nFROM developers d\nJOIN enrollments e ON e.developer_id = d.id\nJOIN courses c ON c.id = e.course_id\nWHERE c.topic = 'backend';\n-- Healthy shape: SCAN/SEARCH courses (filtered first, tiny)\n-- then SEARCH enrollments + developers per row (indexed probes).\n-- Sick shape: SCAN enrollments (28 rows? fine. 28M? nested disaster).", "caption": "Selective tables belong on the outside of the loop nest" },
+    { "t": "callout", "variant": "warn", "title": "Rows lie, costs estimate", "text": "SQLite shows structure without costs; PostgreSQL shows *estimated* costs that can be wildly wrong on stale statistics (run ANALYZE after bulk loads). EXPLAIN ANALYZE reveals estimate-vs-actual gaps — a 10x gap means the planner is deciding blind, and fresh statistics (not a new index) are the fix." },
+    { "t": "h", "text": "The senior reading ritual" },
+    { "t": "p", "text": "Same ritual every time: (1) EXPLAIN the slow query; (2) find the SCAN on the biggest table or the TEMP B-TREE on the hot path; (3) hypothesize one fix (index, rewrite, or statistics); (4) apply and re-EXPLAIN; (5) confirm the node changed, not just your confidence. One fix at a time — stacked changes teach nothing when the query gets faster (or slower)." },
+    { "t": "practice", "query": "SELECT d.name, COUNT(e.id) AS n FROM developers d LEFT JOIN enrollments e ON e.developer_id = d.id GROUP BY d.id ORDER BY n DESC;", "note": "Run this grouped join in the sandbox and predict its plan: which table is scanned, where does grouping sort? Then run the same shape in real SQLite under EXPLAIN QUERY PLAN and compare — training your prediction muscle is the whole lesson." },
+    { "t": "keytakeaways", "items": ["EXPLAIN (QUERY PLAN) reveals strategy: SCAN reads all, SEARCH hops via index, TEMP B-TREE sorts", "Join order reads as nested loops — selective tables outside, indexed probes inside", "SQLite shows structure; PostgreSQL adds estimated costs — ANALYZE exposes estimate-vs-actual gaps", "Ritual: plan → one hypothesis → change → re-plan → confirm the node changed"]} ],
+  "exercise": {
+    "prompt": "A learner dashboard runs: SELECT c.title, COUNT(e.id) FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id WHERE c.published = 1 GROUP BY c.id ORDER BY COUNT(e.id) DESC. (a) In real SQLite, EXPLAIN it and list every plan node. (b) Predict which node dominates at 1M enrollments and propose exactly one fix. (c) In the sandbox, run the flat filter SELECT * FROM courses WHERE published = 1 and report selectivity to support your reasoning.",
+    "hints": [
+      "Plan nodes to expect: SCAN or SEARCH on courses (published filter), probes into enrollments per course, TEMP B-TREE for the ORDER BY over a computed count. Write each node down before judging.",
+      "At 1M rows the enrollments probes dominate — each needs an index on course_id, else every course triggers a scan. One fix: CREATE INDEX on enrollments(course_id); the ORDER BY sort over ~dozens of courses is negligible.",
+      "Sandbox selectivity: published courses vs 16 total tells you whether the courses side is worth indexing at all."
+    ],
+    "solution": "-- (c) sandbox selectivity probe (flat — runs here)\n-- SELECT * FROM courses WHERE published = 1;\n-- (a) real SQLite: EXPLAIN QUERY PLAN <dashboard query>;\n-- Expect: SEARCH/SCAN courses + SEARCH enrollments (indexed) + TEMP B-TREE (ORDER BY count).\n-- (b) one fix: CREATE INDEX idx_enrollments_course ON enrollments(course_id);\n-- Re-EXPLAIN: probes become SEARCH; the tiny final sort is acceptable.",
+    "why": "The exercise forces the ritual on a realistic query: enumerate nodes, identify the scale-dominant one (per-row probes at 1M rows, not the small final sort), fix minimally, and verify. Selectivity data from the sandbox grounds the judgment instead of superstition.",
+    "code": "-- Sandbox probe (flat — run here)\nSELECT * FROM courses WHERE published = 1;\n\n-- Real-DB diagnosis (see solution): EXPLAIN, one index, re-EXPLAIN.",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "EXPLAIN QUERY PLAN shows SCAN enrollments for a 28-row teaching table. Verdict?",
+      "options": ["Catastrophic — add an index immediately", "Fine at this size; SCAN becomes the prime suspect only as tables grow — plans must be read with scale in mind", "Impossible — small tables always SEARCH", "The table is corrupted"],
+      "answer": 1,
+      "explain": "Plan nodes are scale-relative: scanning 28 rows is cheaper than index hops. The same SCAN at 28M rows dominates cost. Seniors judge nodes against table size, not in isolation."
+    },
+    {
+      "q": "PostgreSQL EXPLAIN estimates 10 rows but ANALYZE shows 100,000. Most likely fix?",
+      "options": ["Add an index on every column", "Fresh statistics (ANALYZE the table) — the planner is deciding blind on stale stats", "Increase work_mem", "Rewrite in a different language"],
+      "answer": 1,
+      "explain": "Estimate-vs-actual gaps mean the cost model works from lies. After bulk loads or major changes, ANALYZE refreshes statistics — often fixing plans with zero query or index changes."
+    },
+    {
+      "q": "A plan nests SCAN-big-table inside a per-row loop over a tiny filtered table. What is wrong?",
+      "options": ["Nothing — small drivers are ideal", "Join order/costing failure: each outer row triggers a full scan; the big side needs an index probe or the order needs flipping", "TEMP B-TREE is missing", "The query needs UNION"],
+      "answer": 1,
+      "explain": "Nested-loop cost is outer-rows × inner-probe. A scan inside the loop multiplies catastrophically. Fix: index the inner access path or restructure so the selective side drives with probes."
+    },
+    {
+      "q": "Why change exactly one thing between EXPLAIN runs?",
+      "options": ["Databases allow only one change per day", " stacked changes teach nothing — when the plan improves (or regresses) you cannot attribute it", "Plans can only be read once", "Indexes conflict with rewrites"],
+      "answer": 1,
+      "explain": "Diagnosis requires attribution. One hypothesis, one change, one re-plan — the scientific method applied to query plans. Stacked fixes that 'work' leave you unable to repeat or explain the win."
+    }
+  ],
+  "summary": "Plans confess strategy: SCAN, SEARCH, TEMP B-TREE, and join nesting read with scale in mind. PostgreSQL adds costs and ANALYZE truth; SQLite shows clean structure. The ritual — plan, hypothesize once, change, re-plan — turns slow queries from mysteries into measurements.",
+  "next": "You can read plans — now feed them better structures. Next: composite, covering, and partial indexes, the designs that turn SEARCH into answered-without-touching-the-table."
+}

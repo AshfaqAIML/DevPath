@@ -1,0 +1,60 @@
+{
+  "title": "Antipatterns & Code Review",
+  "slug": "09-antipatterns-code-review",
+  "objective": "After this lesson you will be able to spot the nine classic SQL antipatterns in review (SELECT *, blind OFFSET, leading wildcards, OR chains, N+1, implicit conversions, functions on keys, fat joins, magic numbers), explain each one's cost, and prescribe the idiomatic fix.",
+  "why": "Optimization (Ch.8) fixes slow queries; review prevents them. Seniors spend more time reading SQL than writing it — PRs, ORM output, legacy reports — and the reviewer's value is pattern recognition at speed. This lesson is the checklist that turns 'looks fine' into nine specific, defensible comments.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "The review lens: cost, correctness, clarity" },
+    { "t": "p", "text": "Every review comment should name one of three harms. **Cost**: shape/scans the data can't afford (SELECT *, deep OFFSET). **Correctness**: shapes that lie (fanout totals, NULL ambushes, nondeterministic ROW_NUMBER ties). **Clarity**: shapes the next reader will misread (SELECT-list subqueries three deep, magic thresholds). If a comment names none of the three, it's taste — say so or skip it." },
+    { "t": "table", "headers": ["Antipattern", "Harm", "Fix"], "rows": [["SELECT * in app/report code", "Cost + fragility: ships bytes, breaks on schema change", "Name columns explicitly"], ["Deep OFFSET pages", "Cost linear in page number + drift", "Keyset bookmarks (Ch.3)"], ["LIKE '%x%' filters", "Cost: unindexable scan", "Exact/prefix match, or trigram/FTS (stated follow-up)"], ["OR across indexes", "Cost: plan degrades to scan", "UNION ALL with disjoint guards (Ch.3)"], ["N+1 (loop queries)", "Cost: N round trips", "One JOIN/batch load"], ["Implicit conversions", "Cost + correctness: index blindness, wrong matches", "Match types; CAST the value, never the column"], ["Functions on indexed keys", "Cost: sargability death", "Rewrite bare-column (Ch.3)"], ["SELECT-list correlated scalars", "Cost: per-row re-execution", "Flatten to grouped join (Ch.3)"], ["Magic thresholds inline", "Clarity: 0.07 unexplained", "Named CTE/bands table + comment (Ch.2, Ch.5 bands)"]] },
+    { "t": "h", "text": "N+1: the ORM special" },
+    { "t": "p", "text": "Application loops that query per row (`for course: fetch enrollments`) turn one JOIN into N+1 round trips — invisible in development (tiny N), catastrophic in production. In review, any query inside a loop is guilty until proven batched: eager-load with JOINs, `WHERE id IN (…)` batches, or dataloader patterns. The SQL is fine; the call pattern is the bug." },
+    { "t": "code", "lang": "sql", "code": "-- N+1 shape (application pseudocode — the bug lives outside SQL)\n-- for c in courses:                      # 1 query\n--   n = query(\"SELECT COUNT(*) … WHERE course_id = ?\", c.id)  # +N queries\n\n-- Batched: one grouped query for all courses (real SQLite/PostgreSQL)\n-- SELECT course_id, COUNT(*) AS n FROM enrollments\n-- WHERE course_id IN (SELECT id FROM courses WHERE published = 1)\n-- GROUP BY course_id;", "caption": "N+1 dies in batching: IN-list or JOIN replaces the loop" },
+    { "t": "h", "text": "Implicit conversions: the quiet corruptor" },
+    { "t": "p", "text": "Comparing mismatched types (`WHERE text_id = 5`, dates vs strings) forces conversions that blind indexes *and* change semantics (SQLite's flexible typing is lenient until it isn't; PostgreSQL errors loudly — prefer loud). Rules: schema types correct at DDL time (Chapter 7 of Intermediate), bind parameters with matching types, CAST the literal/value side, never the column side." },
+    { "t": "callout", "variant": "tip", "title": "The review comment template", "text": "File review comments as harm + fix + proof: 'N+1 here (cost: 300 round trips on this page) — batch with WHERE id IN (…) (Ch.3 shapes); verify with the query log count before/after.' Specific, teachable, verifiable — the opposite of 'slow, fix it.'" },
+    { "t": "practice", "query": "SELECT id, title, topic FROM courses WHERE published = 1 ORDER BY title LIMIT 5;", "note": "Run this clean query in the sandbox — named columns, sargable filter, small LIMIT, meaningful ORDER BY. It is the 'approved' shape: hold every future query against it and name the first deviation." },
+    { "t": "keytakeaways", "items": ["Review through cost/correctness/clarity — comments naming none are taste", "N+1 is a call-pattern bug: batch with IN/JOIN, prove with query-log counts", "Conversions corrupt silently: correct types at DDL, CAST values never columns", "File comments as harm + fix + proof — teachable and verifiable"]} ],
+  "exercise": {
+    "prompt": "Review this report query and file exactly five comments (harm + fix each): SELECT * FROM courses c, enrollments e WHERE UPPER(c.topic) = 'BACKEND' OR e.progress > 90 ORDER BY e.progress LIMIT 10 OFFSET 500. (a) In the sandbox, run the flat pieces (topic filter, progress filter) and record counts. (b) Write the rescued query for real SQLite/PostgreSQL.",
+    "hints": [
+      "Five findings: comma join (cross-join risk — explicit JOIN … ON), UPPER() on indexed column (sargability — normalize constant), OR across tables (split UNION ALL), OFFSET 500 (keyset), SELECT * (name columns).",
+      "Sandbox probes: SELECT title FROM courses WHERE topic = 'backend'; and SELECT COUNT(*) FROM enrollments WHERE progress > 90; — preservation targets for the rewrite.",
+      "Rescued shape: explicit JOINs, bare columns, UNION ALL branches with guards, named columns, keyset bookmark, small LIMIT."
+    ],
+    "solution": "-- (b) rescued (real SQLite / PostgreSQL)\n-- SELECT c.id, c.title, e.progress\n-- FROM courses c JOIN enrollments e ON e.course_id = c.id\n-- WHERE c.topic = 'backend' AND e.progress > 90\n--   AND (e.progress, e.id) < (?, ?)\n-- ORDER BY e.progress DESC, e.id DESC LIMIT 10;\n-- (OR-split only if branches need separate indexes; here one sargable AND suffices.)",
+    "why": "The exercise compresses the whole gallery into one query: five distinct harms, five fixes, one rescued shape. Real reviews look exactly like this — stacked pathologies in inherited SQL, untangled one harm at a time.",
+    "code": "-- Sandbox probes (flat — run here)\nSELECT title FROM courses WHERE topic = 'backend';\nSELECT COUNT(*) FROM enrollments WHERE progress > 90;\n\n-- Rescued query (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "A review comment says only 'this is slow, fix it'. What's wrong with the comment?",
+      "options": ["Nothing — slowness is self-evident", "It names no harm, no fix, no proof — unactionable; good comments state cost/correctness/clarity + remedy + verification", "Comments should never mention speed", "Only seniors may comment"],
+      "answer": 1,
+      "explain": "Review is teaching plus verification. Harm + fix + proof (plan counts, timings, row preservation) makes the comment mergeable wisdom instead of drive-by taste."
+    },
+    {
+      "q": "Loop of 300 per-row COUNT queries on a page. Diagnosis and fix?",
+      "options": ["Add 300 indexes", "N+1: replace with one batched GROUP BY (IN-list or JOIN); prove with query-log counts before/after", "Increase LIMIT", "Cache the page forever"],
+      "answer": 1,
+      "explain": "Round trips dominate: 300 queries means 300 network+parse+plan cycles regardless of each query's speed. Batching collapses them to one — the call pattern, not the SQL, was the bug."
+    },
+    {
+      "q": "WHERE text_id = 5 on a TEXT column is slow and occasionally mismatches. Why?",
+      "options": ["5 is too small", "Implicit conversion: per-row casts blind indexes and alter comparison semantics — fix types at DDL, CAST values never columns", "TEXT columns can't be indexed", "Needs UNION"],
+      "answer": 1,
+      "explain": "Type mismatches force runtime conversion: index blindness (cost) plus surprising equality rules (correctness). Correctness at DDL time beats cleverness at query time."
+    },
+    {
+      "q": "Which SELECT * is acceptable?",
+      "options": ["Application report code", "Ad-hoc exploration in a console/sandbox — then name columns for anything persisted", "Paginated APIs", "Materialized views"],
+      "answer": 1,
+      "explain": "SELECT * is an exploration tool: surveying unfamiliar tables interactively. Persisted code (apps, reports, views) names columns — shipping bytes and schema-fragility otherwise."
+    }
+  ],
+  "summary": "Review with the gallery memorized: cost (scans, N+1, OFFSET), correctness (conversions, fanout, ties), clarity (magic, nesting). Comment harm + fix + proof, and hold every query against the clean shape.",
+  "next": "Gallery memorized — now perform the whole craft on one stage. Next and last: the performance-audit capstone walkthrough, then your final assessment."
+}

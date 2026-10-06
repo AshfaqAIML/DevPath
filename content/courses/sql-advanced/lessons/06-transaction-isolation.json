@@ -1,0 +1,64 @@
+{
+  "title": "Transactions & Isolation: Writers Colliding",
+  "slug": "06-transaction-isolation",
+  "objective": "After this lesson you will be able to wrap multi-statement work atomically, name the three classic concurrency anomalies, choose isolation levels (PostgreSQL) and locking modes (SQLite) deliberately, and design retry logic for serialization failures and deadlocks.",
+  "why": "Single-statement queries are atomic by nature; real work isn't — enroll a developer (insert + update counts + log), transfer anything, migrate data. Concurrent writers interleave, and interleavings produce dirty reads, lost updates, and phantoms unless you choose otherwise. Every 'impossible' data corruption story is this lesson, unlearned.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Atomicity: all-or-nothing blocks" },
+    { "t": "p", "text": "A **transaction** (`BEGIN … COMMIT`, escape hatch `ROLLBACK`) makes many statements atomic: either all effects persist or none do. The enrollment flow (insert enrollment, bump counters, write audit log) must never half-finish — a crash between statements without a transaction leaves permanent inconsistency no query can detect." },
+    { "t": "code", "lang": "sql", "code": "-- Enroll developer 3 in course 5: three writes, one atomic unit\n-- (real SQLite / PostgreSQL)\nBEGIN;\nINSERT INTO enrollments (developer_id, course_id, progress, completed)\nVALUES (3, 5, 0, 0);\n-- UPDATE course_stats SET enrolled = enrolled + 1 WHERE course_id = 5;\n-- INSERT INTO audit_log (action) VALUES ('enrolled dev 3 in course 5');\nCOMMIT;\n-- Any error before COMMIT → ROLLBACK: zero partial effects.", "caption": "Transactions turn multi-statement flows into indivisible units" },
+    { "t": "h", "text": "The three anomalies (know them cold)" },
+    { "t": "p", "text": "Concurrency bugs have canonical names. **Dirty read**: reading uncommitted data that later rolls back (you acted on rows that never existed). **Non-repeatable read / lost update**: two reads of the same row disagree because a writer committed between them (balances, counters). **Phantom**: a repeated *range* query gains/loses rows as writers insert into the range (reports that don't foot). Every isolation discussion below is about which of these you permit." },
+    { "t": "table", "headers": ["Anomaly", "What happens", "Killed by"], "rows": [["Dirty read", "Read uncommitted-then-rolled-back data", "READ COMMITTED and up"], ["Non-repeatable / lost update", "Same row differs between your two reads", "REPEATABLE READ and up (snapshot)"], ["Phantom", "Range query changes membership mid-transaction", "SERIALIZABLE (predicate locking)"]] },
+    { "t": "h", "text": "PostgreSQL levels vs SQLite locking" },
+    { "t": "p", "text": "PostgreSQL offers **READ COMMITTED** (default: no dirty reads, fresh snapshot per statement), **REPEATABLE READ** (snapshot per transaction — no non-repeatables, phantoms possible, serialization errors on write conflicts), and **SERIALIZABLE** (fullest safety; conflicting transactions abort with 40001 — your code *must* retry). SQLite serializes writers with locking instead: one writer at a time, `BEGIN IMMEDIATE` to reserve the write lock up front (avoiding mid-transaction SQLITE_BUSY), WAL mode for concurrent readers." },
+    { "t": "code", "lang": "sql", "code": "-- PostgreSQL: choose per transaction, retry on 40001\n-- BEGIN ISOLATION LEVEL REPEATABLE READ;\n-- SELECT SUM(progress) FROM enrollments WHERE course_id = 5;\n-- (application work…)\n-- COMMIT;  -- may raise serialization failure → retry whole txn\n\n-- SQLite: reserve the write lock early, keep transactions short\n-- BEGIN IMMEDIATE;\n-- UPDATE enrollments SET progress = 100 WHERE id = 7;\n-- COMMIT;", "caption": "Levels (PG) vs lock reservation (SQLite) — same goal, different machinery" },
+    { "t": "p", "text": "Defaults are sensible starting points (READ COMMITTED / deferred locking); escalate deliberately for money-like invariants (balances, seat counts, enrollment caps) and keep those transactions short — long transactions hold snapshots/locks that starve everyone else. Deadlocks (two transactions locking in opposite order) resolve by always acquiring in the same order plus retry logic, never by hoping." },
+    { "t": "callout", "variant": "warn", "title": "Retry is part of the code", "text": "SERIALIZABLE (and SQLite BUSY) failure modes are *expected control flow*, not bugs: wrap transactions in retry loops with backoff, keep retried units idempotent, and cap attempts. Code that treats serialization errors as crashes will page you at 3am under load — which is exactly when they spike." },
+    { "t": "h", "text": "Lost updates: the counter pattern" },
+    { "t": "p", "text": "Read-modify-write (`read count, +1, write`) loses updates when two writers interleave — each reads 5, writes 6, one increment vanishes. Fixes in ascending strength: single-statement atomic updates (`SET n = n + 1`), optimistic locking (version column + `WHERE version = ?`, retry on zero rows), or SERIALIZABLE. The single-statement form is almost always sufficient and composes with everything." },
+    { "t": "practice", "query": "SELECT course_id, COUNT(*) AS n FROM enrollments GROUP BY course_id ORDER BY n DESC;", "note": "Run this counter snapshot in the sandbox — counters are the data most corrupted by lost updates. Then picture two admins recomputing it concurrently: the reasoning about interleavings starts from numbers you have actually seen." },
+    { "t": "keytakeaways", "items": ["Transactions make multi-statement flows atomic: BEGIN…COMMIT, ROLLBACK on any failure", "Three anomalies: dirty reads, non-repeatable/lost updates, phantoms — each killed by a specific level", "PG levels (COMMITTED → REPEATABLE → SERIALIZABLE + retry) vs SQLite locking (IMMEDIATE, short txns, WAL readers)", "Lost-update antidote ladder: atomic single statements → optimistic versioning → serializable + retry", "Keep transactions short; acquire locks in consistent order; retry loops are production code"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, snapshot per-course enrollment counts (flat GROUP BY). (b) On paper, interleave two writers both doing read-count(5)→insert→write-count(6) on the same course and show the lost increment. (c) For real SQLite/PostgreSQL, write the three fixes: atomic single-statement counter bump, optimistic-version update with retry check, and the SERIALIZABLE transaction with retry pseudocode. State when each is appropriate.",
+    "hints": [
+      "Sandbox snapshot is the practice query — record counts; they are the 'before' photo your interleaving corrupts.",
+      "Interleaving: W1 read 5, W2 read 5, W1 write 6, W2 write 6 — two increments, net +1. Draw the timeline; the overlap window is the bug.",
+      "Atomic: UPDATE stats SET n = n + 1 WHERE course_id = ? (one statement, no read). Optimistic: UPDATE … SET n = ?, version = version + 1 WHERE id = ? AND version = ? + application retry on 0 rows. Serializable: BEGIN ISOLATION LEVEL SERIALIZABLE … COMMIT with 40001 retry loop."
+    ],
+    "solution": "-- (c-i) atomic bump (real SQLite / PostgreSQL)\n-- UPDATE course_stats SET enrolled = enrolled + 1 WHERE course_id = 5;\n-- (c-ii) optimistic: UPDATE course_stats SET enrolled = 6, version = version + 1\n--   WHERE course_id = 5 AND version = 3;  -- 0 rows → re-read, retry\n-- (c-iii) serializable block with application-level retry-on-40001 loop.\n-- Ladder: atomic for counters; optimistic for multi-field edits; serializable for money-like multi-row invariants.",
+    "why": "The ladder teaches proportionate response: most counter bugs die at step one, and reaching for SERIALIZABLE everywhere buys latency and retries for safety simple statements already provide. The interleaving sketch is the diagnostic skill — see the overlap window, name the anomaly.",
+    "code": "-- Sandbox snapshot (flat — run here)\nSELECT course_id, COUNT(*) AS n FROM enrollments GROUP BY course_id ORDER BY n DESC;\n\n-- Real-DB fixes (see solution): atomic bump, optimistic version, serializable + retry.",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Two writers read count 5, each adds 1, each writes 6. Final count and name?",
+      "options": ["7 — correct", "6 — one increment lost: a lost update (non-repeatable family)", "5 — both rolled back", "12 — double counted"],
+      "answer": 1,
+      "explain": "Read-modify-write interleaves: both base on the same read, one write clobbers the other. Net +1 for two increments — the canonical lost update."
+    },
+    {
+      "q": "PostgreSQL SERIALIZABLE transaction aborts with 40001 under load. Correct handling?",
+      "options": ["Log and crash — data is corrupt", "Retry the whole transaction (idempotent unit, bounded attempts, backoff) — serialization failures are expected control flow", "Downgrade to READ UNCOMMITTED", "Restart the database"],
+      "answer": 1,
+      "explain": "Serializable safety is enforced by aborting conflicts; the application contract is retry. Units must be idempotent and bounded — spikes coincide with load, exactly when paging hurts most."
+    },
+    {
+      "q": "SQLite writer gets SQLITE_BUSY mid-transaction. Best prevention?",
+      "options": ["Longer transactions", "BEGIN IMMEDIATE to reserve the write lock up front + short transactions + WAL mode for readers", "Delete the journal", "More indexes"],
+      "answer": 1,
+      "explain": "Deferred locking discovers contention mid-flight; IMMEDIATE fails fast at start instead. Short transactions shrink hold time; WAL lets readers proceed during writes."
+    },
+    {
+      "q": "Which anomaly does REPEATABLE READ (snapshot per transaction) still permit?",
+      "options": ["Dirty reads", "Phantoms — new rows matching the range can appear; only SERIALIZABLE's predicate locking kills them", "Nothing — it is perfect", "Lost connections"],
+      "answer": 1,
+      "explain": "Snapshots freeze *seen* rows, not range membership. Repeatable reads of the same row are safe; repeated range queries can gain phantoms — the remaining gap SERIALIZABLE closes."
+    }
+  ],
+  "summary": "Atomicity via transactions, anomalies named (dirty, non-repeatable/lost, phantom), levels and locks chosen per invariant, retries as production code. Concurrency correctness is designed, never hoped for.",
+  "next": "Safe writers assumed one executor — but what about the planner executing your clever pipeline twice? Next: materialization, temp tables, and staging expensive work deliberately."
+}

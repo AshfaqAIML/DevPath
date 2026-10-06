@@ -1,0 +1,64 @@
+{
+  "title": "Recursive CTEs: Base Plus Step",
+  "slug": "04-recursive-ctes",
+  "objective": "After this lesson you will be able to write WITH RECURSIVE queries (anchor + recursive step + termination), walk hierarchies and generate sequences in pure SQL, and prove termination before running.",
+  "why": "Intermediate Ch.2 teased it: a CTE that references itself. Org charts, prerequisite chains, category trees, dependency graphs — any data that points at itself — plus sequence generation (date series, number ranges for gap analysis). Recursion turns SQL from a row-filtering language into one that walks structures, and it is the single most interview-distinguishing SQL skill.",
+  "minutes": 18,
+  "xp": 75,
+  "blocks": [
+    { "t": "h", "text": "The shape: anchor, step, stop" },
+    { "t": "p", "text": "A recursive CTE has three parts: the **anchor** (starting rows), **`UNION ALL`** (almost always ALL — UNION's dedup can break iteration), and the **recursive step** (joins the CTE to produce the next layer). The engine repeats the step on new rows until it produces nothing. Termination is your responsibility: every recursion needs a condition that eventually yields zero rows." },
+    { "t": "code", "lang": "sql", "code": "-- Count 1..10 in pure SQL: anchor, step, and the stop condition\nWITH RECURSIVE counter(n) AS (\n  SELECT 1            -- anchor: where the walk starts\n  UNION ALL\n  SELECT n + 1 FROM counter WHERE n < 10  -- step + stop in one line\n)\nSELECT n FROM counter;", "caption": "The minimal recursion: without WHERE n < 10 it never terminates" },
+    { "t": "p", "text": "Read the execution as waves: wave 0 is {1}; the step maps each wave to the next ({2}, {3}, …); the WHERE filters wave 11 to empty, and iteration stops. The stop condition lives *inside* the recursive step — forget it and the query runs until the engine's iteration limit kills it (SQLite: SQLITE_LIMIT_CTE_RECURSION; PostgreSQL: statement timeout territory)." },
+    { "t": "callout", "variant": "warn", "title": "Prove termination on paper first", "text": "Before running any recursion, point at the condition that shrinks the frontier: a counter with an upper bound, a depth limit, or a visited-set that grows. Cycles in the data (A→B→A) defeat naive walks — carry a path/depth guard. Infinite recursion is the one SQL mistake that punishes with hangs, not errors." },
+    { "t": "h", "text": "Walking hierarchies: the real use" },
+    { "t": "p", "text": "Hierarchies store parent pointers (`manager_id`, `parent_id`); recursion walks them. Track **depth** as you go (anchor depth 0, step depth+1) and build a **path** string for readable lineage. The pattern below uses an inline org table — in production it joins your real employees/categories table." },
+    { "t": "code", "lang": "sql", "code": "-- Org walk: depth + path carried through the recursion (real SQLite/PostgreSQL)\nWITH RECURSIVE org(id, name, mgr) AS (\n  VALUES (1, 'Ava', NULL), (2, 'Ben', 1), (3, 'Cy', 1), (4, 'Dee', 2)\n),\nchain(id, name, depth, path) AS (\n  SELECT id, name, 0, name FROM org WHERE mgr IS NULL\n  UNION ALL\n  SELECT o.id, o.name, c.depth + 1, c.path || ' > ' || o.name\n  FROM org o JOIN chain c ON o.mgr = c.id\n  WHERE c.depth < 20\n)\nSELECT name, depth, path FROM chain ORDER BY path;", "caption": "Depth and path as carried state — the hierarchy walk template" },
+    { "t": "p", "text": "Three reusable mechanics: the anchor selects roots (`mgr IS NULL`); the step joins children to the accumulated chain (not to the base table's roots); carried columns (`depth`, `path`) accumulate context the final SELECT presents. `WHERE c.depth < 20` is the seatbelt — even clean hierarchies deserve one against corrupt cycles." },
+    { "t": "h", "text": "Sequences for gap analysis" },
+    { "t": "p", "text": "Recursion also *generates* rows: number ranges, date series. The killer app is **gap analysis** — generate the complete expected set, LEFT JOIN actuals, keep the NULLs (Intermediate absence dialect). 'Which course ids have no enrollments in a range?' and 'which dates had zero signups?' are sequence-minus-reality queries." },
+    { "t": "code", "lang": "sql", "code": "-- Gap hunt template: expected series LEFT JOIN reality (real SQLite/PostgreSQL)\nWITH RECURSIVE series(n) AS (\n  SELECT 1 UNION ALL SELECT n + 1 FROM series WHERE n < 16\n)\nSELECT s.n AS course_id\nFROM series s\nLEFT JOIN enrollments e ON e.course_id = s.n\nWHERE e.id IS NULL;", "caption": "Generate the expected, subtract the actual — absence via recursion" },
+    { "t": "callout", "variant": "info", "title": "Sandbox note", "text": "Recursion needs WITH RECURSIVE, which the flat-SELECT sandbox doesn't execute — all recursion runs in real SQLite/PostgreSQL. Sandbox practice below verifies the *anchor-shaped* flat pieces (roots, children-of-X) that your recursive steps are built from." },
+    { "t": "practice", "query": "SELECT DISTINCT course_id FROM enrollments ORDER BY course_id;", "note": "Run this reality inventory in the sandbox — which ids actually occur. The gap template subtracts exactly this set from the generated series: in a real database the series comes from WITH RECURSIVE, the reality from this same flat shape." },
+    { "t": "keytakeaways", "items": ["Recursion = anchor + UNION ALL + self-referencing step + in-step stop condition", "UNION ALL (not UNION) for iteration; dedup can corrupt wave semantics", "Carry depth and path as state; seatbelt every walk against cycles", "Generate-then-subtract (series LEFT JOIN reality) finds gaps in sequences, dates, ids", "Prove termination on paper: the frontier must shrink to empty"]} ],
+  "exercise": {
+    "prompt": "Build a prerequisite chain walk. Assume a table prereq(course_id, needs_id) with rows (8,5),(5,3),(3,1) meaning '8 needs 5 needs 3 needs 1'. (a) In the sandbox, practice the seed-then-expand mechanics on real tables: first the anchor-shaped query (developer's direct enrollments), then the one-hop expansion (their course titles) — two flat queries. (b) For real SQLite/PostgreSQL, write the WITH RECURSIVE walk from course 8 collecting the full chain with depth, terminating safely.",
+    "hints": [
+      "Anchor: the direct prerequisite of 8 (needs_id of the row with course_id = 8), depth 1. Model prereq as a VALUES CTE or a real table — same shape.",
+      "Step: join prereq ON prereq.course_id = chain.current_id, collecting needs_id with depth + 1. Stop: no row has course_id = 1, so the walk ends naturally — plus an explicit depth guard.",
+      "Expected chain: 5 (d1), 3 (d2), 1 (d3). If your walk returns duplicates, check UNION ALL vs UNION and the join direction."
+    ],
+    "solution": "-- (b) real SQLite / PostgreSQL\nWITH RECURSIVE prereq(course_id, needs_id) AS (\n  VALUES (8, 5), (5, 3), (3, 1)\n),\nchain(current_id, depth) AS (\n  SELECT needs_id, 1 FROM prereq WHERE course_id = 8\n  UNION ALL\n  SELECT p.needs_id, c.depth + 1\n  FROM prereq p JOIN chain c ON p.course_id = c.current_id\n  WHERE c.depth < 20\n)\nSELECT current_id AS prerequisite, depth FROM chain ORDER BY depth;\n-- 5/d1, 3/d2, 1/d3: then nothing needs course 1, walk ends.",
+    "why": "The walk mirrors graph traversal: anchor seeds the frontier, the step expands it, exhaustion terminates it. VALUES-as-table keeps the exercise self-contained; production swaps in the real table with zero shape change — which is why the template transfers directly.",
+    "code": "-- Sandbox mechanics (flat — run both here): seed, then expand one hop\nSELECT course_id FROM enrollments WHERE developer_id = 3;\nSELECT c.title FROM courses c JOIN enrollments e ON e.course_id = c.id WHERE e.developer_id = 3;\n\n-- Full walk (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "What are the three mandatory parts of a recursive CTE?",
+      "options": ["SELECT, FROM, WHERE", "Anchor (seed rows), UNION ALL, self-referencing step with a stop condition", "GROUP BY, HAVING, ORDER BY", "BEGIN, COMMIT, ROLLBACK"],
+      "answer": 1,
+      "explain": "Waves need a start (anchor), a wave function (recursive step over UNION ALL), and exhaustion (stop condition yielding zero rows). Missing any one: no start, corrupted iteration, or a hang."
+    },
+    {
+      "q": "Why UNION ALL rather than UNION in the recursive step?",
+      "options": ["UNION is slower to type", "UNION's dedup can remove rows the iteration still needs and corrupt wave semantics; ALL preserves every generated row", "UNION is unsupported in CTEs", "No reason — interchangeable"],
+      "answer": 1,
+      "explain": "Iteration correctness depends on complete waves. Dedup between waves can swallow frontier rows (and legitimately repeated values), breaking counts and termination. ALL is the correct default."
+    },
+    {
+      "q": "A hierarchy walk hangs on production data but worked in testing. Most likely cause and guard?",
+      "options": ["Too many columns — select fewer", "A cycle in the data (A→B→A) defeats naive termination — carry depth/path with an explicit bound", "Missing index", "Wrong alias"],
+      "answer": 1,
+      "explain": "Testing used a clean tree; production has a cycle, so the frontier never empties. Depth/path guards bound every walk regardless of data hygiene — seatbelts, not optimism."
+    },
+    {
+      "q": "How do you find 'dates with zero signups' using recursion?",
+      "options": ["Impossible in SQL", "Generate the full date series recursively, LEFT JOIN signups, keep NULLs — expected minus actual", "UNION all signup dates", "ORDER BY date DESC"],
+      "answer": 1,
+      "explain": "Absence needs a universe to subtract from. Recursion generates the expected set; the anti-join reveals gaps. Same template serves id ranges and sequence holes."
+    }
+  ],
+  "summary": "Recursion walks what joins can't reach: anchor seeds, UNION ALL steps expand, stop conditions (plus seatbelts) terminate. Carry depth and path, generate-then-subtract for gaps, and never run an unproven walk on production data.",
+  "next": "You can walk trees — but analytics mostly ranks peers, not ancestors. Next: window functions primer (ranks, partitions, frames), with full depth reserved for the dedicated course."
+}

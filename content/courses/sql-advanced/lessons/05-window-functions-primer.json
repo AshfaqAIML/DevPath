@@ -1,0 +1,64 @@
+{
+  "title": "Window Functions Primer",
+  "slug": "05-window-functions-primer",
+  "objective": "After this lesson you will be able to rank rows with ROW_NUMBER/RANK/DENSE_RANK, partition computations with PARTITION BY, compare GROUP BY vs windows, and use running totals — while knowing exactly where this primer stops and the dedicated Window Functions course begins.",
+  "why": "GROUP BY collapses rows; analytics usually needs detail *plus* context — each developer's hours *and* their rank, each enrollment *and* the running total. Window functions compute over peer sets without collapsing, and they power most 'top-N per group' and leaderboard queries in production. This primer makes you functional; the SQL Window Functions course makes you fluent.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "GROUP BY collapses, OVER preserves" },
+    { "t": "p", "text": "The one idea: a window function computes across a set of related rows (**partition**) while keeping every row. `GROUP BY role` returns one row per role; `AVG(hours_studied) OVER (PARTITION BY role)` returns all 14 developers, each annotated with their role's average. Detail plus context, in one pass, no self-join." },
+    { "t": "code", "lang": "sql", "code": "-- Every developer, annotated with their role average (real SQLite/PostgreSQL)\nSELECT name, role, hours_studied,\n  ROUND(AVG(hours_studied) OVER (PARTITION BY role), 1) AS role_avg,\n  hours_studied - ROUND(AVG(hours_studied) OVER (PARTITION BY role), 1) AS vs_avg\nFROM developers\nORDER BY role, hours_studied DESC;", "caption": "OVER (PARTITION BY): group-aware computation without collapsing rows" },
+    { "t": "h", "text": "Ranking: ROW_NUMBER vs RANK vs DENSE_RANK" },
+    { "t": "p", "text": "Three rankings, three tie policies. **`ROW_NUMBER`** assigns 1,2,3,… arbitrarily breaking ties (nondeterministic order within ties — always add a tiebreaker). **`RANK`** gives ties the same number and *skips* (1,2,2,4 — competition ranking). **`DENSE_RANK`** ties share without skipping (1,2,2,3). Leaderboards that pay prizes want RANK; pagination wants ROW_NUMBER with a unique order; tier labels want DENSE_RANK." },
+    { "t": "code", "lang": "sql", "code": "-- Hours leaderboard under all three tie policies (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  ROW_NUMBER() OVER (ORDER BY hours_studied DESC) AS rn,\n  RANK() OVER (ORDER BY hours_studied DESC) AS rnk,\n  DENSE_RANK() OVER (ORDER BY hours_studied DESC) AS dense_rnk\nFROM developers\nORDER BY hours_studied DESC;", "caption": "Same ORDER BY, three tie philosophies — run it and compare columns" },
+    { "t": "h", "text": "Top-N per group without self-joins" },
+    { "t": "p", "text": "The classic window application: rank *within* partitions, then filter ranks outside. `ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC)` numbers developers inside each role; the outer query keeps `rn <= 2` for top-2-per-role. Pre-window SQL did this with correlated subqueries or lateral joins — slower to write, harder to read, often slower to run." },
+    { "t": "code", "lang": "sql", "code": "-- Top 2 most-studied developers per role (real SQLite/PostgreSQL)\nSELECT role, name, hours_studied\nFROM (\n  SELECT role, name, hours_studied,\n    ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC) AS rn\n  FROM developers\n) AS ranked\nWHERE rn <= 2\nORDER BY role, rn;", "caption": "Rank inside, filter outside — windows can't appear in WHERE directly" },
+    { "t": "p", "text": "The subquery wrapper is mandatory: window functions evaluate *after* WHERE/GROUP BY but *before* ORDER BY, so `WHERE rn <= 2` on the same level is an error in every engine. Rank in the inner query, filter in the outer — the staging rule of windows." },
+    { "t": "h", "text": "Frames: running totals in one line" },
+    { "t": "p", "text": "Aggregates over windows accept **frames** — which peer rows count. `SUM(x) OVER (ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` is the running total; omit the frame with an ORDER BY and most engines default to exactly that (a classic surprise when you expected the whole-partition sum — be explicit). Frames also do moving averages (`ROWS BETWEEN 6 PRECEDING AND CURRENT ROW`) — full depth belongs to the Window Functions course." },
+    { "t": "callout", "variant": "info", "title": "Primer boundary (course honesty)", "text": "This lesson deliberately stops at ranking, top-N-per-group, and running totals. LEAD/LAG, FIRST_VALUE, NTILE details, frame exclusion, and window optimization live in SQL Window Functions (6 lessons, Data track) — take it next. If a question here feels cut short, that course is its continuation, not an omission." },
+    { "t": "practice", "query": "SELECT role, COUNT(*) AS devs, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role ORDER BY avg_hours DESC;", "note": "Run this GROUP BY baseline in the sandbox — one row per role. The window version in this lesson returns all 14 developers with the same averages attached: collapsing vs annotating is the contrast to internalize before touching OVER." },
+    { "t": "keytakeaways", "items": ["OVER computes over peer sets without collapsing rows — detail plus context in one pass", "ROW_NUMBER breaks ties arbitrarily, RANK skips (1,2,2,4), DENSE_RANK shares without skipping", "Top-N per group: rank inside (PARTITION BY + ORDER BY), filter ranks outside — windows can't live in WHERE", "Frames define running vs whole-set aggregates — be explicit, defaults surprise", "This is a primer: LEAD/LAG, frames depth, and optimization continue in SQL Window Functions"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the GROUP BY baseline from practice and record each role's average. (b) In real SQLite/PostgreSQL, write the annotated version (every developer with role_avg and vs_avg) and the top-2-per-role query; verify the top-2 names per role against the baseline ordering. (c) In one sentence, state when you would choose GROUP BY over windows.",
+    "hints": [
+      "Annotated version mirrors the lesson's first query: AVG(...) OVER (PARTITION BY role) plus the difference column. vs_avg signs should match baseline intuition (above/below average).",
+      "Top-2-per-role needs the subquery wrapper: ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC) AS rn outside, WHERE rn <= 2 outside that.",
+      "GROUP BY wins when the consumer wants one row per group (dashboard tiles, rollups); windows win when detail rows must keep their context (leaderboards, annotated exports)."
+    ],
+    "solution": "-- (b) annotated (real SQLite / PostgreSQL)\nSELECT name, role, hours_studied,\n  ROUND(AVG(hours_studied) OVER (PARTITION BY role), 1) AS role_avg\nFROM developers ORDER BY role, hours_studied DESC;\n\n-- top-2 per role\nSELECT role, name, hours_studied FROM (\n  SELECT role, name, hours_studied,\n    ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC) AS rn\n  FROM developers\n) AS ranked WHERE rn <= 2 ORDER BY role, rn;\n-- (c) GROUP BY for one-row-per-group consumers; windows when detail must keep context.",
+    "why": "The exercise forces both shapes on the same data so the collapsing-vs-annotating distinction becomes muscle memory — plus the staging rule (rank inside, filter outside) that every window beginner trips on exactly once.",
+    "code": "-- Sandbox baseline (flat — run here)\nSELECT role, COUNT(*) AS devs, AVG(hours_studied) AS avg_hours\nFROM developers GROUP BY role ORDER BY avg_hours DESC;\n\n-- Window versions (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "GROUP BY role returns 4 rows; AVG() OVER (PARTITION BY role) returns 14. Why?",
+      "options": ["Windows duplicate data", "GROUP BY collapses each group to one row; windows annotate every detail row with its group's computation", "PARTITION BY is broken here", "The window version counts wrong"],
+      "answer": 1,
+      "explain": "Collapsing vs annotating is the core distinction: rollups for tiles (GROUP BY), context-preserving detail for leaderboards and exports (windows)."
+    },
+    {
+      "q": "Hours 912, 912, 800 under ROW_NUMBER, RANK, DENSE_RANK (ORDER BY hours DESC)?",
+      "options": ["1,2,3 for all three", "ROW_NUMBER 1,2,3 (ties broken); RANK 1,1,3 (shared, skip); DENSE_RANK 1,1,2 (shared, no skip)", "All give 1,1,1", "All give 1,2,2"],
+      "answer": 1,
+      "explain": "Three tie philosophies: arbitrary order, competition ranking with gaps, dense tiers. Match the function to the use: pagination, prizes, labels."
+    },
+    {
+      "q": "Why can't WHERE rn <= 2 sit in the same query level as the ROW_NUMBER() definition?",
+      "options": ["It can — no wrapper needed", "Evaluation order: windows compute after WHERE but before ORDER BY, so the alias doesn't exist yet at filtering time", "rn is a reserved word", "Subqueries are deprecated"],
+      "answer": 1,
+      "explain": "SQL's logical pipeline (FROM → WHERE → GROUP BY → windows → SELECT → ORDER BY) means same-level WHERE predates the window. Rank inside, filter outside — always."
+    },
+    {
+      "q": "SUM(x) OVER (ORDER BY day) returns running totals instead of the grand total. Why?",
+      "options": ["A bug in the engine", "With ORDER BY present, the default frame is UNBOUNDED PRECEDING..CURRENT ROW — be explicit with frames", "SUM is broken in windows", "Missing PARTITION BY"],
+      "answer": 1,
+      "explain": "Ordered windows default to a growing frame (running semantics). Expecting the whole-set sum is the classic frame surprise — state frames explicitly, and study full frame control in the Window Functions course."
+    }
+  ],
+  "summary": "Windows annotate where GROUP BY collapses: partition for peer context, rank with explicit tie policy, filter ranks outside, frame running computations deliberately. Primer complete — fluency continues in SQL Window Functions.",
+  "next": "Ranked rows assume committed data — but what does 'committed' mean when writers collide? Next: transactions, isolation levels, and the anomalies they permit."
+}

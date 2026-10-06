@@ -1,0 +1,62 @@
+{
+  "title": "Materialization & Temp Tables",
+  "slug": "07-materialization-temp-tables",
+  "objective": "After this lesson you will be able to predict when the planner inlines vs materializes CTEs, force materialization deliberately (PostgreSQL MATERIALIZED, temp tables), and stage expensive pipelines so repeated references compute once.",
+  "why": "Intermediate Ch.2 warned that CTEs promise no caching — here is the other half of that truth: referenced three times, a CTE can execute three times, turning an elegant pipeline into a triple-paid bill. Knowing when the planner shares work versus repeats it, and how to force the sharing, separates queries that look fast from queries that are fast.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Inlining: the default deal" },
+    { "t": "p", "text": "By default the planner **inlines** CTEs: it pastes each CTE's definition into every referencing spot and optimizes the whole. Inlining is usually brilliant — outer filters push inside, unused columns vanish. But inlining a CTE referenced three times means three evaluations. Elegant text, triple execution: the cost is invisible in the query and painfully visible in runtime." },
+    { "t": "code", "lang": "sql", "code": "-- Elegant, triple-paid: heavy CTE referenced 3x (real SQLite/PostgreSQL)\n-- WITH heavy AS (SELECT … expensive aggregation …)\n-- SELECT (SELECT COUNT(*) FROM heavy),\n--        (SELECT AVG(x) FROM heavy),\n--        (SELECT MAX(y) FROM heavy);", "caption": "Three references, potentially three full evaluations" },
+    { "t": "h", "text": "Forcing the share: MATERIALIZED and temp tables" },
+    { "t": "p", "text": "PostgreSQL lets you command it: `WITH w AS MATERIALIZED (…)` computes once into a temporary store; `NOT MATERIALIZED` forces inlining (useful when you *want* pushdown). SQLite historically materializes more aggressively — version-dependent, so verify with EXPLAIN rather than assuming. For the heaviest stages, **temp tables** (`CREATE TEMP TABLE … AS SELECT`) make staging explicit, inspectable, and indexable." },
+    { "t": "code", "lang": "sql", "code": "-- PostgreSQL: compute once, reference freely\n-- WITH heavy AS MATERIALIZED (SELECT … expensive …)\n-- SELECT … FROM heavy … JOIN heavy …;\n\n-- Portable staging: temp table you can inspect and index (real SQLite/PostgreSQL)\n-- CREATE TEMP TABLE heavy AS SELECT … expensive aggregation …;\n-- CREATE INDEX t_heavy_key ON heavy(key);\n-- SELECT … FROM heavy …;   -- repeat references, zero recompute\n-- DROP TABLE heavy;        -- dies with the session anyway", "caption": "Command sharing: MATERIALIZED hint or explicit temp staging" },
+    { "t": "p", "text": "Temp tables are also debugging superpowers: each stage is a real table you can SELECT, count, and eyeball — the pipeline-debugging of Intermediate Ch.2 made persistent. Costs: session-scoped storage, manual cleanup discipline, and statistics the planner may lack (ANALYZE temp tables that drive big downstream joins)." },
+    { "t": "h", "text": "When to stage: the decision rule" },
+    { "t": "p", "text": "Stage when a CTE is (a) expensive, (b) referenced more than once, or (c) worth inspecting mid-pipeline. Don't stage cheap single-use CTEs — inlining optimizes them better than you can, and temp-table ceremony adds failure modes (stale data, forgotten drops, name collisions in shared sessions). Default inline; materialize on measured evidence (EXPLAIN showing repeated evaluation, or runtime that scales with reference count)." },
+    { "t": "table", "headers": ["Shape", "Evaluations", "Use when"], "rows": [["Plain CTE, referenced once", "Once (inlined optimally)", "Default for all single-use stages"], ["CTE referenced 3x", "Up to 3x (verify!)", "Add MATERIALIZED (PG) or temp-table it"], ["Temp table + index", "Once + indexed probes", "Heavy stage feeding joins/lookups"], ["Materialized view", "On refresh schedule", "Dashboard sources recomputed periodically (beyond course scope)"]] },
+    { "t": "callout", "variant": "warn", "title": "Stale-stage hazard", "text": "Temp tables snapshot data at creation: concurrent writers move on while your stage freezes. Short-lived staging inside one analysis is safe; long-lived temp tables feeding decisions are a staleness bug. Timestamp your stages (created_at column) so staleness is visible, not silent." },
+    { "t": "practice", "query": "SELECT developer_id, COUNT(*) AS n FROM enrollments GROUP BY developer_id ORDER BY n DESC;", "note": "Run this per-developer aggregation in the sandbox — it is the 'heavy stage' shape this lesson stages. Ask: referenced once (inline it) or three times (materialize it)? The answer is always about reference count, never about elegance." },
+    { "t": "keytakeaways", "items": ["Inlining is the default: great for single-use CTEs (pushdown, pruning), triple-billing for 3x-referenced ones", "PostgreSQL MATERIALIZED/NOT MATERIALIZED commands the choice; SQLite behavior is version-dependent — verify", "Temp tables make staging explicit, inspectable, indexable — with cleanup and staleness discipline", "Stage on evidence (repeated evaluation in EXPLAIN/runtime), never on elegance"]} ],
+  "exercise": {
+    "prompt": "A report references the per-course engagement CTE three times (averages, maxima, and a leaderboard). (a) In the sandbox, run the flat engagement aggregation and record timing feel + row counts. (b) For real PostgreSQL, write both the MATERIALIZED CTE version and the temp-table version with an index; state which you would ship and why. (c) Name the staleness guard you would add to the temp table.",
+    "hints": [
+      "Sandbox aggregation: per-course COUNT + conditional completed counts (flat, GROUP BY) — the stage everything else references.",
+      "MATERIALIZED version: WITH eng AS MATERIALIZED (…) then three references. Temp version: CREATE TEMP TABLE eng AS … + CREATE INDEX + three consumers + DROP. Compare ceremony vs control.",
+      "Ship the temp table for debuggability + indexing when the stage is heavy and joined; MATERIALIZED when the win is pure recompute-avoidance. Staleness guard: created_at timestamp column checked by consumers."
+    ],
+    "solution": "-- (b) PostgreSQL MATERIALIZED (real PG)\n-- WITH eng AS MATERIALIZED (\n--   SELECT c.id, COUNT(e.id) AS n,\n--     COUNT(CASE WHEN e.completed = 1 THEN 1 END) AS d\n--   FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id GROUP BY c.id)\n-- SELECT (SELECT AVG(n) FROM eng), (SELECT MAX(d) FROM eng), …;\n-- Temp-table alternative (real SQLite / PostgreSQL):\n-- CREATE TEMP TABLE eng AS <same aggregation>;\n-- CREATE INDEX t_eng_id ON eng(id);\n-- …consumers… DROP TABLE eng;\n-- Ship temp table here: heavy stage + joins + inspectability win.",
+    "why": "The exercise makes the reference-count rule concrete: one stage, three consumers, two mechanisms, one shipped with reasons. Ceremony must justify itself against measured recompute — senior engineers stage deliberately, not decoratively.",
+    "code": "-- Sandbox stage probe (flat — run here)\nSELECT c.id, COUNT(e.id) AS n FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id GROUP BY c.id;\n\n-- Staged versions (real PG / SQLite — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "A CTE referenced three times runs slowly although each reference is cheap. Most likely cause?",
+      "options": ["Missing index on the CTE", "Repeated evaluation: inlining pastes the definition per reference — the elegant text executes up to 3x", "CTEs are always slow", "Need UNION ALL"],
+      "answer": 1,
+      "explain": "Inlining optimizes single-use stages brilliantly and multi-referenced ones expensively. Reference count, not text elegance, determines evaluation count — verify in EXPLAIN."
+    },
+    {
+      "q": "PostgreSQL WITH w AS MATERIALIZED vs NOT MATERIALIZED — when each?",
+      "options": ["Interchangeable hints", "MATERIALIZED: compute-once for multi-referenced expensive stages; NOT MATERIALIZED: force inlining when outer filters should push inside", "MATERIALIZED is faster always", "NOT MATERIALIZED deletes the CTE"],
+      "answer": 1,
+      "explain": "Command the trade: sharing versus pushdown/pruning. Materialize repeated heavy work; inline when outer context should optimize the inner query."
+    },
+    {
+      "q": "Temp tables beat MATERIALIZED CTEs when…",
+      "options": ["Never — CTEs always win", "The stage needs inspection mid-pipeline, its own index, or reuse across statements in the session", "Queries are short", "Data is tiny"],
+      "answer": 1,
+      "explain": "Temp tables are real, inspectable, indexable objects persisting across statements. The price is ceremony, cleanup, and staleness discipline (timestamp stages)."
+    },
+    {
+      "q": "Long-lived temp table feeds a daily decision. Biggest risk?",
+      "options": ["Syntax errors", "Staleness: snapshot frozen at creation while writers move on — timestamp stages so age is visible", "Too fast", "Excessive normalization"],
+      "answer": 1,
+      "explain": "Staging snapshots time. Short-lived analysis stages are safe; decision-feeding stages need visible timestamps and refresh contracts, or silent staleness corrupts choices."
+    }
+  ],
+  "summary": "Inlining for single use, materialization for repeated expense — commanded in PG, verified everywhere, staged explicitly with temp tables when inspection or indexing pays. Reference count rules; elegance doesn't.",
+  "next": "Staged work runs fast — now watch a full rescue end to end. Next: the optimization case study, one slow dashboard query from complaint to proof."
+}

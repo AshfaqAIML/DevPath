@@ -1,0 +1,64 @@
+{
+  "title": "Composite, Covering & Partial Indexes",
+  "slug": "02-composite-covering-partial-indexes",
+  "objective": "After this lesson you will be able to design composite indexes with correct column order, build covering indexes that answer queries without touching tables, scope partial indexes to hot subsets, and audit an index set for waste.",
+  "why": "Intermediate indexing (single columns on filters and FKs) plateaus fast: real slow queries filter on two columns, sort by a third, and select five more. Each pattern has an index design that serves it exactly — and each wrong design is write-cost and disk paid for nothing. This is the highest-leverage performance knowledge per page in the course.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Composite order is a left-prefix contract" },
+    { "t": "p", "text": "A composite index on `(course_id, completed)` is one sorted structure ordered by course first, completed within each course. It serves `WHERE course_id = ? AND completed = ?` fully, `WHERE course_id = ?` alone (left prefix), and — critically — **never** `WHERE completed = ?` alone. Order columns by equality-first selectivity: the most-constrained, most-queried column leads." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite/PostgreSQL: one structure, three service levels\nCREATE INDEX idx_enr_course_done ON enrollments(course_id, completed);\n\n-- Fully served (both columns anchor the search)\n-- SELECT * FROM enrollments WHERE course_id = 5 AND completed = 1;\n-- Prefix-served (course_id anchors; completed filters the slice)\n-- SELECT * FROM enrollments WHERE course_id = 5;\n-- UNSERVED (completed alone cannot enter the structure)\n-- SELECT * FROM enrollments WHERE completed = 1;", "caption": "Left-prefix rule: the index opens from the left or not at all" },
+    { "t": "h", "text": "Covering: answer without visiting the table" },
+    { "t": "p", "text": "A normal index finds row locations, then the engine fetches each row from the table (random I/O per row). A **covering index** holds every column the query needs, so the plan becomes `SEARCH … USING COVERING INDEX` — no table visits at all. The standard trick is `INCLUDE` columns (PostgreSQL) or simply extending the composite (SQLite): keys for searching, payload for returning." },
+    { "t": "code", "lang": "sql", "code": "-- Real PostgreSQL: keys search, INCLUDE payload rides along\n-- CREATE INDEX idx_enr_cover ON enrollments(course_id) INCLUDE (progress, completed);\n-- SELECT progress, completed FROM enrollments WHERE course_id = 5;\n-- → index-only scan: table never touched.\n\n-- Real SQLite: same idea, wider composite (no INCLUDE syntax)\nCREATE INDEX idx_enr_cover_lite ON enrollments(course_id, progress, completed);", "caption": "Covering indexes trade width for zero table visits" },
+    { "t": "p", "text": "Covering is not free width: every extra column fattens the structure and its maintenance. Cover the hot, narrow read patterns (dashboards selecting 3 columns by one key); never cover `SELECT *` reporting. PostgreSQL's `EXPLAIN` confirms with 'Index Only Scan' plus visibility-map health — mostly-updated tables may still visit; SQLite shows COVERING INDEX directly." },
+    { "t": "h", "text": "Partial indexes: index the hot slice" },
+    { "t": "p", "text": "When queries consistently filter one subset — active enrollments, published courses, incomplete items — a **partial index** (`WHERE` in the definition) indexes only those rows. Smaller structure, cheaper maintenance, faster probes. The catch is exactness: the query's predicate must imply the index predicate, or the planner ignores it." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite/PostgreSQL: index only what the hot queries read\nCREATE INDEX idx_enr_incomplete ON enrollments(course_id) WHERE completed = 0;\n\n-- Served: predicate matches the partial condition exactly\n-- SELECT * FROM enrollments WHERE course_id = 5 AND completed = 0;\n-- IGNORED: predicate differs — planner cannot use the slice\n-- SELECT * FROM enrollments WHERE course_id = 5 AND completed = 1;", "caption": "Partial indexes demand predicate-exact queries" },
+    { "t": "callout", "variant": "warn", "title": "The index audit habit", "text": "Every index not serving a proven plan is write-tax with no benefit. Quarterly: list indexes per table, EXPLAIN the hot queries, and DROP whatever nothing uses. Nine overlapping indexes on one table is a failure mode, not diligence — Intermediate Ch.8's restraint scales up here, not down." },
+    { "t": "h", "text": "Design sequence for any slow query" },
+    { "t": "p", "text": "Same ritual, sharper tools: (1) EXPLAIN the query; (2) identify the dominant SCAN or probe; (3) design the minimal composite with equality columns leftmost, range/sort columns after; (4) consider covering iff the SELECT list is narrow and hot; (5) consider partial iff a stable subset predicate dominates; (6) create, re-EXPLAIN, confirm SEARCH/COVERING; (7) schedule the audit that will one day delete it." },
+    { "t": "practice", "query": "SELECT course_id, COUNT(*) AS n FROM enrollments GROUP BY course_id ORDER BY n DESC;", "note": "Run this grouped shape in the sandbox — it is the access pattern your index designs serve. Ask: which single composite would serve both this grouping and WHERE course_id = ? probes? (Answer in the next lesson's spirit: (course_id) with the grouped column leading.)" },
+    { "t": "keytakeaways", "items": ["Composites obey left-prefix: equality columns lead, ranges/sorts follow; second-column-only filters are unserved", "Covering indexes answer without table visits — INCLUDE payload (PG) or wider composites (SQLite), for narrow hot reads", "Partial indexes scope to hot subsets but demand predicate-exact queries", "Every unproven index is write-tax: audit quarterly, DROP fearlessly", "Design sequence: EXPLAIN → dominant node → minimal composite → covering/partial iff justified → verify"]} ],
+  "exercise": {
+    "prompt": "The stalled-learners dashboard runs: SELECT developer_id, COUNT(*) FROM enrollments WHERE completed = 0 GROUP BY developer_id ORDER BY COUNT(*) DESC. (a) In the sandbox, run the flat shape and note the grouping cost. (b) For real SQLite/PostgreSQL, design the minimal index set: one composite serving filter+group, and argue for/against a partial variant. Write the CREATE INDEX statements with per-index justification.",
+    "hints": [
+      "The filter (completed = 0) and the grouping key (developer_id) suggest (completed, developer_id): equality anchors, group key refines — and GROUP BY satisfied in index order can dodge the TEMP B-TREE.",
+      "Partial variant: WHERE completed = 0 on the index shrinks it to incomplete rows only — valid iff stalled-queries dominate this table's reads; otherwise the general composite serves more patterns.",
+      "Keep it minimal: propose the composite first, partial as an evaluated alternative with the trade-off stated, not both blindly."
+    ],
+    "solution": "-- (b) minimal design (real SQLite / PostgreSQL)\nCREATE INDEX idx_enr_done_dev ON enrollments(completed, developer_id);\n-- Serves: the completed = 0 slice, grouping in index order, per-key counts.\n-- Partial alternative (adopt iff incomplete-reads dominate):\n-- CREATE INDEX idx_enr_stalled ON enrollments(developer_id) WHERE completed = 0;\n-- Smaller + cheaper to maintain, but serves ONLY completed = 0 patterns.",
+    "why": "The composite mirrors the query's own structure (filter, then group) — index design as query-shape transcription. The partial debate shows senior judgment: narrower isn't automatically better; generality has value when read patterns vary.",
+    "code": "-- Sandbox shape probe (flat — run here)\nSELECT developer_id, COUNT(*) AS n FROM enrollments WHERE completed = 0 GROUP BY developer_id ORDER BY n DESC;\n\n-- Real-DB design (see solution): composite first, partial as evaluated alternative.",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Index on (course_id, completed). Which filter is unserved?",
+      "options": ["WHERE course_id = 5 AND completed = 1", "WHERE course_id = 5", "WHERE completed = 1 alone", "All are served"],
+      "answer": 2,
+      "explain": "Left-prefix: the structure opens from the leftmost column. Second-column-only predicates cannot enter — they need their own index (or a reordered composite)."
+    },
+    {
+      "q": "What makes an index 'covering', and how do you confirm it?",
+      "options": ["It covers all tables; confirm by row counts", "It holds every needed column so no table visit occurs — EXPLAIN shows COVERING INDEX (SQLite) / Index Only Scan (PG)", "It is larger than the table", "It updates automatically on reads"],
+      "answer": 1,
+      "explain": "Covering eliminates random table I/O for narrow hot reads. The plan names it explicitly — verify, because mostly-updated tables can still force visits."
+    },
+    {
+      "q": "A partial index WHERE completed = 0 is ignored by WHERE course_id = 5 AND completed = 1. Why?",
+      "options": ["Partial indexes are hints, not structures", "The query predicate must imply the index predicate exactly — completed = 1 contradicts the indexed slice", "Indexes don't work with AND", "The table is too small"],
+      "answer": 1,
+      "explain": "Partial indexes are slices with admission rules. A query outside the slice cannot use it, however selective — exactness is the price of smallness."
+    },
+    {
+      "q": "Nine indexes on one hot transactional table. Senior response?",
+      "options": ["Add a tenth for the new dashboard", "Audit usage via plans and DROP the unproven — each index taxes every write", "Rebuild them all weekly", "Convert them to views"],
+      "answer": 1,
+      "explain": "Indexes are write-tax paid per INSERT/UPDATE/DELETE. Unproven ones are pure cost on hot tables — subtraction is the optimization."
+    }
+  ],
+  "summary": "Composite left-prefix first, covering for narrow hot reads, partial for stable hot slices — each verified by EXPLAIN, each audited for continued employment. Index design is query-shape transcription plus restraint.",
+  "next": "Structures ready — now reshape the queries themselves. Next: rewriting for speed (subquery flattening, sargability, OR surgery) and the rewrites that beat any index."
+}

@@ -1,0 +1,67 @@
+{
+  "title": "Rewriting Queries for Speed",
+  "slug": "03-rewriting-queries-for-speed",
+  "objective": "After this lesson you will be able to flatten correlated subqueries into joins, keep predicates sargable, replace OR chains with UNION ALL, avoid functions on indexed columns, and fix pagination that degrades with OFFSET.",
+  "why": "Indexes (Ch.2) help queries the planner can already use. But some query shapes defeat every index: functions wrapping indexed columns, OR across tables, correlated subqueries re-running per row, OFFSET scanning pages nobody reads. Rewriting changes the shape into something indexes can serve — often a 100x fix with zero schema changes, which is why seniors rewrite before they index.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Sargability: let the index see the value" },
+    { "t": "p", "text": "A predicate is **sargable** (Search ARGument ABLE) when the engine can seek an index with it: bare column compared to a value. Wrap the column in a function and the index goes blind — every row must be computed, then filtered. The fix is always the same: rewrite so the column stands alone." },
+    { "t": "code", "lang": "sql", "code": "-- BLIND: function on the column — index unusable, full scan\n-- WHERE UPPER(country) = 'JAPAN'\n-- WHERE hours_studied + 100 > 500\n-- WHERE strftime('%Y', created) = '2026'\n\n-- SARGABLE: column alone, values precomputed\nWHERE country = 'Japan'\n-- WHERE hours_studied > 400\n-- WHERE created >= '2026-01-01' AND created < '2027-01-01'", "caption": "Move computation to the value side; keep columns naked" },
+    { "t": "p", "text": "The date-range rewrite is the highest-value instance: `strftime('%Y', created) = '2026'` scans everything, while the half-open range `>= AND <` seeks. Same for arithmetic (solve for the column) and case (normalize data once at write time, or use case-insensitive collations/indexes where your engine offers them)." },
+    { "t": "h", "text": "Flattening: correlated subqueries → joins" },
+    { "t": "p", "text": "A **correlated subquery** conceptually re-runs per outer row — planners often (not always) fail to decorrelate it. The manual flattening is mechanical: the EXISTS/NOT EXISTS test becomes a semi/anti join, and scalar lookups become LEFT JOINs. Modern planners handle simple cases, but explicit joins are both reliably fast and more readable at scale." },
+    { "t": "code", "lang": "sql", "code": "-- Correlated scalar per row (conceptually N executions)\n-- SELECT name,\n--   (SELECT COUNT(*) FROM enrollments e WHERE e.developer_id = d.id) AS n\n-- FROM developers d;\n\n-- Flattened: one grouping pass, one join (real SQLite/PostgreSQL)\nSELECT d.name, COALESCE(per_dev.n, 0) AS n\nFROM developers d\nLEFT JOIN (\n  SELECT developer_id, COUNT(*) AS n\n  FROM enrollments GROUP BY developer_id\n) AS per_dev ON per_dev.developer_id = d.id;", "caption": "Decorrelation: aggregate once, join once — Chapter 2's derived tables at senior scale" },
+    { "t": "p", "text": "Note the `COALESCE` armor: the LEFT JOIN produces NULL for developers with no enrollments, and reporting `NULL` instead of `0` is a downstream bug. Flattening changes shape; preserving semantics (zeros stay zeros, missing stays missing) is what makes the rewrite correct, not just fast." },
+    { "t": "h", "text": "OR surgery: UNION ALL the branches" },
+    { "t": "p", "text": "`OR` across different columns/tables typically defeats indexes (the engine must satisfy either side, so it scans). Splitting into `UNION ALL` branches lets each side seek its own index. The branches must be disjoint for ALL (else duplicates multiply) — use plain UNION when overlap is possible, and verify disjointness rather than assuming it." },
+    { "t": "code", "lang": "sql", "code": "-- OR across two filtered columns: one scan, no index fully usable\n-- SELECT * FROM developers WHERE country = 'Japan' OR role = 'backend';\n\n-- Split: each branch seeks its own index (real SQLite/PostgreSQL)\nSELECT * FROM developers WHERE country = 'Japan'\nUNION ALL\nSELECT * FROM developers WHERE role = 'backend' AND country <> 'Japan';", "caption": "OR → UNION ALL with an anti-overlap guard on the second branch" },
+    { "t": "callout", "variant": "warn", "title": "Verify disjointness, don't assume it", "text": "UNION ALL over overlapping branches duplicates rows — a correctness bug worse than slowness. The AND country <> 'Japan' guard makes branch two disjoint by construction. When branches can't be made disjoint, pay for UNION's dedup instead of shipping doubles." },
+    { "t": "h", "text": "OFFSET is a lie that scales linearly" },
+    { "t": "p", "text": "`LIMIT 20 OFFSET 100000` still reads and discards 100,000 rows — page 5000 costs 250x page 1. **Keyset (seek) pagination** remembers the last seen key and filters forward: `WHERE (sort_key, id) > (?, ?) ORDER BY … LIMIT 20`. Constant cost per page, immune to inserted-row drift (no skipped/duplicated rows between page loads). OFFSET survives only for tiny tables and admin screens." },
+    { "t": "code", "lang": "sql", "code": "-- Degrades linearly: skips N rows to show 20 (real SQLite/PostgreSQL)\n-- SELECT * FROM developers ORDER BY hours_studied DESC LIMIT 20 OFFSET 100000;\n\n-- Constant cost: resume after the last seen key\n-- SELECT * FROM developers\n-- WHERE (hours_studied, id) < (?, ?)\n-- ORDER BY hours_studied DESC, id DESC LIMIT 20;", "caption": "Seek pagination: filter forward from a bookmark, never skip" },
+    { "t": "p", "text": "The tiebreaker `id` is load-bearing: duplicate sort keys make single-column seeks skip or repeat rows. Any keyset scheme needs a unique total order — (sort key, primary key) is the standard pair." },
+    { "t": "practice", "query": "SELECT name, hours_studied FROM developers WHERE hours_studied > 400 ORDER BY hours_studied DESC LIMIT 5;", "note": "Run this sargable top-N in the sandbox: bare column, range predicate, small LIMIT. Then mentally wrap the column in UPPER() and predict the plan change — that prediction reflex is this lesson's muscle." },
+    { "t": "keytakeaways", "items": ["Sargability: bare columns seek, wrapped columns scan — move computation to the value side", "Flatten correlated subqueries into grouped joins; armor outer joins with COALESCE", "OR across indexes → UNION ALL with disjointness guards (or UNION when overlap is real)", "OFFSET cost grows with page number — keyset pagination with (sort key, id) bookmarks", "Rewrite before indexing: shape changes are often 100x with zero schema cost"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run two flat probes: developers with hours_studied > 400, and developers in role 'backend' — record counts. (b) For real SQLite/PostgreSQL, rewrite this slow dashboard fragment three ways and justify each: (i) WHERE UPPER(role) = 'BACKEND' OR country = 'Japan'; (ii) per-developer enrollment counts via correlated scalar; (iii) page 500 of a hours_studied leaderboard at 20/page.",
+    "hints": [
+      "Sandbox probes establish the sets each rewrite must preserve — rewrites must return identical rows, only faster. Count first, rewrite second.",
+      "(i) Normalize the constant ('backend') for sargability, then split the OR into UNION ALL with a disjointness guard. (ii) Flatten to grouped derived table + LEFT JOIN + COALESCE. (iii) Replace OFFSET 9980 with a keyset bookmark on (hours_studied, id).",
+      "Each justification names the defeated mechanism: index blindness, per-row re-execution, linear skipping."
+    ],
+    "solution": "-- (b-i) sargable + split (real SQLite / PostgreSQL)\nSELECT * FROM developers WHERE role = 'backend'\nUNION ALL\nSELECT * FROM developers WHERE country = 'Japan' AND role <> 'backend';\n-- (b-ii) flattened counts\nSELECT d.name, COALESCE(p.n, 0) AS n FROM developers d\nLEFT JOIN (SELECT developer_id, COUNT(*) AS n FROM enrollments GROUP BY developer_id) AS p\nON p.developer_id = d.id;\n-- (b-iii) keyset page (bookmark = last row of previous page)\n-- SELECT * FROM developers WHERE (hours_studied, id) < (?, ?)\n-- ORDER BY hours_studied DESC, id DESC LIMIT 20;",
+    "why": "All three rewrites preserve semantics while changing shape into index-servable forms — and the sandbox counts prove preservation. The discipline (count first, rewrite, recount) is what makes rewrites safe to ship.",
+    "code": "-- Sandbox probes (flat — run here)\nSELECT name FROM developers WHERE hours_studied > 400;\nSELECT name FROM developers WHERE role = 'backend';\n\n-- Real-DB rewrites (see solution): sargable split, flattened join, keyset page.",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "WHERE UPPER(email) = 'A@X.IO' is slow despite an index on email. Fix?",
+      "options": ["Add a second index", "Compare against the normalized constant (WHERE email = 'a@x.io') or normalize at write time — keep the column bare so the index seeks", "Use LIKE instead", "Remove the index"],
+      "answer": 1,
+      "explain": "Functions blind indexes: every row must be computed before filtering. Sargability means the column stands alone — move case handling to the value side or the write path."
+    },
+    {
+      "q": "A correlated scalar subquery runs once per outer row. The reliable manual fix is?",
+      "options": ["Add LIMIT 1 to the subquery", "Flatten: aggregate the inner side once (GROUP BY), LEFT JOIN it on, COALESCE the NULLs", "Convert to UNION ALL", "Increase cache"],
+      "answer": 1,
+      "explain": "One grouped pass plus one join replaces N executions. COALESCE preserves zeros-vs-missing semantics that the flattening would otherwise corrupt."
+    },
+    {
+      "q": "OR across two indexed columns usually scans. Under what condition is UNION ALL a correct replacement?",
+      "options": ["Always — UNION ALL is always safe", "Only with disjoint branches (guard the overlap) — else duplicates multiply; use UNION when overlap is real", "Only on small tables", "Only with ORDER BY"],
+      "answer": 1,
+      "explain": "The split preserves speed but risks duplication. Disjointness guards (or UNION's dedup when overlap is genuine) keep it correct — speed without correctness is just faster wrong answers."
+    },
+    {
+      "q": "Page 5000 of OFFSET pagination is 250x slower than page 1 and occasionally skips rows. Fix?",
+      "options": ["Bigger LIMIT", "Keyset pagination: WHERE (sort, id) past the last seen bookmark, ORDER BY, small LIMIT — constant cost, drift-immune", "Cache all pages", "Remove ORDER BY"],
+      "answer": 1,
+      "explain": "OFFSET reads-and-discards; keyset seeks from a bookmark. The (sort key, id) pair guarantees a unique total order so no row repeats or vanishes between pages."
+    }
+  ],
+  "summary": "Speed lives in shape: sargable predicates, flattened subqueries, split ORs, keyset pages. Rewrite first (zero schema cost, often 100x), index second, and prove row-preservation with counts before and after.",
+  "next": "Flattened queries run fast — but some questions are inherently iterative: hierarchies, chains, sequences. Next: recursive CTEs, the WITH RECURSIVE promised in Intermediate, and thinking in base-plus-step."
+}

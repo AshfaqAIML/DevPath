@@ -1,0 +1,64 @@
+{
+  "title": "Case Study: Rescuing a Slow Dashboard",
+  "slug": "08-optimization-case-study",
+  "objective": "After this lesson you will be able to execute the full optimization workflow on a realistic slow query — reproduce, EXPLAIN, hypothesize once, fix minimally (rewrite then index), verify with plans and timings, and document the change so the win survives.",
+  "why": "Technique chapters teach moves; production demands game sense — which move first, how you know it worked, and how you prove it to reviewers. This lesson is a narrated rescue of a dashboard query exhibiting four stacked pathologies, applying Chapters 1–7 in order. Read it as the template for every future 'the dashboard is slow' ticket.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The complaint: 4.2 seconds, every load" },
+    { "t": "p", "text": "The learner-engagement dashboard loads in 4.2s and timeouts under load. The query: per-course totals, completion rates, top-learner names, filtered by topic search, sorted by rate, page 40 of OFFSET pagination. Four pathologies stack: leading-wildcard LIKE, correlated scalar per row, OFFSET deep page, missing composite index. One fix at a time — watch attribution work." },
+    { "t": "code", "lang": "sql", "code": "-- The patient (real SQLite/PostgreSQL, simplified for study)\n-- SELECT c.title,\n--   (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) AS total,\n--   (SELECT name FROM developers d JOIN enrollments x ON x.developer_id = d.id\n--    WHERE x.course_id = c.id ORDER BY x.progress DESC LIMIT 1) AS top_learner\n-- FROM courses c\n-- WHERE c.topic LIKE '%end%' AND c.published = 1\n-- ORDER BY total DESC LIMIT 20 OFFSET 780;", "caption": "Four stacked pathologies — diagnose before touching anything" },
+    { "t": "h", "text": "Step 1 — reproduce and baseline" },
+    { "t": "p", "text": "Never optimize a description: reproduce with EXPLAIN (QUERY PLAN) plus timing (`timer on` in SQLite CLI, EXPLAIN ANALYZE in PG) on production-shaped data. Baselines recorded: 4.2s wall time; plan shows SCAN courses (LIKE '%end%' unindexable), two correlated scalars per course row, TEMP B-TREE over the full sort before OFFSET discards 780 rows. Every number below is measured against this baseline — no baseline, no proof." },
+    { "t": "h", "text": "Step 2 — rewrite first (zero schema cost)" },
+    { "t": "p", "text": "Flatten the correlated scalars into one grouped derived table (Ch.3): one enrollments pass instead of 2N. Replace the leading-wildcard search with an exact topic match plus a documented follow-up (trigram/full-text search is the real fix for substring search — scoped out, stated openly). Convert page-40 OFFSET to a keyset bookmark (Ch.3). Rewrites only: 4.2s → 1.1s. Shape beats schema." },
+    { "t": "code", "lang": "sql", "code": "-- After rewrite: one grouped pass, sargable filter, keyset page\n-- (real SQLite/PostgreSQL)\n-- WITH per_course AS (\n--   SELECT course_id, COUNT(*) AS total,\n--     MAX(progress) AS best_progress\n--   FROM enrollments GROUP BY course_id\n-- )\n-- SELECT c.title, COALESCE(p.total, 0) AS total\n-- FROM courses c\n-- LEFT JOIN per_course p ON p.course_id = c.id\n-- WHERE c.topic = 'backend' AND c.published = 1\n--   AND (COALESCE(p.total, 0), c.id) < (?, ?)\n-- ORDER BY total DESC, c.id DESC LIMIT 20;", "caption": "Rewrite transcript: flatten, sargabilize, keyset — 4.2s to 1.1s" },
+    { "t": "h", "text": "Step 3 — index second (measured need)" },
+    { "t": "p", "text": "Re-EXPLAIN: remaining SCAN is courses filtered by topic+published (small table, acceptable) and probes into enrollments per course. One composite `ON enrollments(course_id)` converts probes to SEARCH: 1.1s → 0.18s. A covering variant shaves more, but the plain composite already beats the 0.5s budget — restraint ships (Ch.2's audit mindset: minimal effective indexing)." },
+    { "t": "code", "lang": "sql", "code": "-- The single index the plan proved necessary (real SQLite/PostgreSQL)\n-- CREATE INDEX idx_enrollments_course ON enrollments(course_id);\n-- Plan after: SEARCH enrollments USING INDEX per course row.\n-- 1.1s → 0.18s. Total: 4.2s → 0.18s (23x), one rewrite + one index.", "caption": "23x from shape first, schema second — each step measured" },
+    { "t": "h", "text": "Step 4 — document so the win survives" },
+    { "t": "p", "text": "Unoptimized queries regrow: someone re-adds OFFSET 'temporarily', a new OR defeats the index. The deliverable is a note with baseline, each change, each measurement, and the guardrails (keyset pagination contract, the documented trigram follow-up for substring search). Performance without documentation is a anecdote; with it, a maintained guarantee." },
+    { "t": "practice", "query": "SELECT c.topic, COUNT(e.id) AS n FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id WHERE c.published = 1 GROUP BY c.topic ORDER BY n DESC;", "note": "Run this dashboard-shaped flat query in the sandbox — grouped join, real filter, meaningful sort. It is the healthy end-state shape: imagine its plan (probes + small sort) versus the original's (scans + correlated scalars + deep OFFSET)." },
+    { "t": "keytakeaways", "items": ["Reproduce + baseline first (plan + timing on production-shaped data) — no baseline, no proof", "Rewrite before indexing: flatten scalars, sargabilize filters, keyset pages (4.2s → 1.1s here)", "Index the plan-proven bottleneck minimally, verify SEARCH (1.1s → 0.18s here)", "One change per measurement for attribution; document baselines, steps, and guardrails"]} ],
+  "exercise": {
+    "prompt": "Take the stalled-learners report (developers ≥1 enrollment, 0 completions, grouped by role): (a) in the sandbox, run the flat shape and record its rows; (b) write the 'slow version' deliberately (correlated scalar per developer + OFFSET page 10) and the rescued version (grouped derived table + keyset) for real SQLite/PostgreSQL; (c) write the three-line change log (baseline → rewrite → index) with what you would measure at each arrow.",
+    "hints": [
+      "Sandbox flat: developers JOIN enrollments GROUP BY developer HAVING SUM(completed) = 0 — plus role via join. Record counts: the preservation target.",
+      "Slow version: SELECT with (SELECT COUNT(*) …) scalar and LIMIT 5 OFFSET 45. Rescued: derived-table aggregation LEFT JOINed, WHERE (key) bookmark, composite on the FK if the plan demands it.",
+      "Change log lines name measurement, not hope: 'EXPLAIN shows per-row scalar probes → flatten → re-EXPLAIN shows one grouped pass; wall time X → Y'."
+    ],
+    "solution": "-- (a) sandbox preservation target (flat — runs here)\n-- developers with enrollments but zero completions, per role\n-- (b) slow vs rescued (real SQLite/PostgreSQL):\n-- SLOW: correlated scalar + OFFSET 45 (per-row probes, linear skip)\n-- RESCUED: grouped derived table + LEFT JOIN + keyset bookmark\n--   + CREATE INDEX iff plan shows probe SCANs.\n-- (c) log: baseline plan+time → rewrite (flatten) → re-plan+time → index → verify.",
+    "why": "Writing the slow version on purpose teaches pathology recognition — you cannot diagnose shapes you have never authored. The change log practices the professional deliverable: measured arrows, not adjectives.",
+    "code": "-- Sandbox preservation target (flat — run here)\nSELECT d.role, COUNT(*) AS stalled\nFROM developers d\nJOIN enrollments e ON e.developer_id = d.id\nGROUP BY d.id, d.role\nHAVING SUM(e.completed) = 0;\n\n-- Slow vs rescued (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "First step on a 'dashboard is slow' ticket?",
+      "options": ["Add a composite index immediately", "Reproduce with EXPLAIN + timing on production-shaped data and record the baseline", "Rewrite with UNION ALL", "Restart the database"],
+      "answer": 1,
+      "explain": "No baseline, no proof: every later claim (and every attribution) references the starting plan and time. Optimizing descriptions is superstition."
+    },
+    {
+      "q": "Why rewrite before indexing in the case study order?",
+      "options": ["Indexes don't work", "Shape fixes (flatten, sargabilize, keyset) are zero-schema-cost and often larger (4.2s→1.1s); indexes then serve the proven bottleneck minimally", "Rewrites are easier to type", "Indexes require downtime"],
+      "answer": 1,
+      "explain": "Rewrite attacks the dominant cost with no schema commitment; indexing then serves the remaining proven need. Reversed order risks indexing a shape you later discard."
+    },
+    {
+      "q": "After flattening, the plan still shows probe SCANs into enrollments. Next move?",
+      "options": ["Flatten harder", "CREATE INDEX on the probe key (course_id), re-EXPLAIN, confirm SEARCH — the plan-proven minimal schema change", "Add keyset pagination", "Partition the table immediately"],
+      "answer": 1,
+      "explain": "Probes-per-row at scale dominate: one composite converts them to SEARCH. Minimal, plan-demanded, verified — the restraint half of the discipline."
+    },
+    {
+      "q": "Why document baselines, steps, and guardrails after the fix?",
+      "options": ["Documentation is required by law", "Unoptimized shapes regrow (casual OFFSETs, new ORs) — the note preserves the win as a maintained guarantee with contracts", "To impress management", "Plans expire hourly"],
+      "answer": 1,
+      "explain": "Performance rots without contracts: the keyset rule and the trigram follow-up stop well-meaning regressions. Measured history beats tribal memory."
+    }
+  ],
+  "summary": "Rescue = reproduce + baseline, rewrite (flatten/sargabilize/keyset), index the proven need, verify each arrow, document the win. Shape first, schema second, proof always.",
+  "next": "One rescue down — now learn to spot rot before it ships. Next: the antipattern gallery and code-review checklist."
+}
