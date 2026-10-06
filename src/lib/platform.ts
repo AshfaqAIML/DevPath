@@ -1,6 +1,7 @@
 // Shared platform data layer — server-side access to categories & items.
 // The whole category hub is DB-driven: counts, wording, badges, order,
 // icons and enable-state all come from the Category table.
+import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import type { Category, ResourceItem } from "@prisma/client";
 
@@ -116,7 +117,7 @@ function parseSteps(raw: string): StepView[] {
   }
 }
 
-const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemView => ({
+export const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemView => ({
   id: i.id,
   slug: i.slug,
   title: i.title,
@@ -291,7 +292,50 @@ export async function getAnalyticsSummary() {
 
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "devpath-admin";
 
+// ---------------------------------------------------------------------------
+// Admin session handling.
+// Two auth paths are accepted by every admin endpoint:
+//   1. `x-admin-key: <password>` header — programmatic/API access (curl, QA).
+//   2. `devpath_admin` cookie — the browser session issued by POST
+//      /api/admin/auth. The cookie is httpOnly (invisible to JS), signed
+//      with an HMAC of the admin password and carries an expiry, so the raw
+//      credential is never persisted client-side.
+export const ADMIN_COOKIE = "devpath_admin";
+const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+function hmac(value: string): string {
+  return createHmac("sha256", ADMIN_PASSWORD).update(value).digest("hex");
+}
+
+/** Mint a signed, expiring session token for the auth cookie. */
+export function createAdminSessionToken(): { token: string; maxAge: number } {
+  const exp = Date.now() + ADMIN_SESSION_TTL_MS;
+  return { token: `${exp}.${hmac(String(exp))}`, maxAge: ADMIN_SESSION_TTL_MS / 1000 };
+}
+
+/** Verify a session token minted by createAdminSessionToken. */
+export function verifyAdminSessionToken(token: string | undefined | null): boolean {
+  if (!token) return false;
+  const [expRaw, sig] = token.split(".");
+  if (!expRaw || !sig) return false;
+  const exp = Number(expRaw);
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  const expected = hmac(expRaw);
+  if (expected.length !== sig.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+  } catch {
+    return false;
+  }
+}
+
 export function isAdminRequest(req: Request): boolean {
   const key = req.headers.get("x-admin-key");
-  return !!key && key === ADMIN_PASSWORD;
+  if (key && key === ADMIN_PASSWORD) return true;
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  const match = cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${ADMIN_COOKIE}=`));
+  return verifyAdminSessionToken(match ? decodeURIComponent(match.slice(ADMIN_COOKIE.length + 1)) : null);
 }

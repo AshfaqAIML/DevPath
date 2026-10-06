@@ -2,11 +2,12 @@
 // Maps a ResourceItem slug to the concrete sandbox implementation.
 // Items in the Simulators category without an entry here render the standard
 // detail dialog (and remain drafts until their sandbox is built).
-export type SimulatorKind = "flexbox" | "http";
+export type SimulatorKind = "flexbox" | "http" | "sql";
 
 export const PLAYABLE_SIMULATORS: Record<string, SimulatorKind> = {
   "css-flexbox-simulator": "flexbox",
   "http-request-response-lab": "http",
+  "sql-query-sandbox": "sql",
 };
 
 export function isPlayableSimulator(slug: string): boolean {
@@ -23,6 +24,6 @@ export function simulatorViewHref(slug: string): string {
 
 // The hero spotlight features the most recently shipped sandbox.
 export const SPOTLIGHT_SIM: { slug: string; label: string } = {
-  slug: "http-request-response-lab",
-  label: "New: the HTTP Request/Response Lab",
+  slug: "sql-query-sandbox",
+  label: "New: the SQL Query Sandbox",
 };

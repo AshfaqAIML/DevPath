@@ -18,6 +18,7 @@ import { AdminPanel } from "./AdminPanel";
 import { MyLibraryView } from "./MyLibraryView";
 import { FlexboxSimulator } from "./FlexboxSimulator";
 import { HttpLab } from "./HttpLab";
+import { SqlLab } from "./SqlLab";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
@@ -137,6 +138,8 @@ export function PlatformShell({
           ) : view === "simulator" && simulatorItem && simulatorCategory ? (
             PLAYABLE_SIMULATORS[simulatorItem.slug] === "http" ? (
               <HttpLab item={simulatorItem} category={simulatorCategory} />
+            ) : PLAYABLE_SIMULATORS[simulatorItem.slug] === "sql" ? (
+              <SqlLab item={simulatorItem} category={simulatorCategory} />
             ) : (
               <FlexboxSimulator item={simulatorItem} category={simulatorCategory} />
             )

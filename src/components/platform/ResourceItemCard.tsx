@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bookmark, Check, Clock, Eye, Play, Sparkles } from "lucide-react";
+import { Bookmark, Check, Clock, Eye, Milestone, Play, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
@@ -29,6 +29,9 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
   const completed = useLibrary((s) => s.completed.includes(item.slug));
   const toggleSaved = useLibrary((s) => s.toggleSaved);
   const isPlayable = item.categorySlug === "simulators" && isPlayableSimulator(item.slug);
+  // Roadmap cards surface their real structure: step count + total hours
+  const stepCount = item.steps.length;
+  const stepHours = item.steps.reduce((s, st) => s + (st.hours ?? 0), 0);
 
   return (
     <div
@@ -125,7 +128,15 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
       </p>
 
       <div className="relative mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1 text-[11px] text-muted-foreground">
-        {item.duration ? (
+        {stepCount > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300"
+            title={`${stepCount} milestones in this learning path`}
+          >
+            <Milestone aria-hidden className="size-3" />
+            {stepCount} steps{stepHours > 0 ? ` · ~${stepHours}h` : ""}
+          </span>
+        ) : item.duration ? (
           <span className="inline-flex items-center gap-1">
             <Clock aria-hidden className="size-3" />
             {item.duration}

@@ -19,6 +19,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  ListOrdered,
   Loader2,
   Lock,
   LogOut,
@@ -56,6 +57,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -77,7 +79,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
-import type { CategoryView, ResourceItemView } from "@/lib/platform";
+import type { CategoryView, ResourceItemView, StepView } from "@/lib/platform";
 import { fetchItems, type CategoriesPayload } from "./platform-data";
 
 type AnalyticsSummary = {
@@ -89,11 +91,12 @@ type AnalyticsSummary = {
   simulators: { slug: string; views: number; completes: number }[];
 };
 
-const ADMIN_KEY_STORAGE = "devpath-admin-key";
-
 // ---------------------------------------------------------------- auth gate
 
-function AuthGate({ onAuthorized }: { onAuthorized: (key: string) => void }) {
+// Sessions are httpOnly cookies issued by POST /api/admin/auth — the password
+// itself never reaches (or is stored by) the client. The console restores its
+// state across reloads via GET /api/admin/auth.
+function AuthGate({ onAuthorized }: { onAuthorized: () => void }) {
   const { toast } = useToast();
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -109,9 +112,7 @@ function AuthGate({ onAuthorized }: { onAuthorized: (key: string) => void }) {
         body: JSON.stringify({ password }),
       });
       if (!res.ok) throw new Error("Invalid password");
-      const data = (await res.json()) as { token: string };
-      sessionStorage.setItem(ADMIN_KEY_STORAGE, data.token);
-      onAuthorized(data.token);
+      onAuthorized();
       toast({ title: "Welcome back", description: "Admin console unlocked." });
     } catch {
       toast({
@@ -165,16 +166,25 @@ function AuthGate({ onAuthorized }: { onAuthorized: (key: string) => void }) {
 // ------------------------------------------------------------- console root
 
 export function AdminPanel({ categoriesData }: { categoriesData: CategoriesPayload }) {
-  const [adminKey, setAdminKey] = React.useState<string | null>(null);
-  const [checked, setChecked] = React.useState(false);
+  // null = session check in flight · false = gated · true = unlocked
+  const [authed, setAuthed] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    const k = sessionStorage.getItem(ADMIN_KEY_STORAGE);
-    if (k) setAdminKey(k);
-    setChecked(true);
+    let alive = true;
+    fetch("/api/admin/auth")
+      .then((r) => r.json() as Promise<{ authorized: boolean }>)
+      .then((d) => {
+        if (alive) setAuthed(d.authorized);
+      })
+      .catch(() => {
+        if (alive) setAuthed(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  if (!checked) {
+  if (authed === null) {
     return (
       <div className="flex justify-center py-24">
         <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
@@ -182,26 +192,24 @@ export function AdminPanel({ categoriesData }: { categoriesData: CategoriesPaylo
     );
   }
 
-  if (!adminKey) return <AuthGate onAuthorized={setAdminKey} />;
+  if (!authed) return <AuthGate onAuthorized={() => setAuthed(true)} />;
 
-  return (
-    <AdminConsole
-      adminKey={adminKey}
-      categoriesData={categoriesData}
-      onLogout={() => {
-        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
-        setAdminKey(null);
-      }}
-    />
-  );
+  const logout = async () => {
+    try {
+      await fetch("/api/admin/auth", { method: "DELETE" });
+    } catch {
+      // best-effort: clearing client state matters most
+    }
+    setAuthed(false);
+  };
+
+  return <AdminConsole categoriesData={categoriesData} onLogout={logout} />;
 }
 
 function AdminConsole({
-  adminKey,
   categoriesData,
   onLogout,
 }: {
-  adminKey: string;
   categoriesData: CategoriesPayload;
   onLogout: () => void;
 }) {
@@ -209,17 +217,17 @@ function AdminConsole({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Cookie-authenticated fetch — the httpOnly session travels automatically.
   const authedFetch = React.useCallback(
     (path: string, init?: RequestInit) =>
       fetch(path, {
         ...init,
         headers: {
           "Content-Type": "application/json",
-          "x-admin-key": adminKey,
           ...(init?.headers ?? {}),
         },
       }),
-    [adminKey]
+    []
   );
 
   const invalidate = React.useCallback(() => {
@@ -300,7 +308,6 @@ function AdminConsole({
         <TabsContent value="content" className="mt-6">
           <ContentManager
             categories={categoriesData.categories}
-            adminKey={adminKey}
             authedFetch={authedFetch}
             invalidate={invalidate}
             notify={notify}
@@ -308,7 +315,7 @@ function AdminConsole({
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-6">
-          <AnalyticsTab adminKey={adminKey} categories={categoriesData.categories} />
+          <AnalyticsTab categories={categoriesData.categories} />
         </TabsContent>
       </Tabs>
     </div>
@@ -502,13 +509,11 @@ function CategoryRow({
 
 function ContentManager({
   categories,
-  adminKey,
   authedFetch,
   invalidate,
   notify,
 }: {
   categories: CategoryView[];
-  adminKey: string;
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
   invalidate: () => void;
   notify: (ok: boolean, action: string) => void;
@@ -518,10 +523,11 @@ function ContentManager({
   const [addOpen, setAddOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [stepsItem, setStepsItem] = React.useState<ResourceItemView | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["items", "admin", filter, q],
-    queryFn: () => fetchItems({ category: filter === "all" ? undefined : filter, q, all: true, adminKey }),
+    queryFn: () => fetchItems({ category: filter === "all" ? undefined : filter, q, all: true }),
   });
 
   const items = data?.items ?? [];
@@ -755,6 +761,7 @@ function ContentManager({
               items.map((item) => {
                 const a = getAccent(item.categoryAccent);
                 const isSel = selected.has(item.id);
+                const canEditSteps = item.steps.length > 0 || item.categorySlug === "roadmaps";
                 return (
                   <TableRow key={item.id} className={cn(isSel && "bg-muted/50")}>
                     <TableCell>
@@ -767,7 +774,9 @@ function ContentManager({
                     <TableCell className="max-w-72">
                       <p className="truncate text-sm font-medium">{item.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {item.duration ?? item.tags.slice(0, 2).join(", ")}
+                        {item.steps.length > 0
+                          ? `${item.steps.length} steps`
+                          : (item.duration ?? item.tags.slice(0, 2).join(", "))}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -810,35 +819,54 @@ function ContentManager({
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {canEditSteps && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-8 text-muted-foreground hover:text-destructive"
-                            aria-label={`Delete ${item.title}`}
+                            className={cn(
+                              "size-8",
+                              item.steps.length > 0
+                                ? "text-emerald-600 hover:text-emerald-600"
+                                : "text-muted-foreground"
+                            )}
+                            onClick={() => setStepsItem(item)}
+                            aria-label={`Edit learning path steps for ${item.title}`}
+                            title="Edit learning path steps"
                           >
-                            <Trash2 aria-hidden className="size-4" />
+                            <ListOrdered aria-hidden className="size-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete “{item.title}”?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This permanently removes the item and lowers the
-                              category count in the hub.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => void deleteItem(item.id, item.title)}
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive"
+                              aria-label={`Delete ${item.title}`}
                             >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              <Trash2 aria-hidden className="size-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete “{item.title}”?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This permanently removes the item and lowers the
+                                category count in the hub.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => void deleteItem(item.id, item.title)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -852,6 +880,16 @@ function ContentManager({
         open={addOpen}
         onOpenChange={setAddOpen}
         categories={categories}
+        authedFetch={authedFetch}
+        invalidate={invalidate}
+        notify={notify}
+      />
+
+      <StepsEditorDialog
+        item={stepsItem}
+        onOpenChange={(open) => {
+          if (!open) setStepsItem(null);
+        }}
         authedFetch={authedFetch}
         invalidate={invalidate}
         notify={notify}
@@ -1029,21 +1067,233 @@ function AddItemDialog({
   );
 }
 
+// ------------------------------------------------- roadmap steps editor
+
+interface EditableStep {
+  title: string;
+  detail: string;
+  hours: string;
+}
+
+function StepsEditorDialog({
+  item,
+  onOpenChange,
+  authedFetch,
+  invalidate,
+  notify,
+}: {
+  item: ResourceItemView | null;
+  onOpenChange: (open: boolean) => void;
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  invalidate: () => void;
+  notify: (ok: boolean, action: string) => void;
+}) {
+  const [steps, setSteps] = React.useState<EditableStep[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const open = !!item;
+
+  // Load the item's steps whenever a new item opens the dialog
+  React.useEffect(() => {
+    if (item) {
+      setSteps(
+        item.steps.map((s: StepView) => ({
+          title: s.title,
+          detail: s.detail,
+          hours: s.hours !== undefined ? String(s.hours) : "",
+        }))
+      );
+    }
+  }, [item]);
+
+  const totalHours = steps.reduce((a, s) => a + (Number(s.hours) || 0), 0);
+  const valid =
+    steps.length > 0 && steps.every((s) => s.title.trim().length > 0);
+
+  const update = (i: number, patch: Partial<EditableStep>) => {
+    setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  };
+
+  const move = (i: number, dir: -1 | 1) => {
+    setSteps((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!item || !valid || saving) return;
+    setSaving(true);
+    try {
+      const res = await authedFetch(`/api/resources/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          steps: steps.map((s) => ({
+            title: s.title.trim(),
+            detail: s.detail.trim(),
+            ...(s.hours.trim() !== "" ? { hours: Number(s.hours) } : {}),
+          })),
+        }),
+      });
+      notify(res.ok, `Learning path for “${item.title}”`);
+      if (res.ok) {
+        invalidate();
+        onOpenChange(false);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <ListOrdered aria-hidden className="size-4 text-emerald-500" />
+            Learning path editor
+          </DialogTitle>
+          <DialogDescription>
+            {item ? item.title : ""} — reorder, rewrite or remove milestones.
+            Learners see this as the step-graph and progress checklist.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+          <span className="font-medium tabular-nums">
+            {steps.length} step{steps.length === 1 ? "" : "s"}
+          </span>
+          <span className="text-muted-foreground tabular-nums">
+            {totalHours > 0 ? `≈ ${totalHours} h of guided learning` : "no hour estimates yet"}
+          </span>
+        </div>
+
+        <ol className="space-y-2.5">
+          {steps.map((s, i) => (
+            <li
+              key={i}
+              className="rounded-xl border bg-background/60 p-3 transition-colors focus-within:border-emerald-500/40"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="flex size-6 shrink-0 items-center justify-center rounded-full border bg-card text-[11px] font-bold tabular-nums text-muted-foreground"
+                >
+                  {i + 1}
+                </span>
+                <Input
+                  value={s.title}
+                  onChange={(e) => update(i, { title: e.target.value })}
+                  placeholder="Step title"
+                  className="h-8 flex-1 text-sm font-medium"
+                  aria-label={`Step ${i + 1} title`}
+                />
+                <Input
+                  value={s.hours}
+                  onChange={(e) => update(i, { hours: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder="h"
+                  inputMode="numeric"
+                  className="h-8 w-16 text-center text-sm tabular-nums"
+                  aria-label={`Step ${i + 1} hours`}
+                  title="Estimated hours"
+                />
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 disabled:opacity-30"
+                    disabled={i === 0}
+                    onClick={() => move(i, -1)}
+                    aria-label={`Move step ${i + 1} up`}
+                  >
+                    <ArrowUp aria-hidden className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 disabled:opacity-30"
+                    disabled={i === steps.length - 1}
+                    onClick={() => move(i, 1)}
+                    aria-label={`Move step ${i + 1} down`}
+                  >
+                    <ArrowDown aria-hidden className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))}
+                    aria-label={`Remove step ${i + 1}`}
+                  >
+                    <Trash2 aria-hidden className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <Textarea
+                value={s.detail}
+                onChange={(e) => update(i, { detail: e.target.value })}
+                placeholder="What the learner does in this step (shown under the title)"
+                className="mt-2 min-h-16 text-xs"
+                aria-label={`Step ${i + 1} detail`}
+              />
+            </li>
+          ))}
+          {steps.length === 0 && (
+            <li className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              No steps yet — add the first milestone below.
+            </li>
+          )}
+        </ol>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full gap-2 border-dashed"
+          disabled={steps.length >= 30}
+          onClick={() =>
+            setSteps((prev) => [...prev, { title: "", detail: "", hours: "" }])
+          }
+        >
+          <Plus aria-hidden className="size-3.5" />
+          Add step
+        </Button>
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            {valid ? "Saving replaces the full ordered list." : "Every step needs a title."}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button className="gap-2" disabled={!valid || saving} onClick={() => void save()}>
+              {saving ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Save aria-hidden className="size-4" />
+              )}
+              Save path
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ------------------------------------------------------------- analytics tab
 
 function AnalyticsTab({
-  adminKey,
   categories,
 }: {
-  adminKey: string;
   categories: CategoryView[];
 }) {
   const { data } = useQuery<AnalyticsSummary>({
-    queryKey: ["analytics", adminKey],
+    queryKey: ["analytics"],
     queryFn: async () => {
-      const res = await fetch("/api/analytics", {
-        headers: { "x-admin-key": adminKey },
-      });
+      const res = await fetch("/api/analytics");
       if (!res.ok) throw new Error("Failed to load analytics");
       return res.json();
     },

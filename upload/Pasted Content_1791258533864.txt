@@ -1,0 +1,1418 @@
+Exactly. The previous prompt builds the **platform**, but you now need a second master prompt that makes the coding agent build the **actual educational content inside every course**.
+
+The live site follows a mini-course model with course-level metadata such as lesson count, estimated time, XP, “What you'll learn,” and a lesson-by-lesson curriculum; individual lessons then contain explanations, examples, code, quizzes, and navigation. [Crio.Do Resources](https://resources.criodo.com/?utm_source=chatgpt.com)
+
+Use this prompt for the content-generation phase:
+
+# MASTER PROMPT — CREATE THE ACTUAL CONTENT FOR EVERY COURSE
+
+You are now responsible for creating the COMPLETE educational content for the learning platform.
+
+The platform UI, routing, course pages, lesson pages, progress tracking, and database already exist or are being built separately.
+
+Your job is NOT to create placeholder course descriptions.
+
+Your job is to create the actual courses that a real learner can study from start to finish.
+
+The final platform must contain meaningful, original, beginner-friendly-to-advanced educational material inside every published course.
+
+============================================================
+## 1. PRIMARY OBJECTIVE
+============================================================
+
+Create complete original content for ALL COURSES in the platform.
+
+Every course must contain:
+
+- course title
+- subtitle
+- description
+- target audience
+- prerequisites
+- difficulty
+- estimated duration
+- total lessons
+- skills covered
+- technologies/tools
+- learning outcomes
+- curriculum
+- complete lesson content
+- examples
+- code examples where applicable
+- diagrams where useful
+- practical exercises
+- quizzes
+- challenge questions
+- answers/explanations
+- summary
+- next-step recommendations
+
+DO NOT create:
+- lorem ipsum
+- placeholder paragraphs
+- "content coming soon"
+- fake lesson text
+- one-paragraph lessons
+- repeated generic explanations
+- copy-pasted content between courses
+
+The learner must be able to genuinely learn the subject from the course.
+
+============================================================
+## 2. IMPORTANT — REFERENCE SITE USAGE
+============================================================
+
+Use the reference platform only to understand:
+
+- course categories
+- course positioning
+- approximate lesson granularity
+- learner experience
+- metadata structure
+- progression model
+- page structure
+- difficulty organization
+
+Do NOT copy:
+
+- proprietary lesson text
+- proprietary explanations
+- proprietary examples
+- proprietary quizzes
+- proprietary images
+- proprietary diagrams
+- proprietary branding
+- exact copyrighted copy
+
+Write completely ORIGINAL educational content.
+
+The resulting courses should be academically useful and independently authored.
+
+============================================================
+## 3. FIRST TASK — DISCOVER THE COURSE CATALOG
+============================================================
+
+Before generating content:
+
+Inspect the currently implemented course catalog in the repository.
+
+Also inspect the live reference catalog:
+
+https://resources.criodo.com/?tab=courses
+
+Determine:
+
+- every course title
+- slug
+- category
+- difficulty
+- visible lesson count
+- subject
+- intended learner
+- relationship with other courses
+
+Create:
+
+docs/COURSE_CATALOG_AUDIT.md
+
+with a table:
+
+| # | Course | Category | Level | Planned Lessons | Prerequisites |
+|---|---|---|---|---|---|
+
+IMPORTANT:
+
+The source site may change over time.
+
+Do NOT blindly assume old course lists are still current.
+
+The repository's course catalog is the implementation source of truth.
+
+The reference site is used to understand the product pattern and discover missing content opportunities.
+
+============================================================
+## 4. COURSE GROUPING
+============================================================
+
+Organize courses into coherent learning domains.
+
+Example domains:
+
+### Frontend
+- TypeScript
+- React
+- Tailwind CSS
+- frontend architecture
+- WebSocket fundamentals where applicable
+
+### Backend
+- Node.js
+- API design
+- GraphQL
+- OAuth/OIDC
+- webhooks
+- distributed systems
+- databases
+- caching
+- load balancing
+- system design
+
+### Data / Analytics
+- SQL Fundamentals
+- SQL Intermediate
+- SQL Advanced
+- Window Functions
+- Data Visualization & Analysis
+
+### AI / ML
+- AI for Backend Developers
+- AI agents
+- RAG
+- MCP
+- LangGraph
+- prompt engineering
+- AI engineering
+
+### Tools / DevOps
+- Git
+- Docker
+- CI/CD
+- developer tooling
+
+### DSA
+- DSA fundamentals
+- algorithms
+- data structures
+- visualization
+
+### SDET
+- API testing
+- Selenium
+- automation concepts
+
+The exact final grouping must come from the discovered course catalog.
+
+============================================================
+## 5. COURSE DEPENDENCY GRAPH
+============================================================
+
+Before writing lessons, determine prerequisite relationships.
+
+Example:
+
+Programming Fundamentals
+        ↓
+Python Fundamentals
+        ↓
+Data / Backend
+        ↓
+AI / ML
+
+or:
+
+JavaScript
+   ↓
+TypeScript
+   ↓
+React
+   ↓
+Advanced React
+
+or:
+
+SQL Fundamentals
+   ↓
+SQL Intermediate
+   ↓
+SQL Advanced
+   ↓
+Database Optimization
+
+Store these relationships in structured data.
+
+Create:
+
+docs/LEARNING_PATHS.md
+
+Explain which courses should be taken first.
+
+============================================================
+## 6. COURSE DESIGN PHILOSOPHY
+============================================================
+
+Each course must answer:
+
+1. What is this?
+2. Why does it matter?
+3. Where is it used?
+4. How does it work?
+5. How do I implement it?
+6. What mistakes should I avoid?
+7. How do I practice it?
+8. How does it appear in real applications?
+9. What do interviewers expect?
+10. What should I learn next?
+
+Avoid textbook-style explanations that provide definitions without application.
+
+Prefer:
+
+Concept
+→ intuition
+→ example
+→ implementation
+→ practical problem
+→ exercise
+→ quiz
+→ summary
+
+============================================================
+## 7. LESSON COUNT
+============================================================
+
+Do not force every course to have exactly the same number of lessons.
+
+Lesson count must match topic depth.
+
+Recommended range:
+
+Small focused topic:
+4–6 lessons
+
+Normal mini-course:
+8–10 lessons
+
+Broader topic:
+10–14 lessons
+
+Advanced subject:
+8–12 deeper lessons
+
+Use the smallest number of lessons that still provides complete understanding without creating shallow content.
+
+Every lesson should have a meaningful learning objective.
+
+============================================================
+## 8. COURSE METADATA
+============================================================
+
+Each course must contain structured metadata:
+
+```ts
+{
+  title,
+  slug,
+  shortDescription,
+  description,
+  category,
+  subcategory,
+  difficulty,
+  estimatedHours,
+  lessonCount,
+  xpTotal,
+  prerequisites,
+  learningOutcomes,
+  technologies,
+  skills,
+  tags,
+  targetAudience,
+  featured,
+  published
+}
+```
+
+Do not manually maintain lessonCount or xpTotal if the system can calculate them from lesson records.
+
+Prefer calculated values.
+
+============================================================
+## 9. COURSE INTRODUCTION
+============================================================
+
+Every course should begin with:
+
+# Course Title
+
+Short introduction.
+
+Then:
+
+## What You'll Learn
+
+5–10 concrete learning outcomes.
+
+Bad:
+
+"Understand React."
+
+Good:
+
+"Build reusable React components and explain when state should live locally, in a parent component, or in shared application state."
+
+Then:
+
+## Who This Course Is For
+
+Explain the intended audience.
+
+Then:
+
+## Prerequisites
+
+Only list genuinely necessary prerequisites.
+
+Then:
+
+## What You'll Build
+
+Describe a small project or practical outcome where appropriate.
+
+============================================================
+## 10. LESSON STRUCTURE
+============================================================
+
+Every lesson must follow a consistent structure.
+
+Use:
+
+# Lesson Title
+
+## Learning Objective
+
+Clearly state what the learner will be able to do after the lesson.
+
+## Why This Matters
+
+Explain the real-world reason for learning it.
+
+## Concept
+
+Teach the concept carefully.
+
+Use simple language.
+
+Introduce technical terminology only after explaining it.
+
+## How It Works
+
+Explain the underlying mechanism.
+
+Use diagrams or step-by-step explanations when useful.
+
+## Example
+
+Provide a concrete example.
+
+## Implementation
+
+Provide real implementation details.
+
+Code must be:
+
+- valid
+- runnable
+- properly formatted
+- commented when useful
+- internally consistent
+
+## Common Mistakes
+
+Explain realistic mistakes.
+
+## Practical Example
+
+Show how the concept appears in a real application.
+
+## Try It Yourself
+
+Give the learner an exercise.
+
+## Quick Quiz
+
+3–5 questions.
+
+Each question must include:
+
+- question
+- options
+- correct answer
+- explanation
+
+## Lesson Summary
+
+Summarize the key concepts.
+
+## What's Next?
+
+Connect naturally to the following lesson.
+
+============================================================
+## 11. CODE QUALITY
+============================================================
+
+For programming courses:
+
+All code must be technically valid.
+
+Never invent nonexistent APIs.
+
+Never use obsolete APIs without clearly labeling them as legacy.
+
+Prefer modern stable approaches appropriate to the ecosystem.
+
+Code examples must use consistent versions.
+
+For example:
+
+If using React:
+- clearly establish the React approach/version assumptions
+
+If using Python:
+- specify Python version where relevant
+
+If using Node:
+- specify Node.js version when necessary
+
+If using TypeScript:
+- use valid TypeScript
+
+If using SQL:
+- clearly indicate PostgreSQL/MySQL/SQLite when syntax differs
+
+============================================================
+## 12. BEGINNER-FRIENDLY EXPLANATIONS
+============================================================
+
+The content must be understandable by a learner who knows little about the topic.
+
+Do not write like a research paper.
+
+Instead explain:
+
+"Think of X as..."
+
+"Imagine..."
+
+"Here is what happens step by step..."
+
+Then introduce the formal terminology.
+
+Avoid unexplained jargon.
+
+When advanced terminology is necessary:
+
+Term
+→ simple explanation
+→ technical explanation
+→ example
+
+============================================================
+## 13. PROGRESSION
+============================================================
+
+Lessons must increase in difficulty.
+
+Recommended progression:
+
+Lesson 1:
+orientation / fundamentals
+
+Lesson 2:
+core concept
+
+Lesson 3:
+basic implementation
+
+Lesson 4:
+practical use
+
+Lesson 5:
+deeper mechanics
+
+Lesson 6:
+common problems
+
+Lesson 7:
+real-world implementation
+
+Lesson 8:
+optimization / advanced usage
+
+Final lesson:
+assessment / project / capstone
+
+Do not introduce advanced concepts before their prerequisites.
+
+============================================================
+## 14. PRACTICAL EXERCISES
+============================================================
+
+Every lesson should include at least one meaningful exercise.
+
+Exercises should vary.
+
+Examples:
+
+- predict output
+- fix broken code
+- write a function
+- explain behavior
+- debug an issue
+- design an API
+- optimize a query
+- analyze a dataset
+- implement a pattern
+- reason about architecture
+
+Do not make every exercise:
+
+"Write a program that..."
+
+============================================================
+## 15. HINT SYSTEM
+============================================================
+
+Every substantial exercise should support:
+
+Hint 1
+Hint 2
+Hint 3
+
+The UI must be able to hide hints.
+
+The learner should explicitly click:
+
+"Show Hint"
+
+Hints should help without immediately revealing the solution.
+
+Example:
+
+Hint 1:
+Think about the condition that determines whether the value should be included.
+
+Hint 2:
+You may need to maintain a running result.
+
+Hint 3:
+Consider iterating through the array once.
+
+Then:
+
+### Solution
+
+Provide the complete solution.
+
+Then:
+
+### Why This Works
+
+Explain the reasoning.
+
+============================================================
+## 16. QUIZ SYSTEM
+============================================================
+
+Every lesson must include a short quiz where practical.
+
+Quiz question types:
+
+- multiple choice
+- true/false
+- output prediction
+- debugging
+- conceptual reasoning
+- code reading
+
+Do not create trivia.
+
+Questions must test understanding.
+
+For every question store:
+
+```ts
+{
+  question,
+  options,
+  correctAnswer,
+  explanation,
+  difficulty
+}
+```
+
+============================================================
+## 17. ASSESSMENT
+============================================================
+
+Each course must have a final assessment.
+
+Include:
+
+- conceptual questions
+- implementation questions
+- debugging
+- applied scenarios
+- interview-style questions
+
+Example:
+
+10–20 questions depending on course depth.
+
+Require a meaningful score to mark the assessment complete.
+
+============================================================
+## 18. PROJECTS
+============================================================
+
+Broader courses must contain practical projects.
+
+Possible project types:
+
+Python:
+- CLI application
+- data processor
+- API
+
+SQL:
+- analytics database
+- reporting dashboard queries
+- business analysis
+
+React:
+- dashboard
+- e-commerce interface
+- task manager
+
+Backend:
+- REST API
+- authentication service
+- event-driven service
+
+AI:
+- RAG assistant
+- AI agent
+- tool-calling application
+
+System Design:
+- URL shortener
+- chat system
+- notification service
+- video platform
+- ride dispatch
+- rate limiter
+
+Projects should include:
+
+- requirements
+- architecture
+- steps
+- implementation tasks
+- expected output
+- extension ideas
+- evaluation criteria
+
+============================================================
+## 19. REAL-WORLD EXAMPLES
+============================================================
+
+Whenever useful, connect concepts to realistic applications.
+
+Examples:
+
+Caching:
+- product catalog
+- session data
+- API responses
+
+Load balancing:
+- web servers
+- microservices
+
+OAuth:
+- Google login
+- third-party authorization
+
+Webhooks:
+- payment systems
+- GitHub events
+- order updates
+
+RAG:
+- document assistant
+- support assistant
+- product search
+
+Do not claim a company uses a specific implementation unless the claim is well established.
+
+Use generic industry examples when evidence is uncertain.
+
+============================================================
+## 20. DIAGRAMS
+============================================================
+
+Where architecture or flow is important, create diagrams.
+
+Support:
+
+- Mermaid
+- SVG
+- generated diagrams
+- architecture illustrations
+
+Examples:
+
+Client
+ ↓
+API Gateway
+ ↓
+Service
+ ↓
+Cache
+ ↓
+Database
+
+For each diagram explain it in text.
+
+Do not use diagrams merely for decoration.
+
+============================================================
+## 21. CODE EXAMPLES
+============================================================
+
+Every code-heavy course should contain progressive examples.
+
+Example progression:
+
+```text
+Example 1 — simplest version
+
+Example 2 — realistic version
+
+Example 3 — improved version
+
+Example 4 — production considerations
+```
+
+Explain what changes between versions.
+
+Avoid enormous blocks of code that the learner cannot understand.
+
+For larger implementations:
+
+1. explain architecture
+2. create files
+3. implement incrementally
+4. test
+5. improve
+
+============================================================
+## 22. INTERVIEW PREPARATION
+============================================================
+
+Relevant courses should include:
+
+## Interview Questions
+
+Include questions such as:
+
+- What is X?
+- Why is X used?
+- X vs Y?
+- What happens internally?
+- What are the trade-offs?
+- When should you avoid X?
+- How would you debug X?
+- How would you scale X?
+
+Answers should explain the reasoning, not just give one sentence.
+
+============================================================
+## 23. COMMON MISTAKES
+============================================================
+
+Every course should identify practical mistakes.
+
+Examples:
+
+- incorrect assumptions
+- anti-patterns
+- performance problems
+- security mistakes
+- API misuse
+- poor naming
+- incorrect database design
+- unnecessary complexity
+
+============================================================
+## 24. ADVANCED COURSES
+============================================================
+
+For advanced subjects, do not oversimplify.
+
+Explain:
+
+- trade-offs
+- failure modes
+- scalability
+- consistency
+- availability
+- performance
+- observability
+- security
+- operational complexity
+
+For distributed systems:
+
+Always discuss relevant trade-offs rather than presenting one architecture as universally correct.
+
+============================================================
+## 25. DATA / SQL COURSES
+============================================================
+
+SQL/data courses must use realistic datasets.
+
+Create sample schemas such as:
+
+customers
+orders
+products
+payments
+employees
+events
+
+Provide:
+
+- schema
+- sample rows
+- queries
+- expected results
+- explanations
+
+Where useful, explain:
+
+- execution order
+- indexes
+- query planning
+- joins
+- aggregation
+- window functions
+- normalization
+- performance
+
+============================================================
+## 26. SYSTEM DESIGN COURSES
+============================================================
+
+System design courses must teach reasoning.
+
+Do not merely show final architecture.
+
+For each system:
+
+Requirements
+→ constraints
+→ scale estimation
+→ API design
+→ data model
+→ high-level architecture
+→ bottlenecks
+→ scaling
+→ failure handling
+→ trade-offs
+
+Include back-of-the-envelope estimates where appropriate.
+
+Clearly label assumptions.
+
+============================================================
+## 27. AI / LLM COURSES
+============================================================
+
+AI courses must teach both concepts and implementation.
+
+Cover where appropriate:
+
+- models
+- tokens
+- prompts
+- structured output
+- embeddings
+- vector search
+- RAG
+- tool calling
+- agents
+- memory
+- evaluation
+- hallucination
+- guardrails
+- observability
+- latency
+- cost
+- security
+
+Do not present AI systems as magical black boxes.
+
+Explain the underlying flow.
+
+============================================================
+## 28. COURSE-SPECIFIC ORIGINALITY
+============================================================
+
+Every course must have its own educational identity.
+
+Do not reuse identical explanations across courses.
+
+For example:
+
+SQL Fundamentals:
+teach SQL from first principles.
+
+SQL Intermediate:
+assume fundamentals and move to joins, subqueries, advanced querying.
+
+SQL Advanced:
+focus on performance, complex queries, analytical SQL, optimization.
+
+Do NOT explain SELECT again in the advanced course except as a brief prerequisite reminder.
+
+Likewise:
+
+React Fundamentals
+≠
+TypeScript Fundamentals
+≠
+Advanced React concepts.
+
+Courses must complement each other.
+
+============================================================
+## 29. CONTENT DEPTH
+============================================================
+
+A lesson should be substantial enough that the learner gains a real concept.
+
+As a guideline:
+
+Simple lesson:
+800–1,500 words
+
+Normal lesson:
+1,200–2,500 words
+
+Advanced lesson:
+1,500–3,000+ words
+
+Do not inflate content with repetition.
+
+Depth is more important than word count.
+
+Use tables, diagrams, code and examples to improve teaching quality.
+
+============================================================
+## 30. CONTENT STORAGE
+============================================================
+
+Never place all content directly into giant React components.
+
+Store course content in the project's content architecture.
+
+Preferred:
+
+Course
+  └── Lessons
+       ├── metadata
+       ├── content
+       ├── exercises
+       ├── quizzes
+       └── assessment
+
+Example:
+
+```text
+content/
+  courses/
+    sql-fundamentals/
+      course.json
+      lessons/
+        01-introduction.mdx
+        02-select.mdx
+        03-where.mdx
+        ...
+```
+
+Or use the existing database/content architecture if one already exists.
+
+============================================================
+## 31. MDX / STRUCTURED CONTENT
+============================================================
+
+Support reusable blocks such as:
+
+<Callout />
+
+<CodeBlock />
+
+<Quiz />
+
+<Exercise />
+
+<Hint />
+
+<Solution />
+
+<Diagram />
+
+<KeyTakeaways />
+
+<InterviewQuestion />
+
+Do not embed interactive functionality manually into every lesson.
+
+Create reusable content components.
+
+============================================================
+## 32. COURSE QUALITY REVIEW
+============================================================
+
+After creating a course, perform a self-review.
+
+Check:
+
+Accuracy
+Completeness
+Difficulty progression
+Examples
+Exercises
+Quizzes
+Code correctness
+Prerequisites
+Repetition
+Clarity
+Practical usefulness
+
+Then improve the course before moving to the next one.
+
+============================================================
+## 33. NO HALLUCINATION RULE
+============================================================
+
+Never invent:
+
+- APIs
+- library features
+- commands
+- syntax
+- protocols
+- benchmarks
+- company architecture
+- historical facts
+- security guarantees
+
+For fast-changing technologies, verify current documentation when needed.
+
+When version-specific behavior matters, explicitly identify the version.
+
+============================================================
+## 34. CONTENT VERSIONING
+============================================================
+
+Every course should have:
+
+- version
+- createdAt
+- updatedAt
+- contentStatus
+
+For example:
+
+draft
+review
+published
+archived
+
+Do not expose incomplete courses to normal learners.
+
+============================================================
+## 35. COURSE COMPLETION MODEL
+============================================================
+
+A course should be considered complete only after:
+
+- required lessons completed
+- required exercises completed where applicable
+- final assessment passed where applicable
+
+Calculate progress from actual lesson records.
+
+Example:
+
+8 lessons
+3 complete
+
+Progress = 37.5%
+
+Do not hardcode progress values.
+
+============================================================
+## 36. CONTENT ADMINISTRATION
+============================================================
+
+The admin system must allow:
+
+- editing course title
+- editing descriptions
+- editing lessons
+- reordering lessons
+- editing quiz questions
+- editing exercises
+- publishing/unpublishing
+- replacing images
+- changing difficulty
+- changing tags
+- changing prerequisites
+
+The content should be editable without modifying frontend source code.
+
+============================================================
+## 37. SEO CONTENT
+============================================================
+
+For every course generate:
+
+- SEO title
+- SEO description
+- canonical slug
+- keywords
+- OpenGraph title
+- OpenGraph description
+
+For each lesson generate useful metadata where appropriate.
+
+============================================================
+## 38. COURSE OUTPUT FORMAT
+============================================================
+
+For each course produce:
+
+```text
+COURSE
+├── Metadata
+├── Description
+├── Learning Outcomes
+├── Prerequisites
+├── Skills
+├── Tools
+├── Curriculum
+│
+├── Lesson 1
+│   ├── Objective
+│   ├── Explanation
+│   ├── Example
+│   ├── Code
+│   ├── Exercise
+│   ├── Hints
+│   ├── Solution
+│   ├── Quiz
+│   └── Summary
+│
+├── Lesson 2
+│   └── ...
+│
+├── ...
+│
+└── Final Assessment
+```
+
+============================================================
+## 39. GENERATION ORDER
+============================================================
+
+DO NOT attempt to generate every course in one enormous output.
+
+Generate ONE COURSE AT A TIME.
+
+For each course:
+
+1. Analyze prerequisites.
+2. Design curriculum.
+3. Write lesson titles.
+4. Verify progression.
+5. Write complete Lesson 1.
+6. Complete all lessons.
+7. Write exercises.
+8. Write hints.
+9. Write solutions.
+10. Write quizzes.
+11. Write final assessment.
+12. Review for accuracy.
+13. Save the course.
+14. Validate content structure.
+15. Only then move to the next course.
+
+This requirement is critical.
+
+Do not sacrifice depth by generating dozens of shallow courses simultaneously.
+
+============================================================
+## 40. COURSE GENERATION CHECKPOINT
+============================================================
+
+Before moving to Course N+1, verify:
+
+[ ] Course metadata complete
+[ ] Curriculum complete
+[ ] All lessons written
+[ ] No placeholders
+[ ] No lorem ipsum
+[ ] No duplicated lesson content
+[ ] Exercises included
+[ ] Hints included
+[ ] Solutions included
+[ ] Quizzes included
+[ ] Final assessment included
+[ ] Code checked
+[ ] Links checked
+[ ] Images/diagrams referenced correctly
+[ ] Prerequisites correct
+[ ] Difficulty appropriate
+[ ] Content saved correctly
+[ ] Course renders correctly
+[ ] Build passes
+
+============================================================
+## 41. COURSE PROJECT / PRACTICAL CAPSTONE
+============================================================
+
+Where appropriate, end the course with a practical project.
+
+The project should force the learner to combine multiple concepts from the course.
+
+Include:
+
+### Requirements
+
+### Functional Requirements
+
+### Technical Requirements
+
+### Suggested Architecture
+
+### Implementation Steps
+
+### Test Cases
+
+### Evaluation Criteria
+
+### Stretch Goals
+
+============================================================
+## 42. LEARNING EXPERIENCE
+============================================================
+
+The platform should feel like:
+
+Read
+→ Understand
+→ See
+→ Try
+→ Make mistake
+→ Use hint
+→ Solve
+→ Test knowledge
+→ Apply concept
+→ Continue
+
+not:
+
+Read
+→ Read
+→ Read
+→ Finish
+
+Design content around active learning.
+
+============================================================
+## 43. FINAL COURSE CONTENT AUDIT
+============================================================
+
+After all courses are created, generate:
+
+docs/CONTENT_AUDIT.md
+
+Include:
+
+| Course | Lessons | Exercises | Quizzes | Final Assessment | Project | Status |
+|---|---:|---:|---|---|---|---|
+
+Then identify:
+
+- missing prerequisites
+- duplicated subjects
+- overly shallow courses
+- overly difficult courses
+- missing exercises
+- missing assessments
+- broken links
+- inconsistent terminology
+- outdated technology references
+- content gaps
+
+Fix those problems before declaring completion.
+
+============================================================
+## 44. MOST IMPORTANT QUALITY REQUIREMENT
+============================================================
+
+The platform must NOT look like it contains 44 empty courses.
+
+It must look like a serious educational product containing genuinely useful learning material.
+
+A learner should be able to open:
+
+Courses
+→ choose a course
+→ read the curriculum
+→ open Lesson 1
+→ learn
+→ practice
+→ take the quiz
+→ continue to Lesson 2
+→ track progress
+→ finish the course
+→ take the final assessment
+→ complete the project where applicable.
+
+Everything must be real.
+
+============================================================
+## 45. FINAL INSTRUCTION
+============================================================
+
+Start by auditing the actual course catalog.
+
+Then create the course dependency map.
+
+Then create the first complete course.
+
+Do not generate shallow content merely to increase the course count.
+
+Depth, correctness, pedagogy, progression and practical usefulness are more important than speed.
+
+After each completed course, save it to the project's content/database layer and verify that it renders correctly in the existing course and lesson UI.
+
+Continue course-by-course until the ENTIRE catalog has complete original educational content.
+
+The final result should be a real learning platform, not a content-shaped mockup.
+```
+
+### One thing I would change from the original clone plan
+
+I would make the content engine **course-first rather than page-first**:
+
+`Course → Curriculum → Lesson → Exercise → Hint → Solution → Quiz → Assessment → Project`
+
+That matches the actual learning flow much better. The live reference already uses dedicated lesson routes and lesson-level content rather than putting everything into the course landing page. :chatgpt-content-reference{index="1"}
+
+For example, the live TypeScript course has a 10-lesson progression from getting started through types, interfaces, functions, narrowing and generics, while the lesson page contains actual explanations and runnable examples. :chatgpt-content-reference{index="2"}
+
+For your platform, I would therefore have the agent generate **all 44 courses one by one**, with the content stored as structured MDX/database records. That will make it much easier later to edit, search, version, translate, add quizzes, and connect the content to your AI tutor/RAG system.

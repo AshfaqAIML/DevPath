@@ -119,6 +119,18 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Anchor jumps (e.g. "Browse categories") glide instead of snapping;
+     the prefers-reduced-motion block below disables it when needed. */
+  html {
+    scroll-behavior: smooth;
+  }
+  /* Branded text selection tint — works in both themes */
+  ::selection {
+    background: rgb(20 184 166 / 0.28);
+  }
+  ::-moz-selection {
+    background: rgb(20 184 166 / 0.28);
+  }
 }
 
 /* ------------------------------------------------------------------ *

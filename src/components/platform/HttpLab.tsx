@@ -349,6 +349,7 @@ export function HttpLab({ item, category }: HttpLabProps) {
   // Select the stable record reference; derive the array outside the selector.
   const simProgressMap = useLibrary((s) => s.simProgress);
   const completeChallenge = useLibrary((s) => s.completeChallenge);
+  const pushRecent = useLibrary((s) => s.pushRecent);
 
   const [mode, setMode] = React.useState<"free" | "missions">("free");
   const [method, setMethod] = React.useState<Method>("GET");
@@ -368,10 +369,20 @@ export function HttpLab({ item, category }: HttpLabProps) {
   const solvedIds = hydrated ? simProgressMap[item.slug] ?? [] : [];
   const solvedCount = solvedIds.length;
 
-  // Track the view once on mount
+  // Track the view once on mount + keep the sandbox in the recents strip
   React.useEffect(() => {
     trackEvent("simulator_view", item.slug, item.title);
-  }, [item.slug, item.title]);
+    pushRecent({
+      slug: item.slug,
+      title: item.title,
+      level: item.level,
+      duration: item.duration,
+      categorySlug: category.slug,
+      categoryTitle: category.title,
+      categoryIcon: category.icon,
+      categoryAccent: category.accent,
+    });
+  }, [item, category, pushRecent]);
 
   const selected =
     exchanges.find((e) => e.id === selectedId) ?? exchanges[0] ?? null;

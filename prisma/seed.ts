@@ -237,7 +237,15 @@ const simulatorItems: SeedItem[] = [
     description:
       "A live HTTP lab wired to DevPath's own API: build real requests — methods, headers, bodies, query params — and study genuine status codes, response headers and JSON payloads. Six guided missions included.",
   },
-  { title: "SQL Query Sandbox", level: "Beginner", tags: "sql,database,interactive", published: false },
+  {
+    title: "SQL Query Sandbox",
+    level: "Beginner",
+    tags: "sql,database,interactive",
+    featured: true,
+    published: true,
+    description:
+      "A read-only SQL engine running right in your browser: explore a three-table schema, write SELECTs with joins, groups and aggregates, get friendly errors with did-you-mean hints, and prove your skills in six guided missions.",
+  },
   { title: "Kubernetes Cluster Simulator", level: "Advanced", tags: "kubernetes,devops,interactive", published: false },
 ];
 

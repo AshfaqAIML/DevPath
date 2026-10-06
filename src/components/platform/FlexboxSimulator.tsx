@@ -238,6 +238,7 @@ export function FlexboxSimulator({ item, category }: FlexboxSimulatorProps) {
   // so useSyncExternalStore never sees a fresh [] per call.
   const simProgressMap = useLibrary((s) => s.simProgress);
   const completeChallenge = useLibrary((s) => s.completeChallenge);
+  const pushRecent = useLibrary((s) => s.pushRecent);
 
   const [mode, setMode] = React.useState<"explore" | "challenges">("explore");
   const [state, setState] = React.useState<FlexState>(DEFAULT_STATE);
@@ -250,10 +251,20 @@ export function FlexboxSimulator({ item, category }: FlexboxSimulatorProps) {
   const solvedIds = hydrated ? simProgressMap[item.slug] ?? [] : [];
   const solvedCount = solvedIds.length;
 
-  // Track the view once on mount
+  // Track the view once on mount + keep the sandbox in the recents strip
   React.useEffect(() => {
     trackEvent("simulator_view", item.slug, item.title);
-  }, [item.slug, item.title]);
+    pushRecent({
+      slug: item.slug,
+      title: item.title,
+      level: item.level,
+      duration: item.duration,
+      categorySlug: category.slug,
+      categoryTitle: category.title,
+      categoryIcon: category.icon,
+      categoryAccent: category.accent,
+    });
+  }, [item, category, pushRecent]);
 
   const set = <K extends keyof FlexState>(key: K, value: FlexState[K]) =>
     setState((s) => ({ ...s, [key]: value }));
