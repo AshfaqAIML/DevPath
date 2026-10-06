@@ -62,6 +62,11 @@ export function SiteFooter({ data }: { data: CategoriesPayload }) {
             </p>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>
+                <Link href="/?view=library" className="transition-colors hover:text-foreground">
+                  My library
+                </Link>
+              </li>
+              <li>
                 <Link href="/?view=admin" className="transition-colors hover:text-foreground">
                   Admin console
                 </Link>

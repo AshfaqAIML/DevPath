@@ -120,3 +120,69 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Platform polish — custom scrollbars, motion & accessibility
+ * ------------------------------------------------------------------ */
+
+/* Slender, unobtrusive scrollbars for scrollable regions */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: var(--border);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground, var(--border));
+}
+
+/* Slow ambient pulse for hero glows */
+@keyframes pulse-slow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 7s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Gentle shimmer for the "New" badge dot */
+@keyframes badge-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(20 184 166 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgb(20 184 166 / 0);
+  }
+}
+.animate-badge-glow {
+  animation: badge-glow 2.2s ease-out infinite;
+}
+
+/* Respect users who prefer reduced motion — kill ambient animation */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -93,6 +93,23 @@ export function ResourceCategoryCard({
           )}
         />
 
+        {/* sheen sweep on hover */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+        >
+          <div className="absolute -inset-x-full h-full rotate-12 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+        </div>
+
+        {/* top accent hairline */}
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent to-transparent opacity-40 transition-opacity duration-300 group-hover:opacity-100",
+            "via-foreground/25"
+          )}
+        />
+
         <div className="relative flex items-start justify-between gap-2">
           <div
             className={cn(
@@ -113,7 +130,11 @@ export function ResourceCategoryCard({
           {badge ? (
             <Badge
               variant={badgeVariant}
-              className={cn("text-[11px] tracking-wide", a.badge)}
+              className={cn(
+                "relative text-[11px] tracking-wide",
+                a.badge,
+                badge === "New" && "before:absolute before:-left-2 before:top-1/2 before:size-1.5 before:-translate-y-1/2 before:rounded-full before:bg-current before:animate-badge-glow"
+              )}
             >
               {badge}
             </Badge>

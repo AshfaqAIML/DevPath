@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getAnalyticsSummary, isAdminRequest, logAnalyticsEvent } from "@/lib/platform";
+import {
+  checkRateLimit,
+  getAnalyticsSummary,
+  isAdminRequest,
+  logAnalyticsEvent,
+} from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +16,16 @@ const eventSchema = z.object({
   label: z.string().max(120).optional().nullable(),
 });
 
-// POST /api/analytics — first-party engagement tracking
+// POST /api/analytics — first-party engagement tracking (rate limited)
 export async function POST(req: NextRequest) {
+  const clientKey =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anon";
+  if (!checkRateLimit(`analytics:${clientKey}`, 90, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many events, slow down" },
+      { status: 429 }
+    );
+  }
   try {
     const body = eventSchema.parse(await req.json());
     await logAnalyticsEvent(body.type, body.slug, body.label);

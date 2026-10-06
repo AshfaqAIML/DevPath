@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { Compass, Menu, Moon, Search, Settings2, Sun } from "lucide-react";
+import { Compass, Menu, Moon, Search, Settings2, Sun, Bookmark } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { categoryHref, trackEvent, type CategoriesPayload } from "./platform-data";
+import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import { getAccent } from "@/lib/accent";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,8 @@ export function SiteHeader({ data, onOpenSearch, activeCategory }: SiteHeaderPro
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const libraryHydrated = useLibraryHydrated();
+  const savedCount = useLibrary((s) => s.saved.length);
   React.useEffect(() => setMounted(true), []);
 
   const categories = data.categories.filter((c) => c.enabled);
@@ -108,6 +111,26 @@ export function SiteHeader({ data, onOpenSearch, activeCategory }: SiteHeaderPro
             <kbd className="ml-1 hidden rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground lg:block">
               ⌘K
             </kbd>
+          </Button>
+
+          {/* My library — saved items badge */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative size-9 rounded-lg"
+            asChild
+          >
+            <Link href="/?view=library" aria-label="Open my library">
+              <Bookmark className="size-4.5" aria-hidden />
+              {libraryHydrated && savedCount > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold tabular-nums text-amber-950"
+                >
+                  {savedCount > 9 ? "9+" : savedCount}
+                </span>
+              )}
+            </Link>
           </Button>
 
           {/* Theme toggle */}
@@ -193,6 +216,17 @@ export function SiteHeader({ data, onOpenSearch, activeCategory }: SiteHeaderPro
                 </nav>
                 <div className="border-t p-3">
                   <Button asChild variant="outline" className="w-full justify-start gap-2">
+                    <Link href="/?view=library" onClick={() => setMobileOpen(false)}>
+                      <Bookmark className="size-4" aria-hidden />
+                      My library
+                      {libraryHydrated && savedCount > 0 && (
+                        <span className="ml-auto rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                          {savedCount}
+                        </span>
+                      )}
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="mt-2 w-full justify-start gap-2">
                     <Link href="/?view=admin" onClick={() => setMobileOpen(false)}>
                       <Settings2 className="size-4" aria-hidden />
                       Admin console

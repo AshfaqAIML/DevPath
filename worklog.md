@@ -48,3 +48,47 @@ Unresolved issues / risks & next-phase priorities:
 - Route constraint: the sandbox exposes only `/`, so category routes are query-param based (`/?category=masterclass`) while canonical `/masterclass` strings live in the DB `route` field, ready to become real App Router segments when the constraint is lifted.
 - Prisma client logs every query to dev.log (`log: ['query']` in `src/lib/db.ts`) — noisy; consider reducing.
 - Next ideas: item detail pages with progress tracking, roadmap step-graph visualization, simulator embed page, sitemap.xml + per-category OG images, pagination/virtualization for 100+ items, admin bulk actions, rate limiting on public analytics POST.
+
+---
+Task ID: 2
+Agent: Z.ai Code (cron webDevReview round 1)
+Task: Scheduled 15-min review — QA the platform, fix issues, add features (My Library) and styling polish.
+
+Work Log:
+- Read worklog; assessed status: server healthy (all 200s), QA via agent-browser confirmed homepage / category / admin views render with zero console errors — platform stable, so this round focused on NEW FEATURES + STYLING per mandate.
+- Quick fixes:
+  - Prisma client logging reduced from `['query']` to `['warn','error']` (dev.log noise).
+  - Added in-memory sliding-window rate limiter (`checkRateLimit` in `src/lib/platform.ts`) wired into POST /api/analytics — 90 events/min per client key, verified HTTP 429 fires at request #90; cleaned test events afterwards.
+  - `GET /api/resources` now honors a `limit` query param (capped at 200).
+- NEW FEATURE — My Library (personal learning tracker, all client-persisted):
+  - `src/lib/library-store.ts`: zustand + persist("devpath-library") store — saved (bookmarks), completed, recent (max 10) with toggle/push helpers; `useLibraryHydrated()` implemented via `useSyncExternalStore` (server snapshot false / client true) to avoid SSR mismatch AND the new `react-hooks/set-state-in-effect` lint error.
+  - `/?view=library` view (`MyLibraryView.tsx`): stats cards (Saved / In progress / Completed), "Jump back in" recent strip with clear-history, "Saved for later" grid, "Completed" grid, empty state with CTA; items resolved against live catalog via TanStack query.
+  - Item cards: bookmark button (aria-pressed, amber filled state, stops propagation) + completed ✓ indicator; card restructured from `<button>` to `div[role=button]` so the nested bookmark `<button>` is valid HTML.
+  - ItemDetailDialog: "Save for later" / "Mark complete" action buttons with toast feedback + accent states; auto-pushes opened items into `recent`.
+  - SiteHeader: bookmark icon with live saved-count badge (desktop) + "My library" link in mobile sheet and footer.
+  - Explorer toolbar: "Saved ⟨n⟩" filter toggle — filters results client-side; contextual empty state ("Nothing saved here yet").
+  - Page metadata: `/?view=library` and `/?view=admin` get proper titles + noindex robots.
+- NEW FEATURE — Home content sections:
+  - "Trending now" (SSR: sort=popular limit=6) with Flame icon + SectionHeading component (accent bar + icon + trailing meta).
+  - "Jump back in" personalized strip on home from library recents (only renders when history exists).
+- STYLING POLISH:
+  - Category + item cards: diagonal sheen sweep on hover; category cards got top accent hairline.
+  - Hero: ambient `animate-pulse-slow` glows with stagger delay, top gradient hairline, underline accent on "level up".
+  - "New" badge: pulsing dot via `animate-badge-glow` keyframe (genuine CSS, badge text unchanged).
+  - Explorer toolbar: now sticky (top-20, backdrop-blur, shadow) so filters stay reachable while scrolling long grids — verified top:80px after scroll.
+  - globals.css: slender custom scrollbars (webkit + firefox), `prefers-reduced-motion` kill-switch for all animations/transitions.
+  - Dialog header: dot-grid texture overlay.
+
+Stage Summary (verification results):
+- agent-browser end-to-end: trending section renders (SSR items); item dialog → "Save for later" toggles to "Saved" + header badge shows amber "1"; `/?view=library` shows "1 tracked" pill + Jump back in + Saved for later; "Mark complete" → Completed section appears; explorer Saved filter → "11 career paths · 1 shown" with only the bookmarked item; sticky toolbar verified at top:80 after scrolling 900px; mobile 390px — no horizontal overflow, all sections stack.
+- VLM QA scores: homepage 9/10 ("highly polished"), My Library 9/10, mobile sticky toolbar 9/10.
+- ESLint: clean (after switching hydration gate to useSyncExternalStore). Console: zero errors/warnings across all four views. Rate limiter: 429 at request #90 ✓. Analytics test events cleaned from DB.
+
+Key artifacts added this round:
+- `src/lib/library-store.ts`, `src/components/platform/MyLibraryView.tsx`, updated: ResourceItemCard, ItemDetailDialog, CategoryExplorer (saved filter + sticky toolbar + smart empty states), HomeView (trending + jump back in + SectionHeading), SiteHeader (library badge), SiteFooter, PlatformShell, page.tsx (view=library routing, trending SSR, view-specific metadata), platform.ts (rate limiter), db.ts (log level), globals.css (scrollbars, pulse-slow, badge-glow, reduced-motion), ResourceCategoryCard (sheen, hairline, badge pulse).
+
+Unresolved issues / risks & priority recommendations for next phase:
+- Admin auth still demo-grade → NextAuth credentials + session cookies remains the top upgrade.
+- Single-route constraint unchanged (query-param routing; canonical routes in DB ready).
+- Recommended next features: (1) item detail "pages" with rich bodies (markdown) + progress steps; (2) roadmap step-graph visualization; (3) one playable simulator embed (e.g., CSS Flexbox sandbox) to activate the Simulators category; (4) sitemap.xml + OG images; (5) admin bulk publish/unpublish + CSV export; (6) keyboard shortcut help overlay (?).
+- localStorage library is device-local; if cross-device sync is desired later, lift saved/completed into a User model via authenticated API.

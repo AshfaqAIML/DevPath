@@ -18,6 +18,22 @@ export async function generateMetadata({
   const sp = await searchParams;
   const categorySlug = typeof sp.category === "string" ? sp.category : null;
 
+  if (sp.view === "library") {
+    return {
+      title: "My library — DevPath",
+      description:
+        "Your saved items, recently viewed resources and completed learning — your personal DevPath library.",
+      robots: { index: false, follow: true },
+    };
+  }
+
+  if (sp.view === "admin") {
+    return {
+      title: "Admin console — DevPath",
+      robots: { index: false, follow: false },
+    };
+  }
+
   if (categorySlug) {
     const categories = await getCategoriesWithCounts();
     const cat = categories.find((c) => c.slug === categorySlug && c.enabled);
@@ -65,7 +81,8 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const categorySlug =
     typeof sp.category === "string" && sp.category.length > 0 ? sp.category : null;
-  const view = sp.view === "admin" ? "admin" : "hub";
+  const view =
+    sp.view === "admin" ? "admin" : sp.view === "library" ? "library" : "hub";
   const itemSlug = typeof sp.item === "string" ? sp.item : undefined;
 
   const categories = await getCategoriesWithCounts();
@@ -79,6 +96,10 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
     : [];
   const featuredItems = view === "hub" && !activeCategory
     ? await getItems({ featured: true, limit: 6 })
+    : [];
+  // Trending = most viewed published items across all categories
+  const trendingItems = view === "hub" && !activeCategory
+    ? await getItems({ sort: "popular", limit: 6 })
     : [];
 
   // JSON-LD: the five-category information architecture as structured data
@@ -111,6 +132,7 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
         initialItemSlug={itemSlug}
         view={view}
         featuredItems={featuredItems}
+        trendingItems={trendingItems}
       />
     </>
   );

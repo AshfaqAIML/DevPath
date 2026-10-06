@@ -171,6 +171,29 @@ export async function logAnalyticsEvent(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Lightweight in-memory rate limiter (sliding window) for public endpoints.
+// Local-memory only, per the platform's caching policy.
+const rateBuckets = new Map<string, number[]>();
+
+export function checkRateLimit(
+  key: string,
+  limit = 60,
+  windowMs = 60_000
+): boolean {
+  const now = Date.now();
+  const hits = (rateBuckets.get(key) ?? []).filter((t) => now - t < windowMs);
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  // opportunistic cleanup so the map can't grow unbounded
+  if (rateBuckets.size > 500) {
+    for (const [k, v] of rateBuckets) {
+      if (v.every((t) => now - t >= windowMs)) rateBuckets.delete(k);
+    }
+  }
+  return hits.length <= limit;
+}
+
 export async function getAnalyticsSummary() {
   const byCategory = await db.analyticsEvent.groupBy({
     by: ["slug"],

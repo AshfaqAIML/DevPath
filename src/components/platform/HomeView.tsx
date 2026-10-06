@@ -1,15 +1,17 @@
 "use client";
 
 // HomeView — the resources landing experience: hero, the five-category hub
-// (the primary navigation mechanism), and featured content across categories.
+// (the primary navigation mechanism), trending content, featured picks and
+// the personalized "jump back in" strip from the local library.
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowDown, Search, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, Flame, History, Search, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getAccent } from "@/lib/accent";
 import { cn } from "@/lib/utils";
+import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import type { ResourceItemView } from "@/lib/platform";
 import { CategoryHub } from "./CategoryHub";
 import { ResourceItemCard } from "./ResourceItemCard";
@@ -19,13 +21,51 @@ import { type CategoriesPayload, trackEvent } from "./platform-data";
 interface HomeViewProps {
   categoriesData: CategoriesPayload;
   featuredItems: ResourceItemView[];
+  trendingItems: ResourceItemView[];
   onOpenSearch: () => void;
 }
 
-export function HomeView({ categoriesData, featuredItems, onOpenSearch }: HomeViewProps) {
+/** Section heading with a small accent bar for visual rhythm. */
+function SectionHeading({
+  id,
+  icon: Icon,
+  iconClass,
+  title,
+  trailing,
+}: {
+  id: string;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  iconClass?: string;
+  title: string;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="flex items-center gap-3">
+        <span aria-hidden className="h-5 w-1 rounded-full bg-gradient-to-b from-amber-400 to-orange-500" />
+        <Icon aria-hidden className={cn("size-4", iconClass)} />
+        <h2 id={id} className="text-lg font-bold tracking-tight sm:text-xl">
+          {title}
+        </h2>
+      </div>
+      {trailing}
+    </div>
+  );
+}
+
+export function HomeView({ categoriesData, featuredItems, trendingItems, onOpenSearch }: HomeViewProps) {
   const [selected, setSelected] = React.useState<ResourceItemView | null>(null);
   const categories = categoriesData.categories.filter((c) => c.enabled);
   const total = categoriesData.categories.reduce((s, c) => s + c.count, 0);
+
+  const hydrated = useLibraryHydrated();
+  const recent = useLibrary((s) => s.recent);
+  const recentEntries = hydrated ? recent.slice(0, 5) : [];
+
+  const openItem = (it: ResourceItemView) => {
+    setSelected(it);
+    trackEvent("item_view", it.slug, it.title);
+  };
 
   return (
     <div className="space-y-14 sm:space-y-16">
@@ -38,11 +78,16 @@ export function HomeView({ categoriesData, featuredItems, onOpenSearch }: HomeVi
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-24 -top-24 size-72 rounded-full bg-amber-500/10 blur-3xl"
+          className="pointer-events-none absolute -left-24 -top-24 size-72 animate-pulse-slow rounded-full bg-amber-500/10 blur-3xl"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-24 -right-24 size-72 rounded-full bg-emerald-500/10 blur-3xl"
+          className="pointer-events-none absolute -bottom-24 -right-24 size-72 animate-pulse-slow rounded-full bg-emerald-500/10 blur-3xl [animation-delay:1.5s]"
+        />
+        {/* top accent line */}
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"
         />
 
         <div className="relative mx-auto max-w-2xl space-y-6 text-center">
@@ -66,8 +111,12 @@ export function HomeView({ categoriesData, featuredItems, onOpenSearch }: HomeVi
             className="text-balance text-3xl font-bold leading-tight tracking-tight sm:text-5xl sm:leading-[1.1]"
           >
             Everything you need to{" "}
-            <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 bg-clip-text text-transparent">
+            <span className="relative bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 bg-clip-text text-transparent">
               level up
+              <span
+                aria-hidden
+                className="absolute -inset-x-2 -bottom-1 h-[3px] rounded-full bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"
+              />
             </span>{" "}
             as a developer
           </motion.h1>
@@ -149,32 +198,103 @@ export function HomeView({ categoriesData, featuredItems, onOpenSearch }: HomeVi
         </div>
       </section>
 
+      {/* Jump back in — personalized strip from the local library */}
+      {recentEntries.length > 0 && (
+        <section aria-labelledby="jump-heading" className="space-y-4">
+          <SectionHeading
+            id="jump-heading"
+            icon={History}
+            iconClass="text-muted-foreground"
+            title="Jump back in"
+            trailing={
+              <Button asChild variant="ghost" size="sm" className="h-7 gap-1.5 rounded-lg text-xs">
+                <Link href="/?view=library">
+                  My library
+                  <ArrowRight aria-hidden className="size-3.5" />
+                </Link>
+              </Button>
+            }
+          />
+          <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {recentEntries.map((r) => {
+              const a = getAccent(r.categoryAccent);
+              return (
+                <li key={r.slug}>
+                  <Link
+                    href={`/?category=${r.categorySlug}&item=${r.slug}`}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-xl border bg-card p-3 transition-all duration-200",
+                      "hover:-translate-y-0.5 hover:shadow-md",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                      a.hoverBorder
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn("size-2 shrink-0 rounded-full", a.dot)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium leading-tight">
+                        {r.title}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {r.categoryTitle}
+                        {r.duration ? ` · ${r.duration}` : ""}
+                      </span>
+                    </span>
+                    <ArrowRight
+                      aria-hidden
+                      className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       {/* The category hub — the core navigation mechanism */}
       <CategoryHub data={categoriesData} />
+
+      {/* Trending now — most viewed across the platform */}
+      {trendingItems.length > 0 && (
+        <section aria-labelledby="trending-heading" className="space-y-5">
+          <SectionHeading
+            id="trending-heading"
+            icon={Flame}
+            iconClass="text-orange-500"
+            title="Trending now"
+            trailing={
+              <span className="text-xs text-muted-foreground">most viewed this cycle</span>
+            }
+          />
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {trendingItems.slice(0, 6).map((item, i) => (
+              <li key={item.id} className="h-full">
+                <ResourceItemCard item={item} index={i} onSelect={openItem} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Featured across the platform */}
       {featuredItems.length > 0 && (
         <section aria-labelledby="featured-heading" className="space-y-5">
-          <div className="flex items-center gap-2.5">
-            <Sparkles aria-hidden className="size-4 text-amber-500" />
-            <h2 id="featured-heading" className="text-lg font-bold tracking-tight sm:text-xl">
-              Editor&rsquo;s picks
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              featured across all categories
-            </span>
-          </div>
+          <SectionHeading
+            id="featured-heading"
+            icon={Sparkles}
+            iconClass="text-amber-500"
+            title="Editor&rsquo;s picks"
+            trailing={
+              <span className="text-xs text-muted-foreground">featured across all categories</span>
+            }
+          />
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {featuredItems.slice(0, 6).map((item, i) => (
               <li key={item.id} className="h-full">
-                <ResourceItemCard
-                  item={item}
-                  index={i}
-                  onSelect={(it) => {
-                    setSelected(it);
-                    trackEvent("item_view", it.slug, it.title);
-                  }}
-                />
+                <ResourceItemCard item={item} index={i} onSelect={openItem} />
               </li>
             ))}
           </ul>
@@ -183,14 +303,18 @@ export function HomeView({ categoriesData, featuredItems, onOpenSearch }: HomeVi
 
       {/* CTA band */}
       <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-primary/10 via-transparent to-transparent px-6 py-10 text-center sm:px-10">
-        <h2 className="text-balance text-xl font-bold tracking-tight sm:text-2xl">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_60%_80%_at_50%_100%,black,transparent)]"
+        />
+        <h2 className="relative text-balance text-xl font-bold tracking-tight sm:text-2xl">
           Not sure where to start?
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        <p className="relative mx-auto mt-2 max-w-md text-sm text-muted-foreground">
           Pick a career path in Roadmaps and the platform will point you to the
           masterclasses, courses and cheatsheets you need at every step.
         </p>
-        <Button asChild className="mt-5 gap-2 rounded-xl">
+        <Button asChild className="relative mt-5 gap-2 rounded-xl">
           <Link
             href="/?category=roadmaps"
             onClick={() => trackEvent("card_click", "roadmaps", "cta-roadmaps")}

@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
       level: sp.get("level") ?? undefined,
       sort: sp.get("sort") ?? undefined,
       includeDrafts,
+      limit: sp.get("limit") ? Math.min(Number(sp.get("limit")) || 200, 200) : undefined,
     });
     return NextResponse.json({ items });
   } catch (e) {

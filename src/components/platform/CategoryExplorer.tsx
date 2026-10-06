@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
+  Bookmark,
   ChevronRight,
   ListFilter,
   Loader2,
@@ -31,6 +32,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
+import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import type { CategoryView, ResourceItemView } from "@/lib/platform";
 import { fetchItems, trackEvent, type CategoriesPayload, type ItemsPayload } from "./platform-data";
 import { ResourceItemCard } from "./ResourceItemCard";
@@ -64,7 +66,11 @@ export function CategoryExplorer({
   const [q, setQ] = React.useState("");
   const [level, setLevel] = React.useState<(typeof LEVELS)[number]>("All");
   const [sort, setSort] = React.useState<(typeof SORTS)[number]["value"]>("featured");
+  const [savedOnly, setSavedOnly] = React.useState(false);
   const [selected, setSelected] = React.useState<ResourceItemView | null>(null);
+
+  const hydrated = useLibraryHydrated();
+  const saved = useLibrary((s) => s.saved);
 
   // Debounce the search input before hitting the API
   const [debouncedQ, setDebouncedQ] = React.useState("");
@@ -92,7 +98,10 @@ export function CategoryExplorer({
     placeholderData: (prev) => prev,
   });
 
-  const items = data?.items ?? [];
+  const items = React.useMemo(() => {
+    const all = data?.items ?? [];
+    return savedOnly ? all.filter((i) => saved.includes(i.slug)) : all;
+  }, [data, savedOnly, saved]);
 
   // Deep-linked item (?item=slug) — open its dialog once after load
   const deepLinkHandled = React.useRef(false);
@@ -191,10 +200,10 @@ export function CategoryExplorer({
         </div>
       </motion.header>
 
-      {/* Toolbar: search + level filter + sort */}
+      {/* Toolbar: search + level filter + saved filter + sort */}
       <div
         role="search"
-        className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 sm:flex-row sm:items-center"
+        className="sticky top-20 z-30 flex flex-col gap-3 rounded-2xl border bg-background/85 p-4 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:flex-row sm:items-center"
       >
         <Input
           value={q}
@@ -224,6 +233,22 @@ export function CategoryExplorer({
           ))}
         </ToggleGroup>
         <div className="flex items-center gap-2">
+          {hydrated && (
+            <Button
+              type="button"
+              variant={savedOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSavedOnly((v) => !v)}
+              aria-pressed={savedOnly}
+              className="h-8 gap-1.5 rounded-lg px-3 text-xs"
+            >
+              <Bookmark aria-hidden className={cn("size-3.5", savedOnly && "fill-current")} />
+              Saved
+              <span className="rounded-full bg-black/10 px-1.5 tabular-nums dark:bg-white/10">
+                {saved.length}
+              </span>
+            </Button>
+          )}
           <ListFilter aria-hidden className="size-4 text-muted-foreground" />
           <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
             <SelectTrigger className="h-9 w-[150px] rounded-lg text-xs" aria-label="Sort items">
@@ -249,11 +274,18 @@ export function CategoryExplorer({
         </div>
       ) : items.length === 0 ? (
         <EmptyState
-          hasAnyContent={live.count > 0 || initialItems.length > 0}
+          mode={
+            savedOnly
+              ? "saved"
+              : live.count > 0 || initialItems.length > 0
+                ? "no-results"
+                : "empty-category"
+          }
           onReset={() => {
             setQ("");
             setLevel("All");
             setSort("featured");
+            setSavedOnly(false);
           }}
         />
       ) : (
@@ -287,34 +319,46 @@ export function CategoryExplorer({
 }
 
 function EmptyState({
-  hasAnyContent,
+  mode,
   onReset,
 }: {
-  hasAnyContent: boolean;
+  mode: "saved" | "no-results" | "empty-category";
   onReset: () => void;
 }) {
+  const copy =
+    mode === "saved"
+      ? {
+          icon: Bookmark,
+          title: "Nothing saved here yet",
+          body: "Bookmark items with the save icon and they’ll show up in this filter — and in your library.",
+          action: "Show all items",
+        }
+      : mode === "no-results"
+        ? {
+            icon: SearchX,
+            title: "No results found",
+            body: "Try a different search term or clear the filters.",
+            action: "Clear filters",
+          }
+        : {
+            icon: Sparkles,
+            title: "Launching soon",
+            body: "Simulator experiences are in active development and will be published here as soon as they’re ready.",
+            action: null,
+          };
+  const Icon = copy.icon;
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed py-16 text-center">
       <span className="flex size-12 items-center justify-center rounded-2xl bg-muted">
-        {hasAnyContent ? (
-          <SearchX aria-hidden className="size-6 text-muted-foreground" />
-        ) : (
-          <Sparkles aria-hidden className="size-6 text-muted-foreground" />
-        )}
+        <Icon aria-hidden className="size-6 text-muted-foreground" />
       </span>
       <div className="space-y-1.5">
-        <p className="font-semibold">
-          {hasAnyContent ? "No results found" : "Launching soon"}
-        </p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {hasAnyContent
-            ? "Try a different search term or clear the filters."
-            : "Simulator experiences are in active development and will be published here as soon as they’re ready."}
-        </p>
+        <p className="font-semibold">{copy.title}</p>
+        <p className="max-w-sm text-sm text-muted-foreground">{copy.body}</p>
       </div>
-      {hasAnyContent && (
+      {copy.action && (
         <Button variant="outline" size="sm" onClick={onReset}>
-          Clear filters
+          {copy.action}
         </Button>
       )}
     </div>
