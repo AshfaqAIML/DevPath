@@ -56,7 +56,14 @@ export type ContentBlock =
   | { t: "diagram"; caption?: string; nodes: string[] }
   | { t: "keytakeaways"; title?: string; items: string[] }
   | { t: "interview"; q: string; a: string }
-  | { t: "practice"; query: string; note?: string; title?: string };
+  | {
+      t: "practice";
+      /** Simulator slug the snippet deep-links into (e.g. sql-query-sandbox, js-playground). */
+      sim?: string;
+      query: string;
+      note?: string;
+      title?: string;
+    };
 
 // ---------------------------------------------------------------------------
 // View types returned by the APIs
@@ -115,6 +122,8 @@ export type CourseView = {
   totalMinutes: number;
   xpTotal: number;
   lessons: LessonSummary[];
+  /** Simulator slugs referenced by practice blocks across all lessons. */
+  practiceSims: string[];
   updatedAt: string;
 };
 
@@ -182,6 +191,15 @@ function hasPracticeBlock(raw: string): boolean {
   return parseBlocks(raw).some((b) => b.t === "practice");
 }
 
+/** Simulator slugs referenced by this lesson's practice blocks. */
+function practiceSimsInBlocks(raw: string): string[] {
+  const sims = parseBlocks(raw)
+    .filter((b): b is Extract<ContentBlock, { t: "practice" }> => b.t === "practice")
+    .map((b) => b.sim ?? "sql-query-sandbox")
+    .filter((s): s is string => !!s);
+  return [...new Set(sims)];
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 
@@ -216,9 +234,8 @@ export async function getCourse(
   if (!course) return null;
 
   const quizCache = new Map<string, number>();
-  const lessons = course.lessons
-    .filter((l) => opts.includeDrafts || l.published)
-    .sort((a, b) => a.order - b.order)
+  const lessonRows = course.lessons.filter((l) => opts.includeDrafts || l.published).sort((a, b) => a.order - b.order);
+  const lessons = lessonRows
     .map((l) => {
       const quizCount = quizCache.get(l.id) ?? parseQuiz(l.quiz).length;
       quizCache.set(l.id, quizCount);
@@ -262,6 +279,9 @@ export async function getCourse(
     totalMinutes: lessons.reduce((sum, l) => sum + l.minutes, 0),
     xpTotal: lessons.reduce((sum, l) => sum + l.xp, 0),
     lessons,
+    practiceSims: [
+      ...new Set(lessonRows.flatMap((l) => practiceSimsInBlocks(l.blocks))),
+    ],
     updatedAt: course.updatedAt.toISOString(),
   };
 }

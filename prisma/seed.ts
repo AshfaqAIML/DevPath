@@ -264,6 +264,15 @@ const simulatorItems: SeedItem[] = [
     description:
       "A read-only SQL engine running right in your browser: explore a three-table schema, write SELECTs with joins, groups and aggregates, get friendly errors with did-you-mean hints, and prove your skills in six guided missions.",
   },
+  {
+    title: "JavaScript Playground",
+    level: "Beginner",
+    tags: "javascript,es2020,interactive",
+    featured: true,
+    published: true,
+    description:
+      "A sandboxed JavaScript REPL in your browser: strict-mode ES2020 snippets run in a Web Worker with a captured console, REPL-style last-expression echo, friendly error hints and a 4-second watchdog. Six guided missions, plus deep-links from every JavaScript course practice block.",
+  },
   { title: "Kubernetes Cluster Simulator", level: "Advanced", tags: "kubernetes,devops,interactive", published: false },
 ];
 

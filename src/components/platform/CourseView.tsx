@@ -12,8 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Clock, Compass,
-  Database, Flag, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
+  ArrowLeft, ArrowRight, BookOpen, Braces, Check, ChevronRight, Clock, Compass,
+  Database, Flag, FlaskConical, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
 } from "lucide-react";
 
 import type { CourseView as Course, LessonView } from "@/lib/course-types";
@@ -24,6 +24,31 @@ import { LessonBlocks, renderInline, InterviewQuestion, practiceHref } from "./l
 import { QuizCard } from "./lesson/QuizCard";
 import { ExerciseCard } from "./lesson/ExerciseCard";
 import { getAccent } from "@/lib/accent";
+
+// Live-sandbox pairing registry — one entry per simulator that practice
+// blocks can deep-link into. Rendered per-course from course.practiceSims
+// (computed from lesson blocks in the DB), so new simulators extend this map
+// instead of hardcoding JSX.
+const PRACTICE_PAIRINGS: Record<
+  string,
+  { heading: string; text: string; cta: string; teaser: string; icon: React.ReactNode }
+> = {
+  "sql-query-sandbox": {
+    heading: "Live sandbox practice",
+    text: "This course pairs with the SQL Query Sandbox: lessons hand you runnable queries that open straight in a live editor — run them, tweak them, break them on purpose.",
+    cta: "Open the sandbox",
+    teaser: "SELECT name, role, hours_studied\nFROM developers\nORDER BY hours_studied DESC\nLIMIT 5;",
+    icon: <Database className="h-4 w-4 text-teal-500" aria-hidden="true" />,
+  },
+  "js-playground": {
+    heading: "Live playground practice",
+    text: "This course pairs with the JavaScript Playground: lessons hand you runnable snippets that open straight in a live sandboxed editor — run them, tweak them, break them on purpose. Every snippet runs in a strict-mode Web Worker with a captured console.",
+    cta: "Open the playground",
+    teaser:
+      "// Welcome to the JavaScript Playground\nconst course = { title: \"JavaScript Basics Refresher\", lessons: 8 };\nconsole.log(`Starting ${course.title} — ${course.lessons} lessons`);\n\n[\"values\", \"functions\", \"objects\", \"closures\"].map((t) => t.toUpperCase())",
+    icon: <Braces className="h-4 w-4 text-teal-500" aria-hidden="true" />,
+  },
+};
 
 interface CourseViewProps {
   course: Course;
@@ -249,7 +274,7 @@ export function CourseView({ course, item, category, initialLesson }: CourseView
                           title="Live sandbox practice in this lesson"
                           aria-label="Includes live sandbox practice"
                         >
-                          <Database className="h-3 w-3" aria-hidden="true" />
+                          <FlaskConical className="h-3 w-3" aria-hidden="true" />
                         </span>
                       ) : null}
                       <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground/80 sm:inline">
@@ -351,7 +376,7 @@ function CourseOverview({
           </span>
           What you&apos;ll learn
         </h2>
-        <ul className="grid gap-2.5 sm:grid-cols-2">
+        <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {course.outcomes.map((o, i) => (
             <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-foreground/90">
               <Check className={`mt-0.5 h-4 w-4 shrink-0 ${accent.text}`} aria-hidden="true" />
@@ -425,36 +450,43 @@ function CourseOverview({
         ) : null}
       </div>
 
-      {/* Live sandbox pairing — data-driven: rendered when any lesson carries
-          a practice deep-link block (SQL course ↔ SQL Query Sandbox). */}
-      {course.lessons.some((l) => l.hasPractice) ? (
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.07] via-transparent to-transparent p-5"
-          aria-labelledby="sandbox-pairing-title"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <h2 id="sandbox-pairing-title" className="mb-1.5 flex items-center gap-2 text-base font-semibold text-foreground">
-                <Database className="h-4 w-4 text-teal-500" aria-hidden="true" />
-                Live sandbox practice
-              </h2>
-              <p className="text-sm leading-relaxed text-foreground/85">
-                This course pairs with the SQL Query Sandbox: lessons hand you runnable queries
-                that open straight in a live editor — run them, tweak them, break them on purpose.
-              </p>
-            </div>
-            <Link
-              href={practiceHref("SELECT name, role, hours_studied\nFROM developers\nORDER BY hours_studied DESC\nLIMIT 5;")}
-              className="flex shrink-0 items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition-transform hover:scale-[1.02] hover:bg-teal-500 active:scale-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
-            >
-              <Database className="h-4 w-4" aria-hidden="true" />
-              Open the sandbox
-            </Link>
-          </div>
-        </motion.section>
+      {/* Live sandbox pairing — data-driven: one card per simulator the
+          course's practice blocks deep-link into (SQL course ↔ SQL Query
+          Sandbox, JavaScript course ↔ JavaScript Playground). */}
+      {course.practiceSims.length > 0 ? (
+        <div className="space-y-4">
+          {course.practiceSims.map((sim) => {
+            const pairing = PRACTICE_PAIRINGS[sim];
+            if (!pairing) return null;
+            return (
+              <motion.section
+                key={sim}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.07] via-transparent to-transparent p-5"
+                aria-labelledby={`sandbox-pairing-${sim}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h2 id={`sandbox-pairing-${sim}`} className="mb-1.5 flex items-center gap-2 text-base font-semibold text-foreground">
+                      {pairing.icon}
+                      {pairing.heading}
+                    </h2>
+                    <p className="text-sm leading-relaxed text-foreground/85">{pairing.text}</p>
+                  </div>
+                  <Link
+                    href={practiceHref(pairing.teaser, sim)}
+                    className="flex shrink-0 items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition-transform hover:scale-[1.02] hover:bg-teal-500 active:scale-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
+                  >
+                    {pairing.icon}
+                    {pairing.cta}
+                  </Link>
+                </div>
+              </motion.section>
+            );
+          })}
+        </div>
       ) : null}
 
       {/* Final assessment + project teaser */}
@@ -639,7 +671,7 @@ function LessonPane({
           </span>
           {practiceCount > 0 ? (
             <span className="flex items-center gap-1 rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 font-medium text-teal-600 dark:text-teal-400">
-              <Database className="h-3 w-3" aria-hidden="true" />
+              <FlaskConical className="h-3 w-3" aria-hidden="true" />
               {practiceCount} sandbox {practiceCount === 1 ? "exercise" : "exercises"}
             </span>
           ) : null}

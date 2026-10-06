@@ -1,0 +1,305 @@
+{
+  "title": "Functions: Declarations, Expressions and Arrow Functions",
+  "slug": "02-functions-arrows-this",
+  "objective": "After this lesson you will be able to choose deliberately between function declarations, expressions and arrows — predicting each form's hoisting behavior, where its this comes from, and how default and rest parameters treat undefined, null and leftovers.",
+  "why": "Every callback you pass to map, every event handler you register, every setTimeout you schedule is a function — and the three ways to write one differ in exactly the places production bugs live: hoisting (a 'mechanical' refactor from declaration to const arrow can break every call above it), this (callbacks do not inherit the object they were written inside), and parameter handling (null silently skipping your defaults). This lesson turns those differences from folklore into predictions you make before running anything.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Three grammars for the same verb"
+    },
+    {
+      "t": "p",
+      "text": "JavaScript gives you one verb — *function* — and three grammars for writing it: the **declaration** (`function plan() {}`), the **function expression** (`const plan = function () {}`), and the **arrow expression** (`const plan = () => {}`). All three create exactly the same kind of thing: a callable object. What differs is the paperwork. A declaration is a *statement* the engine registers before any line runs; both expressions are *values* you assign to bindings, with everything that implies for hoisting. Arrows go further and give up `this`, `arguments` and constructibility in exchange for the lightest syntax in the language — one job, three trade-off packages:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// 1) Declaration — a statement, registered before any line runs\nfunction formatName(name) {\n  return name.trim().toLowerCase();\n}\n\n// 2) Function expression — a value, stored in a binding\nconst shout = function (text) {\n  return text.toUpperCase() + '!';\n};\n\n// 3) Arrow expression — also a value; lightest syntax, no this of its own\nconst whisper = (text) => text.toLowerCase() + '...';\n\nconsole.log(formatName('  MAYA ')); // \"maya\"\nconsole.log(shout('hello'));        // \"HELLO!\"\nconsole.log(whisper('HI'));         // \"hi...\"",
+      "caption": "One verb, three grammars — every snippet in this lesson runs exactly as printed"
+    },
+    {
+      "t": "h",
+      "text": "Hoisting: declarations are ready before line one"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "console.log(plan('standup')); // \"agenda: standup\" — the WHOLE function moved up\nfunction plan(meeting) {\n  return 'agenda: ' + meeting;\n}\n\ntry {\n  announce('retro'); // the var NAME exists (hoisted, holding undefined) — the function does not\n  var announce = function (meeting) { return 'notes: ' + meeting; };\n} catch (e) {\n  console.log(e.name); // \"TypeError\" — you called undefined\n}\n\ntry {\n  notify('demo'); // the binding is in the temporal dead zone until its own line\n  const notify = (meeting) => 'notes: ' + meeting;\n} catch (e) {\n  console.log(e.name); // \"ReferenceError\" — dead zone, not \"undefined\"\n}",
+      "caption": "Three declarations, three hoisting policies — run it and check every comment",
+      "highlight": [
+        1,
+        8,
+        14
+      ]
+    },
+    {
+      "t": "p",
+      "text": "All three are hoisted — the engine registers every binding in a pre-execution pass — but they are *initialized* differently. A **declaration** is hoisted whole: name and body both exist before line one, which is why the first call works from above. A `var` **expression** hoists only the *name*, initialized to `undefined` — calling it early is `undefined(...)`, a `TypeError`. A `const`/`let` **expression** hoists the binding but leaves it uninitialized — the **temporal dead zone** from Lesson 1 — so an early call throws `ReferenceError`. The error *names* are the contract here; the message wording varies between engines, but `TypeError` vs `ReferenceError` is stable everywhere and tells you which policy you hit."
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "The refactor that breaks the build",
+      "text": "Converting `function handleDrop() {...}` to `const handleDrop = () => {...}` looks mechanical, but it carries a semantic cost: the declaration could be called from anywhere in the file, while the const arrow can only be called from *below its line*. If any call sits above — a bootstrap sequence, an event registration at the top of a module — the 'harmless' refactor turns it into a dead-zone `ReferenceError`. After the conversion, order is load-bearing: bindings first, calls after."
+    },
+    {
+      "t": "h",
+      "text": "Arrow syntax and the implicit return contract"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const square = (n) => n * n;                   // expression body → implicit return\nconst squareBlock = (n) => { return n * n; };  // block body → returning is YOUR job\nconst greet = (name) => `hi ${name}`;          // one parameter → parens optional\nconst getConfig = () => ({ debug: true });     // returning an object literal → parenthesize it\nconst getConfigBroken = () => { debug: true };  // ← those braces became a BODY\n\nconsole.log(square(4));          // 16\nconsole.log(squareBlock(4));     // 16\nconsole.log(greet('Ada'));       // \"hi Ada\"\nconsole.log(getConfig().debug);  // true — a real object came back\nconsole.log(getConfigBroken());  // undefined — nothing was returned",
+      "caption": "Five arrows, one trap: an expression body returns itself; a block body returns nothing unless you say return",
+      "highlight": [
+        4,
+        5,
+        10
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The rule is short: after `=>`, a single *expression* is evaluated and returned automatically; a *block* `{...}` is a function body, and the only way out is a `return`. The trap is the fifth arrow — `{ debug: true }` after `=>` is not an object, it is a *block* containing a **label** named `debug` (labels exist for nested loops; you have probably never written one on purpose). The fix is parentheses, which say 'this brace starts an expression': `() => ({ debug: true })`. The review habit that catches it: an arrow whose body starts with `{` and contains no `return` is either a procedure (fine — side effects only) or a bug (common)."
+    },
+    {
+      "t": "h",
+      "text": "this is decided at the call site — for regular functions"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "function report() {\n  return this; // a regular function's this depends on HOW it is called, not where it is written\n}\n\nconst server = { name: 'prod', report };\n\nconsole.log(server.report().name);                  // \"prod\" — obj.method(): this = obj\nconsole.log(report.call({ name: 'staging' }).name); // \"staging\" — call/apply/bind set it explicitly\nconsole.log(report() === undefined);                // true — a plain call in strict mode (this\n                                                    // playground's mode) hands you undefined",
+      "caption": "Same function, three calls, three different this values",
+      "highlight": [
+        9
+      ]
+    },
+    {
+      "t": "p",
+      "text": "That is the entire regular-function model: `this` is an argument the call site passes, by one of four routes — a method call (`obj.report()` passes `obj`), an explicit `call`/`apply`/`bind`, `new` (passes the freshly built object), or a plain call, which in strict mode passes `undefined` (sloppy mode historically passed the global object — the source of a whole family of silent global writes). Nothing about *where the function was written* matters. Which is exactly why callbacks break, and that is the next block's story."
+    },
+    {
+      "t": "diagram",
+      "caption": "How JavaScript picks this for one call",
+      "nodes": [
+        "A call happens: which function object is being invoked?",
+        "Is it an arrow? → YES: it has no this of its own — it uses the this of the enclosing function, captured when that function runs",
+        "NO — a regular function → look ONLY at the call site, never at where it was written",
+        "obj.method() → this = obj",
+        "plain method() in strict mode → this = undefined (sloppy mode: the global object)",
+        "new Method() → this = the freshly built object",
+        "method.call(x) / method.bind(x) → this = x, explicitly"
+      ]
+    },
+    {
+      "t": "h",
+      "text": "The classic bug: a callback that loses this"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const counter = {\n  hits: 0,\n  startBroken() {\n    setTimeout(function () {\n      // the HOST invokes callbacks with ITS choice of this (the global object\n      // in browsers) — never the object this function was written inside:\n      this.hits += 1;\n      console.log('broken: this.hits =', this.hits, '· counter.hits =', counter.hits);\n    }, 0);\n  },\n  startFixed() {\n    setTimeout(() => {\n      // the arrow has no this of its own → it uses startFixed's this,\n      // and the call counter.startFixed() set that to counter:\n      this.hits += 1;\n      console.log('fixed: counter.hits =', this.hits);\n    }, 0);\n  },\n};\n\ncounter.startBroken();\ncounter.startFixed();\nconsole.log('both callbacks scheduled'); // synchronous — prints FIRST",
+      "caption": "Predict all three lines before running: the broken callback writes NaN onto the global object; the arrow writes 1 onto counter",
+      "highlight": [
+        5,
+        13
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Trace the broken path: `setTimeout` stores your function and, when the timer fires, the *host* calls it — as a plain call, with the host's own choice of `this` (browsers use the global object). `this.hits += 1` then reads `undefined` off the global, adds 1, and writes `NaN` right back onto it: no crash, just a wrong number in a place nobody looks, while `counter.hits` never moved. Now the arrow path: `startFixed` was called as `counter.startFixed()`, so inside it `this` is `counter` — and the arrow, having no `this` of its own, *borrows* that one. Before arrows existed (and before you reach for `bind`), every codebase carried the `var self = this;` workaround — you will still meet it in older code, and now you know exactly what it was working around."
+    },
+    {
+      "t": "h",
+      "text": "When arrows are the wrong tool: object methods"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const widget = {\n  label: 'widget',\n  build() {\n    // inside build, this === widget (it was called as widget.build())\n    const ui = {\n      label: 'ui-card',\n      print() {\n        return 'regular method sees: ' + this.label; // called as ui.print() → this = ui\n      },\n      printArrow: () => 'arrow method sees: ' + this.label, // no own this → build's this!\n    };\n    return ui.print() + ' / ' + ui.printArrow();\n  },\n};\n\nconsole.log(widget.build());\n// \"regular method sees: ui-card / arrow method sees: widget\"",
+      "caption": "The arrow skipped the object it was written in and grabbed the enclosing function's this",
+      "highlight": [
+        13
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The arrow did not misfire — it followed its one rule perfectly: take `this` from the enclosing *function*, which is `build`, whose `this` is `widget`. **Object literals are not scopes.** An arrow written as a method therefore never binds to the object it is written in — and if there is no enclosing function at all (an object literal at a module's top level), the arrow captures the top-level `this`, which is `undefined` in a strict module. The right tools for object methods are the **shorthand method** (`print() {...}`) or a classic `function` — both get their `this` from the call site. Arrows belong *inside* methods (callbacks), in array-method lambdas, and as small pure helpers — the three places where lexical capture is exactly what you want."
+    },
+    {
+      "t": "h",
+      "text": "Defaults, rest, and the retirement of arguments"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Defaults fire ONLY for undefined — null is a deliberate value and passes through:\nfunction greet(name = 'guest', greeting = 'hello') {\n  return `${greeting}, ${name}`;\n}\nconsole.log(greet());                     // \"hello, guest\" — both defaults fired\nconsole.log(greet('Ada'));                // \"hello, Ada\"\nconsole.log(greet(null));                 // \"hello, null\" — null did NOT fire the default\nconsole.log(greet(undefined, 'welcome')); // \"welcome, guest\"\n\n// Rest: everything after the named parameters arrives as a REAL array:\nfunction summarize(prefix, ...skills) {\n  return `${prefix}: ${skills.length} — ${skills.map((s) => s.toUpperCase()).join(', ')}`;\n}\nconsole.log(summarize('stack', 'ts', 'js', 'sql')); // \"stack: 3 — TS, JS, SQL\"",
+      "caption": "null skips the default; rest parameters arrive as a genuine array with map, join, length",
+      "highlight": [
+        7,
+        13
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "function legacy() {\n  console.log(arguments.length);          // 2\n  console.log(typeof arguments.map);      // \"undefined\" — array-LIKE, not an array\n  console.log(Array.isArray(arguments));  // false\n  return Array.from(arguments).join('-'); // the classic conversion\n}\nconsole.log(legacy('a', 'b')); // \"a-b\"\n\n// Arrows have NO arguments of their own. Nested inside a regular function,\n// the name resolves to the ENCLOSING function's arguments object:\nfunction outer() {\n  const inner = () => arguments[0] + ' (borrowed from outer)';\n  return inner();\n}\nconsole.log(outer('shared')); // \"shared (borrowed from outer)\"",
+      "caption": "arguments: array-like, regular-function-only — and visible to nested arrows through the scope chain",
+      "highlight": [
+        12
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The `arguments` object is the original all-parameters container: array-*like* (indexed, with a `length`) but never a real array — hence the eternal `Array.from(arguments)` dance. It exists only in regular functions: an arrow has **no `arguments` of its own**, so inside one the name resolves through the scope chain to the nearest enclosing *regular* function's `arguments` — exactly what the nested demo shows — and at a module's top level it does not exist at all. That leak-through is quiet behavior, and it is why **rest parameters** are the modern answer: `(...skills)` is a true array, it works in arrows, and it documents itself in the signature."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Named function expression: the inner name is visible ONLY inside the function\nconst countdown = function tick(n) {\n  if (n === 0) return 'liftoff';\n  return tick(n - 1); // recursion that does not depend on the outer binding\n};\nconsole.log(countdown(3)); // \"liftoff\"\nconsole.log(typeof tick);  // \"undefined\" — the name never leaked (Lesson 1's safe probe)\n\n// Arrows have no inner name — they recurse through the VARIABLE, which only\n// works once the binding exists at call time:\nconst factorial = (n) => (n <= 1 ? 1 : n * factorial(n - 1));\nconsole.log(factorial(5)); // 120",
+      "caption": "A recursion aside: named function expressions give the function a private name; arrows borrow the binding"
+    },
+    {
+      "t": "table",
+      "headers": [
+        "",
+        "Declaration",
+        "Function expression",
+        "Arrow expression"
+      ],
+      "rows": [
+        [
+          "Hoisting",
+          "fully — callable from line one",
+          "`var` name only (undefined); `const`/`let` dead zone until its line",
+          "binding dead zone until its line"
+        ],
+        [
+          "`this`",
+          "from the call site",
+          "from the call site",
+          "lexical — the enclosing function's, no own this"
+        ],
+        [
+          "`arguments`",
+          "yes (array-like)",
+          "yes (array-like)",
+          "none of its own — sees the enclosing function's"
+        ],
+        [
+          "Usable with `new`",
+          "yes",
+          "yes",
+          "no — TypeError: not a constructor"
+        ],
+        [
+          "Best at",
+          "top-level helpers called from anywhere",
+          "callback-shaped values needing a name",
+          "callbacks inside methods, one-liners, pure helpers"
+        ]
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "What does the engine actually do before running my code? Explain hoisting without the word 'magic'.",
+      "a": "Before the first statement executes, the engine makes a pass over the scope and registers every declaration. Function declarations are registered whole — name and body — so calling one from anywhere in the scope works. var declarations register the name immediately, initialized to undefined, while the assignment waits for its original line — which is why reading one early gives undefined and calling one early throws 'not a function'. let and const register the binding but leave it uninitialized: from the top of the block to the declaration line is the temporal dead zone, and reading there throws ReferenceError — not because the variable is missing, but because it exists without a value yet. Function expressions inherit the policy of whatever declares them. So 'hoisting' is just registration with two initialization policies — immediate for declarations, deferred for var, deferred-and-guarded for let/const. Interviewers are listening for the TDZ framing: 'let is not hoisted' is the wrong answer; 'hoisted but uninitialized' is the right one."
+    },
+    {
+      "t": "interview",
+      "q": "A callback you pass to setTimeout or an event handler crashes or silently does nothing, and the team blames 'this being weird'. Walk me through the diagnosis and the fix.",
+      "a": "The diagnosis has two steps. First, confirm the callback is a regular function — then its this comes from whoever calls it, and for timer and event callbacks the host calls it with its own choice (the global object in browsers for setTimeout, the element for addEventListener). The method it was 'written inside' contributes nothing. Second, decide which this you actually wanted — usually the enclosing method's receiver. The modern fix is an arrow: it has no this of its own, so it captures the enclosing method's this at the moment the method runs, which is exactly the receiver. The pre-2015 fixes were var self = this (copy the receiver by hand) or fn.bind(obj) (pre-bind it) — both still appear in older code, and bind specifically is the tool when you are handed a function you did not write. The wrong fixes worth naming: making the method itself an arrow (an arrow method does not bind to its object — object literals are not scopes), and sprinkling bind everywhere when an inline arrow reads better. The discipline that prevents the whole class: methods stay shorthand functions; arrows live inside them as callbacks."
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 2 in six lines",
+      "items": [
+        "Declarations hoist whole and are callable from line one; var expressions hoist the name only (early call → TypeError); const/let expressions — including arrows — live in the temporal dead zone until their line (early call → ReferenceError)",
+        "Arrow bodies: a single expression returns itself; a block needs return — and () => { debug: true } returns undefined because the braces are a body and debug: is a label; wrap object literals in parentheses",
+        "A regular function's this comes from the call site: obj.fn() → obj, fn.call(x) → x, new fn() → the new object, plain fn() → undefined in strict mode",
+        "Arrows have no this of their own: they capture the enclosing function's this — which fixes lost-this callbacks but makes them wrong as object methods, because object literals are not scopes",
+        "Hosts invoke callbacks with their own this (the global object in browsers): setTimeout(function () { this.hits++ }) writes NaN onto the global while your counter stays at 0",
+        "Default parameters fire only for undefined — null passes straight through; rest parameters (...args) are real arrays and work in arrows, replacing the array-like, regular-function-only arguments object"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "Two disputes, one file. (1) Ravi wants to convert every function declaration in the codebase to a `const` arrow 'for consistency'; Jae says the build will break because the file calls helpers before their definitions. Settle it with evidence: the scaffold's call to `logBoot` works today — keep a runnable proof (try/catch, log the error's `name`) of what happens to an early call after such a conversion, then apply the conversion correctly so `boot from playground` still prints. (2) The same file carries a 2013 method that saves its receiver by hand (`var self = this`) before entering a timer callback — retire the workaround with an arrow while keeping the printed output identical: `button: DEPLOY`.",
+    "hints": [
+      "A function declaration is hoisted whole — name and body — so the scaffold's early call runs today. A `const` binding is only real from its own line down; above that it is temporal-dead-zone territory, and reading it throws a ReferenceError.",
+      "To keep the proof runnable, put the early call inside a try/catch and log e.name — the ReferenceError IS the evidence; the working const arrow then lives above the (moved) call.",
+      "Inside renderLater, delete `self` and use `this.text` directly in the arrow's callback — the arrow has no this of its own, so it borrows renderLater's this, and the call badge.renderLater() set that to badge."
+    ],
+    "solution": "// 1. Jae wins the dispute — kept as evidence, the failed early call:\ntry {\n  earlyLog('too soon'); // the binding below is still in its dead zone here\n  const earlyLog = (source) => 'boot from ' + source;\n} catch (e) {\n  console.log(e.name); // \"ReferenceError\"\n}\n\n// 2. The modern form: binding first, call after — order is now load-bearing\nconst logBoot = (source) => console.log('boot from ' + source);\nlogBoot('playground'); // \"boot from playground\"\n\n// 3. The 2013 self-trap, retired: the arrow has no this of its own,\n//    so it uses renderLater's this — which the call site sets to badge\nconst badge = {\n  text: 'DEPLOY',\n  renderLater() {\n    setTimeout(() => {\n      console.log('button: ' + this.text);\n    }, 0);\n  },\n};\nbadge.renderLater(); // \"button: DEPLOY\"",
+    "why": "The evidence settles both disputes mechanically. The early call's ReferenceError proves const arrows are dead-zone bindings, not hoisted functions — the call must move below the definition, which is why 'mechanical' refactors deserve review. And the arrow version needs no `self` because an arrow has no this of its own: it borrows renderLater's this, and `badge.renderLater()` set that to badge — the same lexical capture that fixes the lesson's timer bug, applied at the exact line where 2013 code needed a hand-copied variable.",
+    "code": "// Target output after your fix, in order:\n//   boot from playground\n//   button: DEPLOY\n// (plus the ReferenceError proof, wherever you keep it)\n\nlogBoot('playground'); // works today — but WHY? (and what after Ravi's refactor?)\n\nfunction logBoot(source) {\n  console.log('boot from ' + source);\n}\n\nconst badge = {\n  text: 'DEPLOY',\n  renderLater() {\n    var self = this; // 2013: save the receiver by hand\n    setTimeout(function () {\n      console.log('button: ' + self.text);\n    }, 0);\n  },\n};\nbadge.renderLater();",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Line 1 is console.log(plan('standup')); and function plan(meeting) {...} is defined on line 20. What happens when the file runs?",
+      "options": [
+        "ReferenceError — you cannot call a function before its declaration",
+        "It works: declarations are hoisted whole — name and body are registered before any line runs",
+        "It logs undefined — the name exists but the body is not attached yet",
+        "SyntaxError — the file refuses to run at all"
+      ],
+      "answer": 1,
+      "explain": "Function declarations are fully hoisted: the engine registers name and body in the pre-execution pass, so the call on line 1 finds a working function. Option 3 describes the var-expression policy (name hoisted as undefined — and calling undefined throws rather than logging), and option 1 describes const/let bindings in their temporal dead zone. Option 4 never happens for this code — it is legal syntax.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "const getConfigBroken = () => { debug: true }; — what does console.log(getConfigBroken()) print?",
+      "options": [
+        "{ debug: true } — the braces build the object",
+        "true — the lone property's value is returned",
+        "undefined — the braces are a function BODY and debug: parses as a label, so nothing is returned",
+        "SyntaxError — an arrow body cannot start with braces"
+      ],
+      "answer": 2,
+      "explain": "After =>, a brace opens a block body, not an object literal: debug: true inside it is a statement (a label named debug with the expression true), and a block without return yields undefined. The legal syntax for returning an object is parentheses: () => ({ debug: true }). Option 4 is the tempting one — it is perfectly valid syntax, which is exactly what makes the silent undefined dangerous in real code.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "widget.build() creates an object ui with an arrow method printArrow: () => 'arrow: ' + this.label, nested inside build. When ui.printArrow() runs, whose this does it use?",
+      "options": [
+        "ui — an arrow method binds to the object it is written in",
+        "widget — the arrow has no this of its own, so it uses the enclosing function build's this, which widget.build() set to widget",
+        "undefined — arrows always run with undefined this",
+        "globalThis — arrows always capture the global object"
+      ],
+      "answer": 1,
+      "explain": "Object literals are not scopes: the arrow's this comes from the enclosing FUNCTION (build), whose this was set to widget by the method call widget.build(). Option 1 is the intuition arrows violate — which is exactly why arrow methods are the wrong tool when you want the object itself. Options 3 and 4 invent fixed rules; an arrow's this is whatever the enclosing function's this happens to be, decided per call of that function.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Inside a method, startBroken() schedules setTimeout(function () { this.hits += 1; }, 0). In a browser, what is the visible result?",
+      "options": [
+        "The object's hits becomes 1 — the callback inherits the method's this",
+        "TypeError — callbacks are always called with undefined this",
+        "this is the global object: a NaN lands on it as a new global property, while the object's hits stays 0",
+        "The callback throws immediately when setTimeout is called, before any timer fires"
+      ],
+      "answer": 2,
+      "explain": "The host invokes timer callbacks with its own choice of this — the global object in browsers — never the object the callback was written inside. So this.hits reads undefined off the global, adds 1, and writes NaN onto it: a silent global write with no crash, while the real counter never moved. Option 2 is the strict-mode plain-call rule, but hosts choose the thisArg for their callbacks; the arrow version, which borrows the method's this, is the fix.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "function outer() { const inner = () => arguments[0]; return inner(); } — what does outer('shared') return, and why?",
+      "options": [
+        "'shared' — arrows have their own arguments object like any function",
+        "A ReferenceError — the identifier arguments never exists inside an arrow",
+        "'shared' — the arrow has no arguments of its own, so the name resolves through the scope chain to outer's arguments object",
+        "undefined — arguments exists but is always empty in arrow context"
+      ],
+      "answer": 2,
+      "explain": "Arrows have no arguments OF THEIR OWN — the rule is about creating the binding, not about hiding it. Inside the arrow, the identifier arguments resolves lexically like any variable: the nearest enclosing regular function (outer) owns one, so the arrow reads outer's arguments and returns 'shared'. Option 2 is the over-memorized version of the rule — it becomes true only when there is no enclosing regular function (at a module's top level, arguments does not exist at all). This leak-through is precisely why rest parameters exist.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Functions come in three grammars with different paperwork: declarations hoist whole (callable from line one); var expressions hoist the name only, initialized to undefined (early calls throw TypeError); const/let expressions sit in the temporal dead zone until their line (early calls throw ReferenceError) — so converting a declaration to a const arrow makes call order load-bearing. Arrows trade this, arguments and constructibility for the lightest syntax: an expression body returns implicitly (parenthesize object literals — bare braces are a block, and debug: is a label), and this comes lexically from the enclosing function, which fixes the classic lost-this callback and disqualifies arrows as object methods, because object literals are not scopes. Regular functions get this from the call site — method call, explicit call/bind, new, or undefined for plain calls in strict mode — while hosts call timer and event callbacks with their own this (the global object in browsers), which is how this.hits++ writes NaN onto the global. Default parameters fire only for undefined (null passes through), rest parameters replace the array-like, regular-function-only arguments object, and named function expressions give recursion a private name.",
+  "next": "There is a deeper reason the broken timer wrote NaN onto the global object while your counter stayed at zero, and it is the same reason a 'backup' object can fail to back anything up: objects are reference values, and assignment copies the reference, never the thing. Next lesson: the reference model — one object with many names, functions that edit their callers, === comparing identity instead of contents, and the copy strategies (spread's one level, structuredClone's true deep copy, the JSON round-trip's quiet losses) that keep shared state from becoming shared bugs."
+}

@@ -1,0 +1,259 @@
+{
+  "title": "Destructuring, Spread and Template Literals",
+  "slug": "04-destructuring-spread-templates",
+  "objective": "After this lesson you will be able to unpack objects and arrays with destructuring patterns (rename, defaults, nested, skip, rest), copy and merge with spread knowing its one-level depth and later-keys-wins order, and build strings with template literals instead of concatenation chains.",
+  "why": "This trio is the everyday grammar of modern codebases: React components pull props apart with destructuring, every state update is a spread merge, every log line and URL is a template literal — and API design in JavaScript converged on one destructured options object precisely because positional arguments stop reading at three parameters. The mechanics are small; the payoff is that data transforms become one declarative line instead of a mutate-and-hope paragraph. And the traps are real: defaults that skip null, copies that share their insides (Lesson 3's rule), merges whose winner flips with order — all covered here.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Destructuring: unpack where the data arrives"
+    },
+    {
+      "t": "p",
+      "text": "Most data arrives wrapped: a response object, a config object, a row from a table. Destructuring is the language's *unpack* operator — a pattern on the left of an `=` (or in a parameter list) that declares exactly which pieces you intend to use, by name. It replaces the three-line `const title = course.title; const hours = course.hours;` ritual with one line, self-documents what a function actually consumes, and — because it is a pattern — carries superpowers: renaming, defaults, and digging into nested shapes."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const course = { title: 'SQL Basics', hours: 12, level: 'beginner' };\n\nconst { title, hours } = course;                 // basic: pull properties out by name\nconst { level: difficulty } = course;            // rename: level's VALUE lands in `difficulty`\nconst { track: trackName = 'general' } = course; // rename + default: track is missing → 'general'\n\nconsole.log(title, '|', hours); // \"SQL Basics | 12\"\nconsole.log(difficulty);        // \"beginner\"\nconsole.log(trackName);         // \"general\" — defaults catch missing keys",
+      "caption": "Destructuring declares the shape you expect — missing keys become undefined, defaults catch them",
+      "highlight": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const lesson = { meta: { minutes: 20, xp: 80 } };\n\nconst { meta: { minutes, xp } } = lesson; // a nested pattern digs into meta in one step\nconsole.log(minutes, xp);                 // 20 80\n\n// Fine print: `meta` itself was a PATH, not a capture — no meta binding exists:\nconsole.log(typeof meta); // \"undefined\" — only the leaves got names",
+      "caption": "Nested patterns dig straight to the leaves — intermediate names are paths, not bindings",
+      "highlight": [
+        3,
+        7
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Three rules cover the fine print. **Defaults fire only for `undefined`** — a missing key, a hole in an array, an omitted argument. `null` is a deliberate, present value and sails straight through (`{ level = 'x' }` against `{ level: null }` gives you `null`) — the same rule, and the same API-consumer trap, as function defaults in Lesson 2. **Destructuring a null or undefined source throws** a `TypeError` — which is why parameter patterns pair with a `= {}` default, two blocks down. And in nested patterns, **intermediate names are paths** — `meta: { minutes }` reads `lesson.meta.minutes` without ever creating a `meta` binding."
+    },
+    {
+      "t": "h",
+      "text": "Array destructuring: position is the pattern"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const scores = [98, 75, 62, 40];\n\nconst [first, , third] = scores; // the hole skips index 1 — POSITION is the pattern\nconsole.log(first, third);       // 98 62\n\nconst [gold = 'nobody', silver = 'no one'] = ['Ada']; // defaults fire on missing slots\nconsole.log(gold, '|', silver);  // \"Ada | no one\"\n\nlet a = 1;\nlet b = 2;\n[a, b] = [b, a]; // the swap: the right side is built FIRST — [2, 1] — then assigned\nconsole.log(a, b); // 2 1",
+      "caption": "Holes skip, defaults fill, and the classic no-temp swap works because the right side is fully evaluated first",
+      "highlight": [
+        3,
+        11
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Arrays have no keys, so the pattern is positional: the *n*th binding receives the *n*th element, and a bare comma-pair (a *hole*) skips an index without binding it. The swap is the famous application: the right-hand side `[b, a]` is a brand-new array, fully built from the current values **before** any assignment happens, and then its elements are assigned left to right — which is why no temp variable is needed. One style note you will thank me for later: keep your semicolons — a line starting with `[` after a line without one gets parsed as a member access on the previous expression, and the resulting error will not point anywhere helpful."
+    },
+    {
+      "t": "h",
+      "text": "Destructuring in function parameters"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// The named-arguments pattern: one options object, destructured in the signature\nfunction renderCard({ title = 'Untitled', hours = 6, level = 'beginner' } = {}) {\n  return `${title} (${hours}h, ${level})`;\n}\n\nconsole.log(renderCard({ title: 'SQL Basics', hours: 0 })); // \"SQL Basics (0h, beginner)\" — 0 survives\nconsole.log(renderCard());                                  // \"Untitled (6h, beginner)\" — = {} caught the no-arg call\n\nfunction renderCardStrict({ title, hours }) { // WITHOUT the = {} default...\n  return `${title} (${hours}h)`;\n}\ntry {\n  renderCardStrict(); // destructuring undefined throws\n} catch (e) {\n  console.log(e.name); // \"TypeError\"\n}",
+      "caption": "The = {} default exists for exactly one caller: renderCard() with no argument at all",
+      "highlight": [
+        2,
+        14
+      ]
+    },
+    {
+      "t": "p",
+      "text": "This is the pattern that ended the positional-arguments era. A call like `renderCard({ title: 'SQL Basics', hours: 0 })` reads at the call site, survives new options being added (no more `fn(x, undefined, undefined, true)`), and is order-free. It also retires the 2013 idiom this lesson is here to bury: `options = options || {}; const hours = options.hours || 6;` — two bugs in two lines, because `||` fires on *every falsy value*, so `hours: 0` or `label: ''` is silently replaced by the default. Destructuring defaults fire only on `undefined` — real data survives. (The `||`-vs-`??` story gets the full treatment in Lesson 6.)"
+    },
+    {
+      "t": "h",
+      "text": "Rest vs spread: the same three dots, opposite directions"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// REST — in a PATTERN (left of = or in a parameter list): gathers many into one\nconst [head, ...tail] = [1, 2, 3, 4];\nconst { title, ...restProps } = { title: 'Deep Dive', hours: 8, level: 'advanced' };\nconsole.log(head, '|', tail.join(','));             // \"1 | 2,3,4\"\nconsole.log(title, '|', JSON.stringify(restProps)); // \"Deep Dive | {\"hours\":8,\"level\":\"advanced\"}\"\n\n// SPREAD — in a VALUE position (inside a literal or a call): scatters one into many\nconst merged = [...[1, 2], ...[3, 4]];\nconst config = { ...{ theme: 'dark' }, retries: 3 };\nconsole.log(merged.join(',')); // \"1,2,3,4\"\nconsole.log(config.theme, config.retries); // \"dark 3\"",
+      "caption": "Same three dots, opposite jobs: gather on the pattern side, scatter on the value side",
+      "highlight": [
+        2,
+        3,
+        7,
+        8
+      ]
+    },
+    {
+      "t": "diagram",
+      "caption": "Which direction do the dots point?",
+      "nodes": [
+        "You see ... in a destructuring pattern or a parameter list — the LEFT side of an =, or inside ( ) parameters",
+        "→ REST: gathers the leftover values into ONE new array or object",
+        "You see ... inside an array/object literal, a function call's arguments, or a tagged template",
+        "→ SPREAD: scatters ONE iterable's values out into the surrounding slots",
+        "One mnemonic: rest collects what is left; spread hands out what you have"
+      ]
+    },
+    {
+      "t": "h",
+      "text": "Spread for arrays: copy, merge, and borrow from iterables"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const a = [1, 2];\nconst b = [3, 4];\n\nconsole.log([...a, ...b].join(',')); // \"1,2,3,4\" — merge without concat\nconst copy = [...a];                  // a fresh array, same elements\ncopy.push(99);\nconsole.log(a.join(','), '|', copy.join(',')); // \"1,2 | 1,2,99\" — the original is untouched\n\nconsole.log([...'hot'].join('-'));    // \"h-o-t\" — spread reads ANY iterable, strings included",
+      "caption": "Spread merges arrays, copies them one level deep (Lesson 3's rule), and splits strings into characters",
+      "highlight": [
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "t": "h",
+      "text": "Spread for objects: merge with later-keys-wins order"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const defaults = { theme: 'dark', retries: 3, timeout: 5000 };\nconst overrides = { theme: 'light', timeout: 2000 };\n\nconst merged = { ...defaults, ...overrides };  // later keys win\nconst flipped = { ...overrides, ...defaults };  // order flipped → opposite winner\n\nconsole.log(merged.theme, merged.retries, merged.timeout); // \"light 3 2000\"\nconsole.log(flipped.theme, '|', merged.theme);             // \"dark | light\" — the LAST spread wins",
+      "caption": "A merge is copy + override, and the override direction is decided purely by order",
+      "highlight": [
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Each spread writes its properties in order, overwriting any same-named key it has already seen — so `{ ...defaults, ...overrides }` is the canonical defaults-then-user merge, and flipping the operands flips the winner for every shared key. You can exploit that on purpose: spread a literal LAST to force a value (`{ ...user, role: 'admin' }`) or FIRST to make it overridable. Two carry-overs from Lesson 3 apply to every spread, arrays included: the copy is **one level deep** (elements that are objects are shared with the original), and none of this is a deep copy — `structuredClone` remains the tool for full independence."
+    },
+    {
+      "t": "h",
+      "text": "Template literals: strings with expressions inside"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "const course = { title: 'SQL Basics', hours: 12 };\nconst learners = ['Ada', 'Grace'];\n\nconst banner = `${course.title}\n${learners.length} learners × ${course.hours}h\ntotal: ${learners.length * course.hours} learner-hours`;\n\nconsole.log(banner);\n// SQL Basics\n// 2 learners × 12h\n// total: 24 learner-hours\n\nconst label = `${course.title.toUpperCase()} — ${learners[0]} & ${learners[1]}`;\nconsole.log(label); // \"SQL BASICS — Ada & Grace\"",
+      "caption": "Backticks, ${} expressions, real newlines — the end of 'a + b + \"...\"' chains",
+      "highlight": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "let count = 0;\nconst label = `count: ${++count}`; // the expression runs NOW — when the literal is built\ncount = 99;                         // later changes do not rewrite finished templates\nconsole.log(label, '| count is now', count); // \"count: 1 | count is now 99\"",
+      "caption": "Template literals are evaluated eagerly, once, where they are written"
+    },
+    {
+      "t": "p",
+      "text": "Everything inside `${}` is an expression, evaluated **eagerly** at the moment the literal is built — arithmetic, method calls, even ternaries. That eagerness is the one behavior to internalize: a stored template is frozen text, and rebuilding it is how you refresh it (a label built before a mutation still shows the pre-mutation value, as the demo proves). Keep the expressions small and pure — a template that calls a function with side effects hides a call inside what looks like a string. Beyond interpolation, backtick strings hold **real newlines** (no `\\n` stitching), and a function can be *tagged* onto a template to receive the raw pieces — the machinery behind styled-components and safe SQL helpers; library territory, but now you know what you are looking at."
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 4 in six lines",
+      "items": [
+        "Object destructuring pulls by name with superpowers: `const { level: difficulty, track = 'general' } = course` renames with `:` and defaults on undefined — null passes through untouched",
+        "Nested patterns dig to the leaves; intermediate names are paths, not bindings — and destructuring a null/undefined source throws, which is why parameter patterns carry `= {}`",
+        "Array destructuring binds by position: holes skip elements (`[first, , third]`), defaults fill missing slots, and `[a, b] = [b, a]` swaps because the right side is fully built first",
+        "Destructured parameters are the named-arguments pattern — `({ title = 'x' } = {})` — and they retire `options = options || {}` plus its falsy-erasing `||` chains",
+        "Rest gathers leftovers into one new array/object (pattern side); spread scatters one iterable into many slots (value side) — same three dots, opposite directions",
+        "Object spread merges with later-keys-wins (`{ ...defaults, ...user }`), copies exactly one level (Lesson 3), and template literals interpolate expressions eagerly at build time with real multi-line output"
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "How do you design a function that takes a lot of optional configuration — and what are the honest trade-offs of the options-object pattern?",
+      "a": "The pattern is one object parameter, destructured in the signature with defaults: `function search({ query, page = 1, pageSize = 20, sort = 'relevance' } = {})`. What it buys: call sites become self-documenting and order-independent — `search({ pageSize: 50, query: 'ts' })` reads, and new options can be added without touching existing callers, which positional arguments can never offer past three parameters. The costs, honestly: the signature stops advertising required values at the call site (TypeScript fixes exactly this), a forgotten `= {}` makes the zero-argument call throw a TypeError while destructuring undefined, and defaults fire only for undefined — a caller passing null deliberately skips them. The pre-ES2015 idiom it replaces — `options = options || {}; const page = options.page || 1` — has the same shape but an extra bug: `||` fires on every falsy value, so `page: 0` or `label: ''` silently becomes the default, where destructuring defaults treat them as real data. My rule of thumb: more than two parameters, or any optionality, and the object wins; positional stays for tight pairs like (x, y) or (key, value)."
+    }
+  ],
+  "exercise": {
+    "prompt": "Modernize a 2013 helper without changing what it means. `makeLabel` below defaults its options with `||` chains and builds its string with `+` — and it carries one silent bug: `makeLabel({ hours: 0 })` erases the 0. Rewrite it with parameter destructuring and defaults plus a template literal, so the same three calls print `Untitled (6h, beginner)`, `SQL Basics (6h, beginner)` and — the fix — `Untitled (0h, beginner)`. Then add the two tools a modern options function deserves: `mergeConfig(base, overrides)` returning a merged object where overrides win (mutating neither input), and `report(config)` returning a two-line template literal.",
+    "hints": [
+      "Move the defaults into the signature: `function makeLabel({ title = COURSE_DEFAULTS.title, hours = COURSE_DEFAULTS.hours, level = COURSE_DEFAULTS.level } = {})` — destructuring defaults fire only on undefined, which is exactly why `hours: 0` will survive.",
+      "The body becomes one template literal: `` `${title} (${hours}h, ${level})` `` — no `+` chains, no spacing surprises.",
+      "`mergeConfig` is one expression — `{ ...base, ...overrides }` — later spreads win and neither input is touched. `report` destructures `{ title, hours, level }` and uses a real newline inside the backticks."
+    ],
+    "solution": "const COURSE_DEFAULTS = { title: 'Untitled', hours: 6, level: 'beginner' };\n\nfunction makeLabel({ title = COURSE_DEFAULTS.title, hours = COURSE_DEFAULTS.hours, level = COURSE_DEFAULTS.level } = {}) {\n  return `${title} (${hours}h, ${level})`;\n}\n\nconsole.log(makeLabel());                        // Untitled (6h, beginner)\nconsole.log(makeLabel({ title: 'SQL Basics' })); // SQL Basics (6h, beginner)\nconsole.log(makeLabel({ hours: 0 }));            // Untitled (0h, beginner) — 0 survives!\n\n// mergeConfig: overrides win, neither input is mutated\nfunction mergeConfig(base, overrides) {\n  return { ...base, ...overrides };\n}\nconst base = { theme: 'dark', retries: 3 };\nconst config = mergeConfig(base, { retries: 5 });\nconsole.log(config.retries, '|', base.retries); // \"5 | 3\" — merged won, original kept\n\n// report: a two-line template literal, parameters destructured\nfunction report({ title, hours, level }) {\n  return `${title}\n${hours}h · ${level} level`;\n}\nconsole.log(report({ title: 'SQL Basics', hours: 12, level: 'beginner' }));\n// SQL Basics\n// 12h · beginner level",
+    "why": "The rewrite is a behavior fix disguised as a syntax upgrade. Destructuring defaults fire only when a key is undefined, so `hours: 0` — a real, present value — finally survives where `options.hours || 6` erased it, and the `= {}` default absorbs the zero-argument call that would otherwise throw while destructuring undefined. `mergeConfig` exploits later-keys-wins: each spread overwrites matching keys from earlier ones, so overrides legitimately win while both inputs stay untouched (the printed `base.retries` proves it). And `report` shows the two template-literal superpowers at once — `${}` interpolation with destructured names, and real newlines, which is why one literal prints two lines.",
+    "code": "const COURSE_DEFAULTS = { title: 'Untitled', hours: 6, level: 'beginner' };\n\nfunction makeLabel(options) {\n  options = options || {}; // 2013: default the whole object\n  const title = options.title || COURSE_DEFAULTS.title;\n  const hours = options.hours || COURSE_DEFAULTS.hours; // ← || erases hours: 0\n  const level = options.level || COURSE_DEFAULTS.level;\n  return title + ' (' + hours + 'h, ' + level + ')';\n}\n\nconsole.log(makeLabel());                        // Untitled (6h, beginner)\nconsole.log(makeLabel({ title: 'SQL Basics' })); // SQL Basics (6h, beginner)\nconsole.log(makeLabel({ hours: 0 }));            // ← the silent bug: predict first, then fix",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "const { n: name } = { n: 'Ada' }; — after this line, what exists?",
+      "options": [
+        "Both name and n, each holding 'Ada'",
+        "Only name — 'Ada'; n was just a path into the source object, and no n binding is created",
+        "Only n — 'Ada'; name is the path",
+        "A SyntaxError — you cannot rename while destructuring"
+      ],
+      "answer": 1,
+      "explain": "In `{ n: name }`, the left side of each colon is the KEY to read and the right side is the NEW binding: the value of n lands in name, and n itself is never a variable — checking `typeof n` gives \"undefined\" (the undeclared probe from Lesson 1). Renaming exists precisely because the source key may be a poor variable name (level → difficulty) or collide with an existing binding. Option 3 reverses the direction, and option 4 invents a restriction — renaming is core syntax.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "const [first, , third] = [98, 75, 62, 40]; — what are first and third?",
+      "options": [
+        "first is 98, third is 75 — bindings fill sequentially regardless of holes",
+        "first is 98, third is 62 — the bare comma (a hole) skips index 1 without binding it",
+        "first is 98, third is undefined — the pattern stops at the hole",
+        "SyntaxError — array patterns cannot contain empty slots"
+      ],
+      "answer": 1,
+      "explain": "Array patterns bind by position, and a hole advances the position counter without creating a binding: first takes index 0 (98), the hole skips index 1 (75), third takes index 2 (62). Option 1 forgets that holes advance the cursor; option 3 invents a short-circuit — the pattern happily continues past holes; and holes in patterns are standard syntax, so option 4 is wrong. Holes are how you grab the pieces you want from positional data like CSV rows or destructured `split()` output.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "const { title, ...rest } = { title: 'Deep Dive', hours: 8, level: 'advanced' }; — what is rest?",
+      "options": [
+        "An array of the remaining values: [8, 'advanced']",
+        "A new object holding every other own enumerable property: { hours: 8, level: 'advanced' }",
+        "The same object minus its title — rest IS the original, mutated",
+        "undefined — rest only works in array patterns"
+      ],
+      "answer": 1,
+      "explain": "Object rest collects every own enumerable property not matched by an earlier pattern name into a FRESH object — keys and values included: { hours: 8, level: 'advanced' }. It is a copy, not a mutation (option 3), it is an object because the source is an object (option 1 is the ARRAY form's behavior), and it works in both pattern kinds (option 4). Together with spread it powers the omit-one-key idiom: `const { internal, ...public } = config;`.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "const merged = { ...defaults, ...user }; — both objects have a theme key. Whose theme is in merged, and why?",
+      "options": [
+        "defaults' — the first spread claims the keys",
+        "user's — each spread writes in order, and a later spread overwrites same-named keys from earlier ones",
+        "Both, as an array: [defaultsTheme, userTheme]",
+        "It depends on which value is truthy"
+      ],
+      "answer": 1,
+      "explain": "Object spread applies properties sequentially: defaults' keys are written first, then user's keys overwrite every matching name — so user's theme wins purely by position. Flip the order ({ ...user, ...defaults }) and defaults wins; that is the whole later-keys-wins rule, and it is why the canonical merge puts defaults FIRST and user input LAST. Option 4 invents truthiness logic — order decides, never the values; and option 3 is not a thing JavaScript does.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why does the parameter pattern in function render({ title } = {}) carry the = {} default?",
+      "options": [
+        "It converts undefined property values to null",
+        "Without it, the call render() would throw a TypeError while trying to destructure undefined — the = {} hands the pattern an empty object to read from",
+        "It makes the function immune to extra properties in the options object",
+        "It is required syntax — destructured parameters cannot appear without a default"
+      ],
+      "answer": 1,
+      "explain": "Destructuring a null or undefined SOURCE throws a TypeError — the pattern needs an object to read from. render() passes no argument, so the parameter is undefined; the = {} default substitutes an empty object, from which title simply reads as undefined (and its own = default, if any, fires). Option 2 is the exact mechanism, option 4 is false (the default is optional — it just changes which calls work), and option 3 confuses this with rest patterns collecting leftovers.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Destructuring unpacks by pattern: objects by key — with `rename:` aliases, `= default`s that fire only on undefined, and nested paths whose intermediate names are not bindings; arrays by position — with holes to skip, defaults for missing slots, and the swap `[a, b] = [b, a]` that works because the right side is fully built first. Function signatures destructure their options object — `({ title = 'x' } = {})` — the named-arguments pattern that retired `options = options || {}` and its falsy-erasing `||` chains. The same three dots point in opposite directions: rest gathers leftovers into a new array/object on the pattern side; spread scatters an iterable's values into literals and calls on the value side — merging with later-keys-wins, copying exactly one level (Lesson 3's rule, arrays included). Template literals interpolate expressions eagerly at build time and hold real newlines; concatenation chains are retired.",
+  "next": "Your value toolkit is nearly complete — but data arrives in lists, and list processing has its own grammar. Next lesson: the array methods that replaced the manual for-loop — map to transform, filter to select, reduce to collapse — plus the method that mutates its caller (sort), the one that compares strings when you meant numbers, and the pipeline habits that keep a five-stage data transform readable and debuggable."
+}

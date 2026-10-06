@@ -1,0 +1,281 @@
+{
+  "title": "Errors, try / catch and JSON Without Surprises",
+  "slug": "07-errors-try-catch-json",
+  "objective": "After this lesson you will be able to throw real Error objects instead of strings, predict exactly what try / catch / finally will run (corners included), and guard JSON.parse at the boundary with the safeParse pattern — knowing precisely which values survive JSON.stringify and which get dropped, nulled or thrown.",
+  "why": "In production, most data does not arrive the way your code hopes: APIs return error pages instead of JSON, localStorage gets truncated, a teammate hand-edits a config and types single quotes. An unguarded JSON.parse turns any of those into a blank screen with a stack trace in the console — the failure your users see first and you see last. This lesson makes failure explicit and local: one guarded place where text becomes data, and a precise inventory of what JSON does to your values in transit.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Errors are values: the engine throws, and so can you"
+    },
+    {
+      "t": "p",
+      "text": "Lesson 6's nullish toolkit handles *absence* — a field that is null or undefined. Errors handle a different problem: data that is actively *wrong*, and operations that cannot proceed. JavaScript expresses that as a **thrown value** — execution stops and unwinds out through the calling code until a `catch` takes over. The engine throws on its own when you break its rules, and the same bad input can fail loudly or silently, which is the first thing to internalize: `Number('http')` quietly produces `NaN` — a poisoned value that surfaces far from its origin — while `JSON.parse('http')` throws immediately, at the scene of the crime. Loud failures are a gift: they point. Here is the engine's own greatest-hits collection, every one a runtime error you will eventually ship:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "Four engine-thrown runtime errors — catch hands you the Error object for inspection",
+      "code": "try { null.prefs; } catch (e) { console.log(e.name); }       // \"TypeError\" — reading a property of null\ntry { (5)(); } catch (e) { console.log(e.name); }            // \"TypeError\" — calling a non-function\ntry { missingBinding; } catch (e) { console.log(e.name); }   // \"ReferenceError\" — no such variable in scope\ntry { 'na'.repeat(-1); } catch (e) { console.log(e.name); }  // \"RangeError\" — argument outside the legal range"
+    },
+    {
+      "t": "p",
+      "text": "Whatever is thrown arrives in `catch (e)` as an **Error object** with three useful properties: `name` (the constructor — TypeError, SyntaxError…), `message` (the human-readable text) and `stack` (the call path at throw time, newest frame first — read it top-down to find *your* code, then the engine's). Message text varies between engines — V8 says `Cannot read properties of null (reading 'prefs')` while JavaScriptCore says `null is not an object (evaluating 'null.prefs')` — but the *names* are stable everywhere, which is why the snippets in this lesson log `e.name`: it is the part you can trust and branch on."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Error name",
+        "Thrown when",
+        "Triggers you have already met"
+      ],
+      "rows": [
+        [
+          "`TypeError`",
+          "a value is the wrong type for the operation",
+          "reading properties of null/undefined, calling a non-function, assigning to a const binding (Lesson 1)"
+        ],
+        [
+          "`ReferenceError`",
+          "a name cannot be found in any scope",
+          "reading an undeclared variable — or one still in its temporal dead zone (Lesson 1)"
+        ],
+        [
+          "`SyntaxError`",
+          "source or input text breaks the grammar",
+          "a typo the parser rejects — and every invalid JSON string you will ever parse"
+        ],
+        [
+          "`RangeError`",
+          "a numeric argument is outside the legal range",
+          "`'na'.repeat(-1)`, `new Array(-1)`, `(1).toFixed(101)`"
+        ]
+      ]
+    },
+    {
+      "t": "h",
+      "text": "throw Error objects — never strings"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "A thrown string works — until the first catch tries to inspect it. Error objects carry name, message and stack",
+      "code": "// What ships by accident all over the industry:\ntry {\n  throw 'invalid port';            // a raw string\n} catch (e) {\n  console.log(e instanceof Error); // false\n  console.log(e.name);             // undefined — no name, no message, no stack\n}\n\n// What the engine itself throws — and what you should:\nfunction setPort(value) {\n  const port = Number(value);\n  if (Number.isNaN(port)) {\n    throw new TypeError('port must be a number, got ' + typeof value);\n  }\n  if (port < 0 || port > 65535) {\n    throw new RangeError('port out of range: ' + port);\n  }\n  return port;\n}\n\ntry { setPort('http'); } catch (e) { console.log(e.name + ': ' + e.message); }\n// \"TypeError: port must be a number, got string\"\ntry { setPort(99999); } catch (e) { console.log(e.name + ': ' + e.message); }\n// \"RangeError: port out of range: 99999\""
+    },
+    {
+      "t": "p",
+      "text": "The rule: **`throw new Error(...)` — or a specific subclass — never a bare string or object literal.** Error objects are what every engine, logger and crash reporter knows how to display: `instanceof Error` checks work, stacks survive, and monitoring tools can group crashes by name. Pick the constructor that states what went wrong: `Error` for generic failures, `TypeError` when a value's type violates the contract (Lesson 1's type model, now with consequences), `RangeError` when a number is outside the allowed range. `SyntaxError` is the engine's own for grammar crimes — you will rarely throw it yourself, but `JSON.parse` throws it constantly, as you are about to see."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "Wrap, don't discard: { cause } keeps the original error chained (ES2022); catch { } skips a binding you don't need (ES2019)",
+      "code": "function loadSettings(raw) {\n  try {\n    return JSON.parse(raw);\n  } catch (e) {\n    // ES2022: attach the original error so the trail survives the re-throw\n    throw new Error('settings could not be parsed', { cause: e });\n  }\n}\n\ntry {\n  loadSettings(\"{'port': 8080}\"); // single quotes — you know by now\n} catch (e) {\n  console.log(e.message);        // \"settings could not be parsed\"\n  console.log(e.cause.name);     // \"SyntaxError\" — the original is still attached\n}\n\n// ES2019: no use for the caught value? Skip the binding entirely:\ntry { JSON.parse('nope'); } catch {\n  console.log('rejected malformed input');\n}"
+    },
+    {
+      "t": "h",
+      "text": "try / catch / finally — the whole trio"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "finally runs on success, on throw and on return — the return value waits politely until it finishes",
+      "code": "function readFile(path) {\n  console.log('opening ' + path);\n  try {\n    if (path === 'missing.json') throw new Error('not found');\n    return 'contents of ' + path;\n  } catch (e) {\n    console.log('caught: ' + e.message);\n    return 'fallback contents';\n  } finally {\n    console.log('finally: closing the file — runs NO MATTER WHAT');\n  }\n}\n\nconsole.log(readFile('config.json'));\n// opening config.json\n// finally: closing the file — runs NO MATTER WHAT\n// contents of config.json\n\nconsole.log(readFile('missing.json'));\n// opening missing.json\n// caught: not found\n// finally: closing the file — runs NO MATTER WHAT\n// fallback contents"
+    },
+    {
+      "t": "p",
+      "text": "The precise contract: `catch` handles only **synchronous** throws raised while its `try` block is running — a throw inside a `setTimeout` callback escapes it entirely, because by the time the callback runs, the try/catch has long finished. `finally` runs when control leaves the try/catch by *any* door: normal completion, throw, even `return` — the value sits in a holding cell while finally runs. That last fact is also the classic footgun: a `return` written *inside* `finally` replaces the outcome entirely — `try { return 'a' } finally { return 'b' }` returns `'b'` — so finally is for cleanup, never for producing values. And the production sin linters hunt for a reason: the **empty catch** — `catch (e) {}` — which converts a loud, locatable failure into silent nothing."
+    },
+    {
+      "t": "h",
+      "text": "JSON.stringify: five silent surprises and one loud failure"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "One object, every silent surprise: dropped values, a Date-turned-string, nulls — plus the circular TypeError at the end",
+      "code": "const user = {\n  id: 7,\n  nickname: undefined,    // dropped — JSON has no undefined\n  save: () => 'saved',    // dropped — JSON has no functions\n  badge: Symbol('gold'),  // dropped — JSON has no symbols\n  lastSeen: new Date(0),  // serialized via toISOString()\n  score: NaN,             // becomes null\n  streak: Infinity,       // becomes null\n};\nconsole.log(JSON.stringify(user));\n// {\"id\":7,\"lastSeen\":\"1970-01-01T00:00:00.000Z\",\"score\":null,\"streak\":null}\n\n// Arrays follow a stricter rule: missing things become null, not dropped\nconsole.log(JSON.stringify([1, undefined, 2]));  // [1,null,2]\nconsole.log(JSON.stringify([() => 1, 'a']));     // [null,\"a\"]\n\n// The loud failure — a circular reference throws:\nconst node = { name: 'root' };\nnode.self = node;\ntry { JSON.stringify(node); } catch (e) { console.log(e.name); }  // \"TypeError\"\n// V8: \"Converting circular structure to JSON\" · JavaScriptCore words it differently"
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Value you stringify",
+        "JSON output",
+        "Why"
+      ],
+      "rows": [
+        [
+          "property whose value is `undefined`",
+          "the property vanishes",
+          "JSON's grammar has no undefined — omission is stringify's chosen policy"
+        ],
+        [
+          "function or `Symbol` value",
+          "the property vanishes",
+          "JSON carries data, never behavior or unique keys"
+        ],
+        [
+          "`Date`",
+          "ISO 8601 string, e.g. `\"1970-01-01T00:00:00.000Z\"`",
+          "Date's toJSON returns toISOString()"
+        ],
+        [
+          "`NaN`, `Infinity`, `-Infinity`",
+          "`null`",
+          "JSON numbers are finite by definition — the spec maps non-finite to null"
+        ],
+        [
+          "`undefined` or a hole inside an array",
+          "`null` in that slot",
+          "an array position cannot vanish without shifting the rest — JSON has no sparse arrays"
+        ],
+        [
+          "circular reference",
+          "throws `TypeError`",
+          "a cycle has no finite text form — stringify refuses"
+        ]
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The asymmetry to burn in: **in objects, un-serializable values are dropped; in arrays they become `null`** — an array slot cannot vanish without shifting every element after it. All five surprises are silent data changes, not errors — `JSON.stringify` throws only on cycles. The round-trip consequence is what bites real code: `JSON.parse(JSON.stringify(user))` comes back with `nickname` missing (reading it yields `undefined`, exactly Lesson 6's territory) and `lastSeen` as a *string* — `typeof copy.lastSeen` is `\"string\"`, because nothing revives a Date from its ISO text. That is why a JSON round-trip is a **lossy copy**: fine for JSON-safe data — Lesson 3 used it exactly that way — and wrong the moment Dates, Maps or functions are involved. `structuredClone` (Lesson 3) is the tool that copies those for real; this lesson just files the reminder."
+    },
+    {
+      "t": "h",
+      "text": "JSON.parse: strict grammar, zero forgiveness"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "Three strings that are legal JavaScript object literals — and fatal JSON. All three log SyntaxError",
+      "code": "console.log(JSON.parse('{\"dev\": true}'));   // { dev: true } — the valid case\n\n// Every one of these throws SyntaxError — the tiniest mistake is fatal:\nconst broken = [\n  \"{'dev': true}\",    // single quotes — the classic API bug\n  '{\"dev\": true,}',   // trailing comma — legal in JS literals, illegal in JSON\n  '{dev: true}',      // unquoted key — legal in JS, illegal in JSON\n];\nfor (const text of broken) {\n  try { JSON.parse(text); } catch (e) { console.log(e.name); }\n}"
+    },
+    {
+      "t": "p",
+      "text": "JSON refuses to guess because it is a **data interchange grammar**, not JavaScript: the entire point is that every parser on every platform agrees on the text, so there is no room for 'probably meant double quotes'. (JS object literals are the lenient sibling — your muscle memory says trailing commas and bare keys are fine, and JSON disagrees.) The practical rule that follows is this lesson's headline: **parse at the boundary, and only there**. Text you did not build yourself — an API response body, a localStorage value, a config file — enters your program at exactly one place; put the guarded `JSON.parse` at that gate, and everything downstream gets to assume it worked. And parse-success is *not* validation: `'{\"port\": \"http\"}'` is perfectly valid JSON whose data is nonsense. After the guarded parse you still check types and shapes with the Lesson 1 and Lesson 6 toolkit — JSON checks the grammar; checking the meaning is your job."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "safeParse: an expected failure is data, not an exception — the try/catch lives in exactly one place",
+      "code": "function safeParse(text) {\n  try {\n    return { ok: true, value: JSON.parse(text) };\n  } catch (e) {\n    return { ok: false, error: e.message };\n  }\n}\n\n// The failure is now a VALUE your code can branch on — no crash:\nconst result = safeParse(\"{'dev': true}\");\nconsole.log(result.ok);     // false\nconsole.log(result.error);  // the SyntaxError's message — wording depends on the engine\n\n// The success path still carries the parsed data:\nconst fine = safeParse('{\"dev\": true}');\nconsole.log(fine.ok, fine.value.dev);  // true true"
+    },
+    {
+      "t": "p",
+      "text": "Why a result object instead of a nicer throw? Because dirty input is an **expected** outcome — it happens in normal operation, and expected outcomes should be ordinary values a caller branches on, not exceptional crashes the caller must remember to wrap. The division of labor used across production codebases: expected failures (malformed input, missing file) become return values; unexpected ones (bugs, broken invariants) stay throws — loud on purpose, because a bug you silence is a bug you ship. The capstone project's first stage is exactly this pattern: a guarded parse whose failure path prints one line and stops the pipeline gracefully."
+    },
+    {
+      "t": "diagram",
+      "caption": "The boundary: where text becomes data — and the two gates it must pass",
+      "nodes": [
+        "Raw text arrives — API response body, localStorage value, a file",
+        "safeParse(text): try { JSON.parse(text) } catch — the guarded gate",
+        "ok: false → the failure is data: log it, show a friendly message, stop",
+        "ok: true → you have a value, but zero guarantees about its shape",
+        "Validate: typeof checks, required fields, Array.isArray",
+        "Only now does the data flow into the rest of the program"
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Guard the parse — predict the crash first",
+      "query": "// 1) The classic crash, caught by hand — name + message:\ntry {\n  JSON.parse(\"{'dev': true}\"); // single quotes — invalid JSON\n} catch (e) {\n  console.log('1) caught ' + e.name + ' — ' + e.message);\n}\n\n// 2) The same call on valid JSON — an object comes back:\nconst parsed = JSON.parse('{\"dev\": true, \"level\": 2}');\nconsole.log('2) parsed: ' + parsed.dev + ' ' + parsed.level);\n\n// 3) The guard you will actually ship:\nfunction safeParse(text) {\n  try {\n    return { ok: true, value: JSON.parse(text) };\n  } catch (e) {\n    return { ok: false, error: e.message };\n  }\n}\n\nconsole.log('3) bad  → ' + JSON.stringify(safeParse(\"{'dev': true}\")));\nconsole.log('4) good → ' + JSON.stringify(safeParse('{\"dev\": true, \"level\": 2}')));",
+      "note": "Predict before running: only the single-quoted string throws — JSON demands double quotes. Expected output: 1) caught SyntaxError — <your engine's wording: V8 points at the position, JavaScriptCore names the offending character>; 2) parsed: true 2; 3) bad → {\"ok\":false,\"error\":\"…the same message as line 1…\"}; 4) good → {\"ok\":true,\"value\":{\"dev\":true,\"level\":2}}. The error NAME is SyntaxError on every engine — the message text is the engine's choice. Notice what line 3 proves: the crash from line 1 has become a value your code can branch on."
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 7 in five lines",
+      "items": [
+        "Throw Error objects — new Error, new TypeError, new RangeError — never bare strings: catch sites, loggers and crash reporters need name, message and stack",
+        "try/catch/finally is synchronous: catch handles throws raised while try runs; finally runs on every exit path — success, throw, even return — and a return inside finally swallows the real outcome",
+        "JSON.stringify silently drops undefined properties, functions and symbols, turns Dates into ISO strings and NaN/Infinity into null (arrays get null slots instead of drops); only circular structures throw",
+        "JSON.parse throws SyntaxError on any grammar violation — single quotes, trailing commas, unquoted keys are all fatal even though JS object literals allow them",
+        "Parse at the boundary: safeParse turns an expected failure into { ok: false, error } data — and validation of shape and types still happens after, because grammar success is not correctness"
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "In code review you see throw 'invalid port'. Why is that worth blocking, and what replaces it?",
+      "a": "The thrown string arrives in catch as a plain string: no name to branch on, no message contract, no stack trace — the single most valuable debugging artifact — and instanceof Error fails, so error-handling middleware and crash reporters cannot classify the failure. It ships anyway because it *works* until the first time someone needs to inspect the error, which is exactly when it costs the most. The replacement is a constructor that states the failure's class: new TypeError('port must be a number') for type-contract violations, new RangeError for out-of-range numbers, new Error for the generic case — and when wrapping a lower-level failure, ES2022's { cause } option: throw new Error('settings invalid', { cause: original }) keeps the whole chain inspectable. The closing line that lands: errors are part of your API surface, and a string is an error with no interface."
+    }
+  ],
+  "exercise": {
+    "prompt": "A teammate shipped loadConfig(raw) for reading saved settings — it calls JSON.parse directly and trusts whatever comes back. Three real inputs break it in three different ways: a single-quoted string (throws), a payload that parses to an array (wrong shape), and an object with no port (missing field). Rewrite it as a boundary function that never throws: return { ok: true, config } only when the text parses to a plain object with a numeric port; every other outcome returns { ok: false, error } naming the problem. Verify all four calls in the test loop behave.",
+    "hints": [
+      "Wrap only the JSON.parse call in try/catch and return from the catch — the rest of the function then assumes parsed exists. The return shape is this lesson's pattern: { ok: false, error } instead of a throw.",
+      "A successful parse can still be the wrong shape: JSON.parse('[8080]') is legal and returns an array. A plain-object check must reject null and arrays too: typeof parsed === 'object' covers both — add parsed !== null && !Array.isArray(parsed).",
+      "The final gate is the field itself: typeof parsed.port === 'number' filters out a missing port (undefined) and a string port ('8080') in one test. Only after all three gates pass do you return { ok: true, config: parsed }."
+    ],
+    "solution": "function loadConfig(raw) {\n  let parsed;\n  try {\n    parsed = JSON.parse(raw);\n  } catch (e) {\n    return { ok: false, error: 'not valid JSON: ' + e.message };\n  }\n  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {\n    return { ok: false, error: 'expected an object' };\n  }\n  if (typeof parsed.port !== 'number') {\n    return { ok: false, error: 'missing or non-numeric field: port' };\n  }\n  return { ok: true, config: parsed };\n}\n\nconst inputs = [\n  ['valid',   '{\"port\": 8080, \"host\": \"localhost\"}'],\n  ['broken',  \"{'port': 8080}\"],\n  ['not-obj', '[8080, 9090]'],\n  ['no-port', '{\"host\": \"localhost\"}'],\n];\nfor (const [name, raw] of inputs) {\n  console.log(name + ' -> ' + JSON.stringify(loadConfig(raw)));\n}\n// valid   -> {\"ok\":true,\"config\":{\"port\":8080,\"host\":\"localhost\"}}\n// broken  -> {\"ok\":false,\"error\":\"not valid JSON: …message varies by engine…\"}\n// not-obj -> {\"ok\":false,\"error\":\"expected an object\"}\n// no-port -> {\"ok\":false,\"error\":\"missing or non-numeric field: port\"}",
+    "why": "Three gates in order — grammar, shape, field type — is exactly how production boundary code works. The unguarded version crashes on the second input and would happily hand back an array as a 'config' on the third, so every caller fails far away from the cause; with the gates, every failure is a labeled result the caller can branch on. One typeof check covers both a missing port (undefined) and a string port ('8080'), because JSON never produces NaN — a numeric-looking string like \"8080\" parses to a string, and typeof catches it before coercion can hide it. And the try/catch sits in exactly one place: the boundary, where text becomes data.",
+    "code": "// Run me first — watch the second call crash. That crash is the bug.\nfunction loadConfig(raw) {\n  const config = JSON.parse(raw); // ← unguarded: throws on malformed input\n  return { ok: true, config };    // ← unvalidated: any parsed shape passes\n}\n\nconst inputs = [\n  ['valid',   '{\"port\": 8080, \"host\": \"localhost\"}'],\n  ['broken',  \"{'port': 8080}\"],\n  ['not-obj', '[8080, 9090]'],\n  ['no-port', '{\"host\": \"localhost\"}'],\n];\n\nfor (const [name, raw] of inputs) {\n  console.log(name + ' -> ' + loadConfig(raw));\n}\n// TODO 1: guard the parse — on failure return { ok: false, error: 'not valid JSON: …' }\n// TODO 2: reject anything that is not a plain object (arrays, strings, null)\n// TODO 3: require a numeric port before returning { ok: true, config }",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "try { throw 'invalid input'; } catch (e) { console.log(typeof e, e.name); } — what prints?",
+      "options": [
+        "\"object Error\" — the engine wraps thrown strings in an Error automatically",
+        "\"string undefined\" — the catch receives the raw string, which has no name, message or stack",
+        "\"string SyntaxError\" — thrown strings are classified at the catch site",
+        "\"object undefined\" — the engine boxes the string but loses the name"
+      ],
+      "answer": 1,
+      "explain": "catch receives exactly what was thrown, no wrapping involved — a string stays a string, so e.name is undefined and instanceof Error is false. That is why monitoring tools and e.stack-based debugging both silently degrade on thrown strings. The fix is to throw new Error / new TypeError / new RangeError, which carry name, message and stack by construction.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "function f() { try { return 'from try'; } finally { console.log('cleanup'); } } — what happens when f() runs?",
+      "options": [
+        "Nothing prints — the return skips finally entirely",
+        "'cleanup' prints and f() returns undefined — finally voids the return",
+        "'cleanup' prints, then f() returns 'from try' — finally runs on every exit path, including return",
+        "SyntaxError — finally cannot follow a try block that returns"
+      ],
+      "answer": 2,
+      "explain": "finally runs whenever control leaves the try/catch — normal completion, a throw, or a return. The return value waits in a holding cell while finally executes, then the function completes with it. The corner to add in an interview: a return written INSIDE finally replaces the outcome (try { return 'a' } finally { return 'b' } yields 'b') — which is why finally is for cleanup, never for producing values.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "console.log(JSON.stringify({ score: NaN, streak: Infinity })) prints exactly what?",
+      "options": [
+        "{\"score\":null,\"streak\":null} — JSON's number grammar is finite-only, so non-finite numbers map to null",
+        "{\"score\":NaN,\"streak\":Infinity} — the values survive as-is",
+        "{\"score\":0,\"streak\":0} — non-finite numbers default to zero",
+        "It throws a TypeError — NaN cannot be serialized"
+      ],
+      "answer": 0,
+      "explain": "JSON numbers are finite by definition, and the spec's chosen mapping is null — a silent data change, not an error: a consumer adding 1 to that score gets 1 instead of NaN, a bug that surfaces downstream. Note the asymmetry with undefined: a property whose value is undefined is dropped entirely, while NaN becomes null — and inside arrays, undefined also becomes null, because positions cannot vanish.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "JSON.parse('{\"dev\": true,}') — what happens?",
+      "options": [
+        "Returns { dev: true } — trailing commas are ignored, like in JavaScript object literals",
+        "Returns null — the parser stops at the trailing comma",
+        "Throws TypeError — trailing commas break the value's type",
+        "Throws SyntaxError — JSON's grammar has no trailing commas, even though JS object literals allow them"
+      ],
+      "answer": 3,
+      "explain": "JSON is a strict interchange grammar, not JavaScript: single quotes, unquoted keys and trailing commas are all fatal, and every one of them throws SyntaxError. Option A is the trap — your JS muscle memory says trailing commas are fine because object literals allow them; JSON never did. This exact strictness is why the guarded-parse pattern exists: the tiniest formatting mistake in external text is a thrown error, not a warning.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "const copy = JSON.parse(JSON.stringify({ at: new Date(0), id: 1 })); — what is typeof copy.at?",
+      "options": [
+        "\"object\" — Dates survive the round trip losslessly",
+        "\"undefined\" — Dates are dropped like functions and symbols",
+        "It throws — Dates make JSON.stringify fail",
+        "\"string\" — the Date became its ISO text like \"1970-01-01T00:00:00.000Z\", and nothing revives it"
+      ],
+      "answer": 3,
+      "explain": "stringify serializes a Date via its toJSON, which returns toISOString() — a string like \"1970-01-01T00:00:00.000Z\". parse returns strings as strings; reviving Dates is never automatic. This is why a JSON round-trip is a lossy copy: fine for JSON-safe data, wrong the moment Dates, Maps or functions are involved — structuredClone (Lesson 3) is the tool that copies those for real. instanceof copy.at being Date is false too, so date methods like copy.at.getFullYear() would throw a TypeError.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Failures in JavaScript are values: the engine throws Error objects with a name you can trust, a message and a stack — and your own code should throw the same shapes (new Error / TypeError / RangeError, with { cause } when wrapping), never bare strings. try/catch/finally is synchronous, visible control flow: catch takes the throw, finally runs on every exit path, and expected failures at boundaries become result objects instead of exceptions. JSON is where it all converges: stringify silently drops undefined properties, functions and symbols, converts Dates to ISO strings and NaN/Infinity to null (throwing only on circular structures); parse throws SyntaxError on the smallest grammar crime — so the text-to-data gate gets one guarded safeParse, followed by real validation. Parse at the boundary, validate after, and throw only for the unexpected.",
+  "next": "Data is now defended end to end. The last lesson is the mechanism underneath everything you have written so far: the scope chain — how every name in your code is found — and closures, functions that keep their birth variables alive after the call that created them has returned. That single idea powers private state without classes, the module pattern, the loop bug from Lesson 1, and the duplicate tracker waiting for you in the capstone. Scope, closures and modules — the finale."
+}

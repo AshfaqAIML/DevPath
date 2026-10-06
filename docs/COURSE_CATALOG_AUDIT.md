@@ -76,7 +76,7 @@ patch `content/patches/add-course-batch-2.ts`).
 4 | CSS Flexbox Deep Dive | Beginner | 8 | HTML Semantics | catalog only
 5 | CSS Grid Layout Crash Course | Advanced | 8 | CSS Flexbox Deep Dive | catalog only
 6 | Responsive Design Fundamentals | Beginner | 8 | CSS Grid/Flexbox | catalog only
-7 | JavaScript Basics Refresher | Intermediate | 8 | HTML | catalog only
+7 | **JavaScript Basics Refresher** | Intermediate | **8** | HTML | **COMPLETE — 8 lessons, 218 blocks, 40 quiz questions, 151 min, 600 XP, 12-question assessment, DevPath Study Pipeline capstone, interview Q&A, 6 js-playground practice deep-links**
 8 | Modern JavaScript (ES2024) | Beginner | 9 | JavaScript Basics | catalog only
 9 | Async JavaScript & Promises | Beginner | 9 | Modern JavaScript | catalog only
 10 | **TypeScript in 2 Hours** | Intermediate | **8** | JavaScript Basics Refresher | **COMPLETE — 8 lessons, 39 quiz questions, 12-question assessment, capstone project, interview Q&A**
@@ -121,13 +121,16 @@ broader 10–14). Counts are planned — final counts match actual authored cont
 
 ## Content coverage priorities (next-phase order)
 
-1. **JavaScript Basics Refresher** — direct prerequisite of the completed TypeScript course;
-   the highest-traffic gap (search "javascript" lands on it today with catalog-level depth).
-2. **Git & GitHub Foundations** — #1 featured course in the category, universal need.
-3. **Docker Foundations** — second featured course; pairs with Docker Compose.
-4. Then breadth: React Hooks → Node.js Fundamentals → CSS Flexbox (pairs with the Flexbox
-   simulator) → REST API Design (pairs with the HTTP Lab simulator).
+1. **Git & GitHub Foundations** — #1 featured course in the category, universal need.
+2. **Docker Foundations** — second featured course; pairs with Docker Compose.
+3. **React Hooks / Interactive React Workshop** — frontend track depth.
+4. Then breadth: Node.js Fundamentals → CSS Flexbox (pairs with the Flexbox
+   simulator) → REST API Design (pairs with the HTTP Lab simulator) → Modern
+   JavaScript ES2024 (now has a completed upstream course in JS Basics).
 
 Completed content: TypeScript in 2 Hours (✅ course 1), SQL Fundamentals (✅ course 2 —
 pairs with the SQL Query Sandbox; its lessons deep-link practice queries into the sandbox
-with `?q=` pre-fill).
+with `?q=` pre-fill), JavaScript Basics Refresher (✅ course 3 — pairs with the NEW
+JavaScript Playground simulator; its 6 practice blocks deep-link snippets into the
+playground with `?q=` pre-fill; the practice-block `sim` field routes blocks to any
+registered simulator).

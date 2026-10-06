@@ -34,7 +34,14 @@ export type ContentBlock =
   | { t: "diagram"; caption?: string; nodes: string[] }
   | { t: "keytakeaways"; title?: string; items: string[] }
   | { t: "interview"; q: string; a: string }
-  | { t: "practice"; query: string; note?: string; title?: string };
+  | {
+      t: "practice";
+      /** Simulator slug the snippet deep-links into (e.g. sql-query-sandbox, js-playground). */
+      sim?: string;
+      query: string;
+      note?: string;
+      title?: string;
+    };
 
 export type LessonSummary = {
   id: string;
@@ -89,6 +96,8 @@ export type CourseView = {
   totalMinutes: number;
   xpTotal: number;
   lessons: LessonSummary[];
+  /** Simulator slugs referenced by practice blocks across all lessons. */
+  practiceSims: string[];
   updatedAt: string;
 };
 

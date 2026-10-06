@@ -1,0 +1,243 @@
+{
+  "title": "Scope, Closures and Modules — Putting It Together",
+  "slug": "08-scope-closures-modules",
+  "objective": "After this lesson you will be able to trace any variable through the scope chain, explain closures as functions holding live references to the variables they were born with, and use that one mechanism for private state, the module pattern and the famous var-loop bug — the exact toolkit the capstone pipeline is built from.",
+  "why": "Closures are the mechanism under half of idiomatic JavaScript: event handlers that remember state, modules that hide their helpers, callbacks that capture loop variables, the once-only guard that runs setup exactly once. If you have ever copied an IIFE wrapper or a () => ++count pattern without being able to say why it works, this lesson replaces the superstition with the actual model — and the model is small: scopes nest, name lookup walks outward, and a function keeps its birth scope alive as long as the function lives. Everything after that, including the assessment and the capstone waiting behind it, is that one rule composed.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "The scope chain: how every name gets found"
+    },
+    {
+      "t": "p",
+      "text": "A **scope** is the region of code where a binding — a variable, constant or parameter — is visible. Scopes nest: a block sits inside a function, functions sit inside functions, and the outermost scope is global. When code reads a name, the engine starts at the **innermost** scope and walks outward — the first scope that has a binding for that name wins, and an inner declaration with the same name **shadows** the outer one without touching it. Walk all the way out with no match and the read throws a `ReferenceError` (Lesson 7's table has it). One rule, and it decides everything in this lesson:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "render finds userName one scope out; loadPage cannot see render's role at all; the global never felt the shadow",
+      "code": "const userName = 'global user';\n\nfunction loadPage() {\n  const userName = 'page user';   // shadows the global — nearest wins\n  function render() {\n    const role = 'dev';           // visible only inside render\n    return userName + ' / ' + role; // found one scope out\n  }\n  console.log(render());          // \"page user / dev\"\n  try { console.log(role); } catch (e) { console.log(e.name); } // \"ReferenceError\"\n}\n\nloadPage();\nconsole.log(userName);            // \"global user\" — untouched by the shadow"
+    },
+    {
+      "t": "diagram",
+      "caption": "Resolving one name — the walk the engine takes",
+      "nodes": [
+        "Code reads userName — start in the innermost scope",
+        "Found here? Use that binding — done",
+        "Not found? Step one scope out: block → function → enclosing function",
+        "Found in an outer scope? Use it — inner scopes never see the search",
+        "Global scope, still nothing? ReferenceError: userName is not defined",
+        "The chain is fixed by WHERE the code is written — never by who calls it"
+      ]
+    },
+    {
+      "t": "h",
+      "text": "var is function-scoped; let and const are block-scoped"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "var escapes the if block (it belongs to the function); let stays in the braces — a ReferenceError, not a leak",
+      "code": "function processOrder(order) {\n  if (order.paid) {\n    var status = 'paid';            // function-scoped: belongs to processOrder\n    const receipt = 'R-' + order.id; // block-scoped: belongs to the if block\n    console.log(status, receipt);    // \"paid R-7\"\n  }\n  console.log(status);              // \"paid\" — var escaped the block\n  try { console.log(receipt); } catch (e) { console.log(e.name); } // \"ReferenceError\"\n}\n\nprocessOrder({ paid: true, id: 7 });"
+    },
+    {
+      "t": "p",
+      "text": "Every pair of braces — if blocks, loop bodies, bare blocks — is a fresh scope for `let` and `const`, while `var` has exactly two possible homes: the enclosing function or global. Lesson 1 covered hoisting and the temporal dead zone; the piece that matters *here* is granularity, because a loop is a block that runs many times: `for (let i…)` gives **every iteration its own binding**, while `for (var i…)` hands them all **one shared binding**. Hold onto that sentence for three more sections — it is the entire loop bug, pre-solved."
+    },
+    {
+      "t": "h",
+      "text": "Closures: a function plus the scope it was born in"
+    },
+    {
+      "t": "p",
+      "text": "Functions in JavaScript are values: you can return them from other functions, store them in arrays, hand them to `setTimeout`. When an inner function outlives the call that created it — returned, stored, called later — the natural assumption is that its birth variables are gone. They are not. A function value carries a reference to the **variable environment** of the call that created it, so those bindings stay alive for as long as the function does. That pairing — function plus captured scope — is a **closure**, and it is not syntax you opt into: it is what every function simply *is*:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "makeGreeter('Ada') has already returned when hiAda() runs — name is alive anyway",
+      "code": "function makeGreeter(name) {\n  return function greet() {\n    return 'hi, ' + name;   // name belongs to a call that is OVER\n  };\n}\n\nconst hiAda = makeGreeter('Ada');\nconsole.log(hiAda());        // \"hi, Ada\"\n\nfunction multiplyBy(factor) {\n  return (n) => n * factor; // same mechanism, arrow flavor\n}\nconst triple = multiplyBy(3);\nconsole.log(triple(7));      // 21"
+    },
+    {
+      "t": "p",
+      "text": "The sentence to memorize — it decides the loop bug, the module pattern and the practice block alike: **closures capture variables, not values.** What is captured is a live *binding* — a storage slot — not a snapshot of its current contents. If the captured variable changes later, the closure reads the new value; if the closure writes to it, everyone sharing that binding sees the write. (One cost note, because the rule cuts both ways: a captured environment stays in memory for as long as the closure does — a forgotten event handler holding a big object is the classic JavaScript memory leak.)"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "bump writes the binding, read reads it — one score shared by two closures from the same call",
+      "code": "function makeScore() {\n  let score = 0;                  // ONE binding…\n  function bump() { score += 10; }  // …written by this closure\n  function read() { return score; } // …read by this closure\n  return { bump, read };\n}\n\nconst game = makeScore();\ngame.bump();\ngame.bump();\nconsole.log(game.read());        // 20 — bump's writes are visible to read"
+    },
+    {
+      "t": "h",
+      "text": "The loop trap, revisited with closure eyes"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "Same bug, now explained: one shared binding vs a fresh binding per iteration — plus the pre-2015 fix",
+      "highlight": [
+        2,
+        4,
+        6
+      ],
+      "code": "const varFns = [];\nfor (var i = 0; i < 3; i++) varFns.push(() => i);\n\nconst letFns = [];\nfor (let j = 0; j < 3; j++) letFns.push(() => j);\n\nconst iifeFns = [];                       // the pre-2015 fix\nfor (var k = 0; k < 3; k++) {\n  (function (copy) { iifeFns.push(() => copy); })(k);\n}\n\nconsole.log(varFns.map((f) => f()));   // [3, 3, 3] — one shared i\nconsole.log(letFns.map((f) => f()));   // [0, 1, 2] — a fresh j per iteration\nconsole.log(iifeFns.map((f) => f()));  // [0, 1, 2] — a fresh copy per call\nconsole.log(i);                         // 3 — the shared binding is still right here"
+    },
+    {
+      "t": "p",
+      "text": "Lesson 1 showed you the symptom and promised the mechanism; here it is. `var i` is ONE binding for the whole function, so all three callbacks capture the same storage slot — and by the time anything calls them, it holds 3. `let j` re-enters the loop block each iteration, creating a fresh binding per pass, so each callback captures its own slot. The **IIFE fix** — present in every pre-2015 codebase you will inherit — works because a function *call* is also a scope: each iteration invokes the wrapper, which creates a parameter binding holding that iteration's value of `k`, and the inner callback captures the per-call parameter instead of the shared `k`. Same closure rule, one extra scope layer. When interviewers ask about the var-loop bug, the winning phrase is the one from two sections up: *closures capture bindings, not values — and var gives the loop exactly one binding to share.*"
+    },
+    {
+      "t": "h",
+      "text": "Private state without classes: the factory pattern"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "balance is not a property — it is a captured variable, and deposit / spend / getBalance are the only doors to it",
+      "code": "function makeWallet(openingBalance) {\n  let balance = openingBalance;   // private: no property, no global\n\n  return {\n    deposit(amount) { balance += amount; return balance; },\n    spend(amount) {\n      if (amount > balance) return 'declined: only ' + balance + ' left';\n      balance -= amount;\n      return balance;\n    },\n    getBalance() { return balance; },\n  };\n}\n\nconst wallet = makeWallet(100);\nconsole.log(wallet.deposit(50));   // 150\nconsole.log(wallet.spend(30));     // 120\nconsole.log(wallet.spend(1000));   // \"declined: only 120 left\"\nconsole.log(wallet.getBalance());  // 120\nconsole.log(wallet.balance);       // undefined — there is no such property"
+    },
+    {
+      "t": "p",
+      "text": "Look at what the wallet achieves with nothing but a function and a return value. `balance` is invisible — `wallet.balance` is `undefined` because there *is* no such property — and unreachable from outside; the only ways in are the three functions created in the same call, which share one live binding (the block above's rule) and can enforce rules at the only door that exists: spend declines overdrafts, no validation layer needed. Before class `#private` fields existed, this was *the* privacy mechanism in JavaScript, and it is still the lighter tool when a class is ceremony around one value. The minimal version — a bare counter — is this lesson's practice block; the version with a business rule is the shape of the capstone's duplicate tracker."
+    },
+    {
+      "t": "h",
+      "text": "The module pattern: one scope, a public API, hidden helpers"
+    },
+    {
+      "t": "p",
+      "text": "Before ES modules, every `<script>` on a page shared ONE global scope, and name collisions between libraries were a daily incident — two files both defining `var utils` meant the second silently won. The escape hatch: wrap a file's entire code in an IIFE (the scope-creation tool from the loop fix, scaled up), keep the helpers and state as locals of that one call, and return a small object exposing the public API. That is the **module pattern**, and a large share of the codebases you will inherit use it:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "total and add are private; study and average are the API — studyStats.total is undefined, not 0",
+      "code": "const studyStats = (function () {\n  let total = 0;      // private\n  let sessions = 0;   // private\n\n  function add(minutes) {   // private helper\n    total += minutes;\n    sessions += 1;\n  }\n\n  return {                  // the public API — everything else stays hidden\n    study(minutes) { add(minutes); return total; },\n    average() { return sessions === 0 ? 0 : total / sessions; },\n  };\n})();\n\nstudyStats.study(30);\nstudyStats.study(45);\nconsole.log(studyStats.average());  // 37.5\nconsole.log(studyStats.total);      // undefined — not part of the API"
+    },
+    {
+      "t": "p",
+      "text": "Modern JavaScript replaced the wrapper with structure: **ES modules** give every file its own module scope, `export` marks which bindings are public, and `import` pulls them in by name — resolved by the engine or your bundler before anything runs, with unexported bindings simply invisible to importers. The privacy story becomes architectural instead of clever, and strict mode becomes the default for free. The honest caveat for this course: the DevPath playground executes one synchronous snippet in a worker, so `import`/`export` cannot run there — the block below is from a two-file project; run it in any real project or a modules-capable sandbox:"
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "caption": "Illustrative, two files — not runnable in the playground (it runs a single synchronous snippet): the same studyStats as a real ES module",
+      "code": "// studyStats.js — a module: file scope + explicit exports\nlet total = 0;\nlet sessions = 0;\n\nexport function study(minutes) {   // public — importable by name\n  total += minutes;\n  sessions += 1;\n  return total;\n}\n\nexport function average() {\n  return sessions === 0 ? 0 : total / sessions;\n}\n\n// app.js — the consumer, in another file:\n// import { study, average } from './studyStats.js';\n// study(30);\n// study(45);\n// console.log(average()); // 37.5"
+    },
+    {
+      "t": "h",
+      "text": "Putting it together: the finale asks for all of it"
+    },
+    {
+      "t": "p",
+      "text": "The course ends with a 12-question final assessment (70% to pass) and the capstone project, **DevPath Study Pipeline — console edition** — and by now you can read its architecture as a parts list you own. A raw JSON string of 12 dirty enrollment records enters the script; the entry gate is Lesson 7's guarded `JSON.parse` with a graceful `PARSE FAILED:` path. The clean stage is `filter` (Lesson 5) driven by a validation predicate built from Lesson 1's type checks — and its duplicate-id memory is a closure holding a `Set`, exactly the `makeSeen` shape from this lesson's exercise. The transform stage is `map` over fresh objects (Lesson 3's reference discipline is why the input survives untouched), the aggregate is `reduce` (Lesson 5), the report is one template literal (Lesson 4) — and each stage's helpers stay private to it, which is scope doing precisely its job. Nothing in that pipeline is new to you anymore. That is the point."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "makeCounter — two counters, one rule",
+      "query": "function makeCounter() {\n  let count = 0;              // one private counter per call\n  return function next() {\n    return ++count;           // reads AND writes the captured variable\n  };\n}\n\nconst replies = makeCounter();\nconst misses = makeCounter();\n\nconsole.log('replies: ' + replies());\nconsole.log('replies: ' + replies());\nconsole.log('misses:  ' + misses());\nconsole.log('replies: ' + replies());\nconsole.log('misses:  ' + misses());\n\nconsole.log('replies.count: ' + replies.count);\ntry {\n  console.log(count);   // ← is the variable itself reachable out here?\n} catch (e) {\n  console.log('count is unreachable: ' + e.name);\n}",
+      "note": "Predict the interleaved sequence before running — then the last two lines. Expected: replies: 1, replies: 2, misses: 1, replies: 3, misses: 2, replies.count: undefined, count is unreachable: ReferenceError. The why: closures capture VARIABLES, not values — next() does not remember 'the number 0', it holds a live reference to count's binding, and ++ reads it, adds one, and writes it back. Two calls to makeCounter() create two separate environments, so the counters never share state; and count, being a local of a finished call, cannot even be named from out here — that is encapsulation without a class."
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 8 in five lines",
+      "items": [
+        "Name lookup walks the scope chain innermost → outward; the first match wins (shadowing), no match throws ReferenceError — and the chain is fixed by where code is written, never by who calls it",
+        "var is function-scoped — one shared binding for a whole loop; let and const are block-scoped — a fresh binding per iteration, which is the entire loop-bug fix",
+        "A closure is a function plus the birth scope it still references: captured variables outlive the call that created them, and the capture is a live binding — writes and later mutations are visible to everyone sharing it",
+        "Closures give private state without classes: locals of a factory call are reachable only through the returned functions — the wallet's balance, the module pattern's hidden helpers",
+        "ES modules give every file real scope with explicit import/export — the structural descendant of the IIFE module pattern; the playground runs one synchronous snippet, so modules cannot execute there, but the closure mechanics are identical"
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "How do you keep state private in JavaScript without classes or the #field syntax?",
+      "a": "With a closure. Declare the state as a local of a factory function or an IIFE and return only the functions that should touch it — the state is a captured binding, not a property, so outside code cannot even name it, let alone overwrite it. The shape: function makeWallet() { let balance = 0; return { deposit, spend, getBalance }; } — the returned functions share one hidden binding, and business rules (no overdrafts, once-only initialization) are enforced at the only door that exists. This was *the* privacy mechanism for most of JavaScript's history — the module pattern wrapped entire libraries this way to keep helpers out of the shared global scope. The honest costs: captured environments pin memory for the closure's lifetime (forgotten listeners holding big objects are the classic leak), and the state is invisible to tools that print objects, since there is no property to print. Today I reach for class #fields when the unit is genuinely a class, ES module scope for file-level privacy — and closures when the unit is a function, which is most of the time."
+    },
+    {
+      "t": "interview",
+      "q": "You open a 2014-era codebase and every file starts with (function () { ... })(); — what is it doing there, and would you still write it?",
+      "a": "That is an immediately-invoked function expression: a function defined and called in one statement, whose job is scope creation. Pre-modules, all scripts on a page shared one global namespace — two libraries both defining var utils meant the second silently won — so files wrapped themselves in an IIFE to get a private scope, kept helpers as locals, and exposed a deliberate public API on the return value (or attached one global). It was also the per-file home for 'use strict' before modules made strict the default. Would I still write one? Not as a file wrapper — ES modules give every file real scope and a better contract in import/export. But the IIFE survives as a precision tool inside functions: the pre-let loop fix (passing the loop variable into a fresh parameter binding per iteration) and one-shot private initialization are the two you still write by hand. The tell that a candidate understands rather than remembers: the parens make the function an *expression* so it can be invoked in place, and the pattern is just a closure whose outer call happens immediately."
+    }
+  ],
+  "exercise": {
+    "prompt": "The capstone's clean stage must reject the second occurrence of a duplicate enrollment id while keeping the first — with the 'already seen' memory invisible to the rest of the code. Rehearse it now: write makeSeen() — each call returns a function seen(id) that returns true the first time it meets an id and false for every repeat — with the memory (a Set) unreachable from outside. Then use one makeSeen() to filter [101, 102, 101, 103, 102, 101, 104] down to first occurrences only, log the memory's visibility from outside, and prove that a second makeSeen() starts completely fresh.",
+    "hints": [
+      "The memory has to live inside makeSeen's body as a local — a Set is ideal: .has(id) asks the question, .add(id) records the answer. Locals of a call are reachable only from functions created during that call, which is the whole trick.",
+      "Order matters inside the returned function: check .has(id) FIRST, then .add(id), and return the verdict — add before the check and every id reports 'already seen', including the first.",
+      "The privacy proof is one line: seen.seenIds logs undefined — the Set is a captured variable, not a property of the returned function. The freshness proof: const other = makeSeen() builds a brand-new Set that starts empty no matter how many ids the first one saw."
+    ],
+    "solution": "function makeSeen() {\n  const seenIds = new Set();      // private memory — captured, not exposed\n  return function seen(id) {\n    const firstTime = !seenIds.has(id);\n    if (firstTime) seenIds.add(id);\n    return firstTime;\n  };\n}\n\nconst seen = makeSeen();\nconsole.log('deduped: ' + [101, 102, 101, 103, 102, 101, 104].filter((id) => seen(id)));\n// deduped: 101,102,103,104 — first occurrences only\n\nconsole.log('memory from outside: ' + seen.seenIds); // undefined — private\n\nconst fresh = makeSeen(); // a brand-new, empty memory\nconsole.log('independent: ' + [101, 101, 105].filter((id) => fresh(id)));\n// independent: 101,105",
+    "why": "The Set is a binding captured by seen, so it lives exactly as long as the returned function does — and nothing outside the closure family can reach it. filter never sees the Set; it only asks the function yes-or-no questions, which is the entire privacy contract of a closure. The second makeSeen() call creates a new call, a new Set and a new function — independence comes free because state is per-call, not per-factory. And the order inside seen — ask, then record — is the difference between 'keep the first occurrence' and 'keep nothing': the capstone's duplicate rejection depends on exactly that order.",
+    "code": "function makeSeen() {\n  // TODO 1: create the memory here (a Set) — a local that only\n  //         this closure family can reach\n  return function seen(id) {\n    // TODO 2: ask the memory whether id is new, record it, and\n    //         return true the FIRST time, false on repeats\n    return true; // ← currently lets everything through\n  };\n}\n\nconst seen = makeSeen();\nconsole.log('deduped: ' + [101, 102, 101, 103, 102, 101, 104].filter((id) => seen(id)));\n// deduped: 101,102,101,103,102,101,104 — no dedupe yet\n\n// TODO 3: log seen.seenIds from out here — predict what it prints, and why",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "What does a closure capture from the scope it was created in?",
+      "options": [
+        "A snapshot of the values at the moment of creation — later changes to those variables are invisible to the closure",
+        "The live variable bindings — a later write to the captured variable is visible to the closure, and the closure's writes are visible to others sharing it",
+        "A deep copy of the entire outer scope, refreshed on every call",
+        "Only bindings from the global scope — function scopes are not captured"
+      ],
+      "answer": 1,
+      "explain": "The capture is a reference to the binding — the storage slot — not its current contents. That is why the var-loop callbacks all report 3: they share one live binding whose final value is 3. It is also why the module pattern works: the returned functions all see the same private state, and mutations by one are visible to the others. 'Snapshot' is the intuitively appealing wrong model — and the exact bug in every 'why does my callback see the last value?' question.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "const a = makeCounter(); const b = makeCounter(); a(); a(); — what does b() return? (makeCounter: let count = 0; return () => ++count;)",
+      "options": [
+        "3 — b shares the count created by the first call",
+        "2 — b sees the total across both counters",
+        "1 — each call to makeCounter() creates a brand-new count binding, and b's closure captured its own zero",
+        "undefined — count is out of scope inside b"
+      ],
+      "answer": 2,
+      "explain": "State is per-call: every invocation of makeCounter() builds a fresh environment with its own count, and the returned function captures that environment — so a and b are fully independent, and b() is the first call of its own counter. count is very much in scope inside b (option D) — that is the closure; it is simply unreachable from anywhere else. This per-call independence is what makes closures a state-management tool, not just a callback quirk.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "for (var i = 0; i < 3; i++) (function (copy) { fns.push(() => copy); })(i); — why do the callbacks now report 0, 1, 2?",
+      "options": [
+        "Each iteration invokes the wrapper, creating a fresh function scope whose parameter holds that iteration's value — and each callback captures its own per-call binding",
+        "Function parameters are exempt from closures, so the callbacks never capture anything",
+        "The IIFE delays the callbacks until after the loop finishes, when the values are stable",
+        "Wrapping code in an IIFE upgrades var to let semantics for everything inside"
+      ],
+      "answer": 0,
+      "explain": "A function call is a scope: each iteration passes the current value of i into a new invocation, creating a parameter binding that lives only for that call — and the inner closure captures that per-call slot instead of the shared i. The value is indeed copied at call time, but the fix is the fresh binding per call, not some exemption from closure rules: every closure still captures a variable. This is the pre-let fix you will meet in every pre-2015 codebase — and the ancestor of the module pattern.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "const stats = (function () { let total = 0; return { add(n) { total += n; return total; } }; })(); stats.add(5); console.log(stats.total); — what logs?",
+      "options": [
+        "5 — the add call stored total on the returned object",
+        "undefined — total is a captured variable, not a property of the returned object; only add was exposed",
+        "TypeError — total is private and access to it throws",
+        "0 — the IIFE resets total after each external access"
+      ],
+      "answer": 1,
+      "explain": "stats.total is property access, and the returned object has exactly one property: add. total is a binding captured by add's closure — invisible from outside, which is the module pattern's entire value proposition. Note option C's trap: accessing a missing property does not throw in JavaScript, it yields undefined (Lessons 3 and 6) — the loud alternative would be a getter written on purpose. The only door to total is stats.add.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "const mode = 'light'; function render() { console.log(mode); const mode = 'dark'; } render(); — what happens?",
+      "options": [
+        "Prints 'light' — the global mode is used until the local declaration line runs",
+        "ReferenceError — the local const mode is hoisted into render's scope, so the entire function body is its temporal dead zone, and the lookup never falls back to the global binding",
+        "Prints 'dark' — the declaration moves above the console.log",
+        "SyntaxError — mode cannot be declared twice in one program"
+      ],
+      "answer": 1,
+      "explain": "Name resolution starts innermost: mode IS found in render's scope — the hoisted-but-uninitialized binding — so the global mode is never even consulted. Reading a let/const binding before its declaration line is the temporal dead zone from Lesson 1, and shadowing makes the TDZ cover the whole function here. The compounding of two honest rules (lookup goes inner-first; TDZ applies until the declaration) is what makes this a classic hard question — and it is why shadowing deserves intent, not accident.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Every name resolves through a scope chain fixed at write time — innermost scope outward, first match wins, no match means ReferenceError — and var ignores blocks (one binding per function, one per loop) while let and const honor every brace, handing each loop iteration its own binding. A closure is a function plus the birth scope it still references: captured variables outlive the call that created them, and the capture is a live binding — writes and later mutations are visible to every closure sharing it, which is the loop bug and the module pattern in one sentence. Factories and IIFEs turn that rule into private state — the wallet's balance, the module pattern's hidden helpers, the capstone's duplicate Set — and ES modules make the privacy structural with real file scope and explicit import/export. The toolkit is complete; the assessment and the study pipeline are what it was all for.",
+  "next": "That is the whole course — eight lessons, one mental model each, and one pipeline that needs them all. Next stop: the final assessment, twelve questions spanning everything from typeof null to the falsy list to the loop bug, with a 70% bar to pass and an explanation after every answer. Right beside it sits the capstone project card — DevPath Study Pipeline, console edition: a raw JSON string of twelve dirty enrollment records that you will parse (guarded), clean (filter plus the closure-held Set from this lesson's exercise), normalize (map with clamping), aggregate (reduce) and render (template literals) into a trustworthy report — the entire course running as one playground script. Take the assessment, then go build the pipeline."
+}
