@@ -52,3 +52,23 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# local databases / sqlite
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+db/
+prisma/*.db
+prisma/dev.db*
+
+# local tooling / agent artifacts
+tool-results/
+upload/
+download/qa-*.png
+worklog.md
+
+# stray / runtime artifacts
+--full-page
+.zscripts/dev.pid
+dev.pid
