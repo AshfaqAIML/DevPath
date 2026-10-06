@@ -21,10 +21,13 @@ earliest-allowed — slipping later is always fine, earlier is not.
 | Date (earliest) | Badge | Action |
 |---|---|---|
 | 2026-10-06 | — | No new badges (YOLO/Pull Shark era; trackers + docs commits only) |
-| 2026-10-07 | ⚡ Quickdraw | Open + immediately close one issue |
-| 2026-10-08 | ❤️ Heart On Your Sleeve | ❤️-react one comment/release |
-| 2026-10-09 | 🤝 Pair Extraordinaire (base) | Merge co-authored PR (needs 2nd-account details first) |
-| TBD (≥1 day apart each) | ⭐ Starstruck → 🌍 Open Sourcerer → 🧠 Galaxy Brain → 💖 Sponsor | Organic order; never double-book a date |
+| 2026-10-10 (+4d) | ⚡ Quickdraw | Open + immediately close one issue |
+| 2026-10-28 (+18d) | ❤️ Heart On Your Sleeve | ❤️-react one comment/release |
+| 2026-11-20 (+23d) | 🤝 Pair Extraordinaire (base) | Merge co-authored PR (needs 2nd-account details first) |
+| Dec 2026 – Jan 2027 (~1–2 mo) | 🌍 Open Sourcerer | 1 small merged PR in another public repo |
+| Feb 2027 (~1 mo) | 🧠 Galaxy Brain | 2 accepted discussion answers (enable Discussions first) |
+| Whenever stars hit 16 (organic) | ⭐ Starstruck | Polish repo surface + share; cannot be forced on a date |
+| Mar 2027 (~1 mo) | 💖 Public Sponsor | Sponsor any dev, any tier |
 
 ## 🎯 Targets (in attack order — easiest first)
 
