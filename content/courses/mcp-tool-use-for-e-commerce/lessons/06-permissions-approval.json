@@ -1,0 +1,53 @@
+{
+  "title": "Permissions & Approval Gates",
+  "slug": "06-permissions-approval",
+  "objective": "After this lesson you will be able to scope tool permissions per consumer, gate destructive operations with approval flows (including elicitation), and audit permission grants like access-control rules.",
+  "why": "Exposed tools are powers: lookup leaks data, refunds move money, deletes destroy. Ungated destructive tools turn confused agents into incidents — the support-drafter-with-refunds nightmare from CrewAI Ch.7, now at protocol scale across every host. Permissions (who may call what), gates (approvals before effects), and audit (who did what) are the access-control triple of MCP deployments.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Scopes per consumer, not per server" },
+    { "t": "p", "text": "Permissions attach to **(consumer, tool)** pairs, not servers globally: the support assistant reads orders and drafts; the finance consumer issues gated refunds; the analytics job reads aggregates only. Same server, three scopes. Scope manifests (role → tools, from CrewAI Ch.7) port directly — MCP servers enforce what manifests declare, per connected client identity." },
+    { "t": "code", "lang": "js", "code": "// Scope matrix: consumer × tool → allow | gate | deny (plain JS)\nconst SCOPES = {\n  \"support-assistant\": { \"lookup-order\": \"allow\", \"search-orders\": \"allow\", \"issue-refund\": \"deny\" },\n  \"finance-agent\": { \"lookup-order\": \"allow\", \"issue-refund\": \"gate\" },\n  \"analytics-job\": { \"order-stats\": \"allow\", \"issue-refund\": \"deny\", \"lookup-order\": \"deny\" },\n};\nfunction authorize(consumer, tool) {\n  const rule = (SCOPES[consumer] || {})[tool];\n  return rule || \"deny\"; // default-deny: unlisted pairs refuse loudly\n}\n// Default-deny closes the 'new tool, forgotten scopes' hole by construction.", "caption": "Default-deny matrices: unlisted pairs refuse loudly" },
+    { "t": "h", "text": "Gates: elicitation for confirmations" },
+    { "t": "p", "text": "Gated tools pause for human approval via **elicitation** (`elicitation/create`): server requests confirmation/details through the client, user approves/edits/declines, execution proceeds or aborts. Refunds over thresholds, deletions, external sends — anything irreversible or monetary. Elicitation is MCP's native HITL (LangGraph interrupts, CrewAI gates — same pattern, protocol-native). Unknown verdicts fail closed to logged skips." },
+    { "t": "code", "lang": "js", "code": "// Gated execution: authorize → elicit → execute-or-skip (plain JS pattern)\nasync function gatedCall(consumer, tool, args, ctx) {\n  const rule = authorize(consumer, tool.name);\n  if (rule === \"deny\") return { ok: false, error: \"forbidden\", audit: logAttempt(consumer, tool, args, \"denied\") };\n  if (rule === \"gate\") {\n    const verdict = await ctx.elicit({ action: tool.name, args }); // approve|edit|skip\n    ctx.audit({ consumer, tool: tool.name, args, verdict });\n    if (verdict.decision !== \"approve\") return { ok: false, error: \"not-approved:\" + verdict.decision };\n    args = verdict.editedArgs || args; // edits validated like fresh args\n  }\n  return tool.run(args);\n}\n// Every path audited: allowed, denied, approved, edited, skipped.", "caption": "Deny/gate/allow with audit on every branch — access control as code" },
+    { "t": "h", "text": "Audit: who did what, provably" },
+    { "t": "p", "text": "Every tool call appends **consumer, tool, args, verdict, outcome, timestamp** to an append-only log — allowed and denied alike (denied attempts are threat signal). Audit reviews ask: ungated destructives? scope creep per consumer? denied-attempt spikes (attack campaigns)? The log answers all three; missing logs answer nothing. stdout stays protocol-clean; audit flows to stderr/files/sinks." },
+    { "t": "practice", "sim": "js-playground", "title": "Enforce the matrix", "query": "const SCOPES = {\n  'support-assistant': { 'lookup-order': 'allow', 'issue-refund': 'deny' },\n  'finance-agent': { 'lookup-order': 'allow', 'issue-refund': 'gate' },\n};\nfunction authorize(consumer, tool) {\n  const rule = (SCOPES[consumer] || {})[tool];\n  return rule || 'deny';\n}\nconst cases = [\n  ['support-assistant', 'lookup-order', 'allow'],\n  ['support-assistant', 'issue-refund', 'deny'],\n  ['finance-agent', 'issue-refund', 'gate'],\n  ['analytics-job', 'lookup-order', 'deny'],\n  ['support-assistant', 'delete-user', 'deny'],\n];\nlet pass = 0;\nfor (const [c, t, expected] of cases) {\n  const got = authorize(c, t);\n  if (got === expected) pass++;\n  else console.log('MISS ' + c + '/' + t + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' authorizations correct');", "note": "Run it: expect 5/5 — including unknown consumer (deny), unknown tool (deny), and the finance gate. Default-deny closes both novelty holes by construction." },
+    { "t": "keytakeaways", "items": ["Scopes per (consumer, tool): allow/gate/deny with default-deny closing novelty holes", "Gates via elicitation for irreversible/monetary tools; edits re-validated; unknowns fail closed", "Append-only audit per call (allowed + denied); denied spikes signal campaigns"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice matrix and confirm 5/5 with both novelty denials. (b) Add an analytics-job scope (order-stats allow, everything else deny) plus a test proving lookup-order denies. (c) Write the elicitation payload for a $500 refund (action, args, context shown to approver) and state the three verdict paths.",
+    "hints": [
+      "Baseline 5/5: allows, deny, gate, unknown-consumer deny, unknown-tool deny — novelty covered both directions.",
+      "Analytics scope: {order-stats: allow} only; test asserts lookup-order → deny (default-deny proves itself on additions).",
+      "Payload: action issue-refund + args + ticket/policy summary for the approver; verdicts approve (execute) / edit (re-validate then execute) / skip-or-unknown (logged skip)."
+    ],
+    "solution": "// (a) 5/5 with both novelty denials (consumer-unknown + tool-unknown).\n// (b) analytics scope per hints; lookup denies by default-deny (proven).\n// (c) elicitation payload (action+args+context) with approve/edit/skip routings.",
+    "why": "Novelty-proofing (unknowns deny), scope addition discipline (prove denials on every add), and elicitation design (verdicts with routings) are the three permission judgments — each verified, none assumed.",
+    "code": "// Scope-addition protocol: manifest edit → novelty tests → green required.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Support assistant holds ungated issue-refund. Fix?",
+      "options": ["Document it", "Rescope: deny for support, gate for finance (elicitation over thresholds), audit all paths — least privilege per consumer", "Faster approvals", "Bigger limits"],
+      "answer": 1,
+      "explain": "Drafting ≠ executing. Money tools live gated under finance scope; support drafts and recommends. Scopes per pair, default-deny."
+    },
+    {
+      "q": "Unknown consumer connects requesting delete-user. Behavior?",
+      "options": ["Allow — new friends", "Deny loudly + audit: default-deny closes novelty holes in both directions (unknown who, unknown what)", "Ask the model", "Throttle"],
+      "answer": 1,
+      "explain": "Novelty denies by construction: unlisted consumers and unlisted tools both refuse with audit trails. Open-by-default is the breach."
+    },
+    {
+      "q": "Approval edits the refund amount. Handling?",
+      "options": ["Execute edited amount directly", "Re-validate edited args against the schema, then execute — edits are fresh untrusted input", "Ignore edits", "Cancel everything"],
+      "answer": 1,
+      "explain": "Human edits bypass the original validation context: re-validate like new args. Edits are inputs, not blessings."
+    }
+  ],
+  "summary": "Per-pair scopes with default-deny, elicitation gates for destructive power, append-only audit with denied-attempt intelligence. Permissions maintained per change, never assumed.",
+  "next": "Locked down — now run safely: timeouts, idempotency, isError discipline, and stdout hygiene. Next: execution that survives production."
+}

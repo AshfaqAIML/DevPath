@@ -1,0 +1,52 @@
+{
+  "title": "Debugging MCP Like an Operator",
+  "slug": "09-debugging-mcp",
+  "objective": "After this lesson you will be able to drive the MCP Inspector across tools/resources/prompts, trace requests through JSON-RPC with correlation IDs, negotiate versions explicitly, and read error codes to fixes.",
+  "why": "'The agent can't see my tool' is the #1 MCP support question, and answers live in exactly four places: discovery (advertised?), transport (framing intact?), validation (args rejected?), versions (mutual?). Operators check in that order with tools that show each layer. Debugging MCP is layered elimination, not log-diving.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Inspector first: the four checks" },
+    { "t": "p", "text": "The **MCP Inspector** connects to any server for interactive verification: **tools/list** (advertised? names/descriptions/schemas as intended?), **tools/call** with forms (valid args pass, invalid reject pre-handler?), **resources/read** (URIs resolve?), **prompts/get** (templates render?). Run all four on every change — most 'agent' bugs reproduce here as server bugs in seconds." },
+    { "t": "h", "text": "Layered elimination order" },
+    { "t": "p", "text": "Debug in stack order, never randomly: (1) **transport** — framing intact? (stdout clean? connection alive?); (2) **discovery** — server/discover returns expected versions + capabilities?; (3) **validation** — args rejected? (read the isError text — it names the rule); (4) **versions** — mutual spec support or explicit error?; (5) **semantics** — handler logic with logged inputs. Each layer exonerated moves exactly one level deeper." },
+    { "t": "code", "lang": "js", "code": "// Layered debug checklist as runnable assertions (plain JS pattern)\nconst debugLayers = [\n  [\"transport\", (ctx) => ctx.framingOk || \"stdout polluted / connection dead\"],\n  [\"discovery\", (ctx) => ctx.discoverOk || \"versions/capabilities mismatch\"],\n  [\"validation\", (ctx) => ctx.argsAccepted || \"isError names the violated rule\"],\n  [\"versions\", (ctx) => ctx.mutual || \"explicit version error, negotiate\"],\n  [\"semantics\", (ctx) => ctx.handlerOk || \"logged inputs decide the fix\"],\n];\nfunction diagnose(ctx) {\n  for (const [layer, check] of debugLayers) {\n    const res = check(ctx);\n    if (res !== true) return { layer, finding: res };\n  }\n  return { layer: \"none\", finding: \"all green — reproduce with minimal case\" };\n}\n// First failing layer owns the incident; deeper layers wait their turn.", "caption": "Elimination order encoded: transport → discovery → validation → versions → semantics" },
+    { "t": "h", "text": "Notifications and versions in the wild" },
+    { "t": "p", "text": "Dynamic tool lists need **subscriptions/listen** for `toolsListChanged` with re-list on event — plus polling fallback (delivery is best-effort). Mixed-version fleets negotiate per server/discover: pin versions, test the matrix (client vX × server vY), and read explicit version errors as routing instructions, not failures." },
+    { "t": "practice", "sim": "js-playground", "title": "Eliminate by layers", "query": "function diagnose(ctx) {\n  const layers = [\n    ['transport', ctx.framingOk || 'stdout polluted'],\n    ['discovery', ctx.discoverOk || 'version/capability mismatch'],\n    ['validation', ctx.argsAccepted || 'isError names the rule'],\n  ];\n  for (const [layer, res] of layers) if (res !== true) return layer + ': ' + res;\n  return 'all green';\n}\nconsole.log(diagnose({ framingOk: false }));\nconsole.log(diagnose({ framingOk: true, discoverOk: false }));\nconsole.log(diagnose({ framingOk: true, discoverOk: true, argsAccepted: false }));\nconsole.log(diagnose({ framingOk: true, discoverOk: true, argsAccepted: true }));", "note": "Run it: expect transport, discovery, validation, then all-green — first failing layer owns the incident. Elimination order prevents log-diving: check transport before reading a single handler line." },
+    { "t": "keytakeaways", "items": ["Inspector across list/call/read/get on every change — most agent bugs reproduce as server bugs", "Eliminate transport → discovery → validation → versions → semantics; first failure owns it", "Notifications opt-in with polling fallback; versions negotiated explicitly per fleet matrix"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice diagnoser on all four contexts and map layers. (b) Write the incident report for 'refund tool vanished mid-conversation': three candidate layers with the check that rules each in/out. (c) State the polling fallback rule for toolsListChanged and why best-effort demands it.",
+    "hints": [
+      "Mappings: transport / discovery / validation / all-green (in order) — first failure owns.",
+      "Candidates: notification missed (check subscription + re-list manually) vs server redeploy dropping the tool (discover shows absence) vs permission revoked (scope audit) — each with its ruling check.",
+      "Polling fallback: re-list on interval regardless (delivery best-effort across reconnects); notifications optimize, polling guarantees."
+    ],
+    "solution": "// (a) transport / discovery / validation / all-green (in order).\n// (b) notification vs redeploy vs permission — each with ruling check.\n// (c) interval re-list always; notifications speed, polling guarantees.",
+    "why": "Layered incident reports (candidate + ruling check each) plus fallback design (best-effort + guarantee pairing) are operator-grade debugging — practiced on realistic disappearances.",
+    "code": "// Incident-report pattern: candidates × ruling-checks, ordered by layer.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Agent can't see my new tool.' First check?",
+      "options": ["Handler logic", "Inspector tools/list: advertised? (Then transport framing, then versions — layered order, discovery before depth)", "Bigger model", "Restart everything"],
+      "answer": 1,
+      "explain": "Advertisement precedes invocation: list first, then framing, versions, validation, semantics. Most such bugs die at step one."
+    },
+    {
+      "q": "toolsListChanged missed across a reconnect. Design implication?",
+      "options": ["Notifications are broken", "Best-effort delivery demands polling fallback: interval re-list guarantees freshness, notifications optimize it", "No dynamic tools ever", "Restart on reconnect"],
+      "answer": 1,
+      "explain": "Best-effort means gaps are normal, especially across reconnects. Polling guarantees; notifications accelerate."
+    },
+    {
+      "q": "isError result names a violated pattern. Value?",
+      "options": ["Noise", "Self-diagnosing failures: the violated rule travels with the failure — fix location named, not inferred", "Ignore it", "Retry blindly"],
+      "answer": 1,
+      "explain": "Named violations convert debugging from inference to reading. Schema-driven errors carry their own diagnosis."
+    }
+  ],
+  "summary": "Inspector per change, layered elimination per incident, notifications with polling fallback, versions negotiated explicitly. Operators debug layers, not logs.",
+  "next": "Operable and debuggable — now assemble the order-operations server end to end, measured throughout. Next and last: the capstone build."
+}

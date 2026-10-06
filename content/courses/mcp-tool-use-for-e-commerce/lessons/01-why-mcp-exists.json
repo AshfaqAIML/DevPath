@@ -1,0 +1,53 @@
+{
+  "title": "Why MCP Exists: End the N×M Madness",
+  "slug": "01-why-mcp-exists",
+  "objective": "After this lesson you will be able to explain MCP's economic argument (N+M vs N×M integrations), distinguish it from provider function calling, and decide what belongs in MCP servers versus application code.",
+  "why": "Every assistant team rebuilds the same integrations: catalog lookup for Claude, catalog lookup for the custom app, order tools per provider SDK — bespoke wirings multiplying with hosts × sources. MCP standardizes the seam once: servers expose context and actions, any host consumes them. Adopting it (or not) is an architecture decision with 10x cost implications — this lesson makes it on purpose.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "The N×M problem, priced" },
+    { "t": "p", "text": "Twelve hosts × eight data sources with bespoke integrations = 96 wirings to build, version, and maintain — each with its own auth, schemas, and failure modes. MCP collapses it to 12 + 8 = 20 protocol implementations: each host speaks MCP once, each server speaks it once, and any pair interoperates. Standards convert quadratic integration cost into linear — the entire economic case in one arithmetic." },
+    { "t": "code", "lang": "js", "code": "// Integration math: bespoke vs standard (plain JS)\nfunction bespoke(hosts, sources) { return hosts * sources; }\nfunction standard(hosts, sources) { return hosts + sources; }\nconsole.log(\"bespoke 12x8: \" + bespoke(12, 8));   // 96 wirings\nconsole.log(\"standard 12x8: \" + standard(12, 8)); // 20 implementations\n// Add a 13th host: bespoke +8 wirings, standard +1. Standards compound.", "caption": "Quadratic vs linear integration cost — the adoption argument" },
+    { "t": "h", "text": "MCP vs function calling (not rivals)" },
+    { "t": "p", "text": "**Function calling** standardizes model→tool *syntax per provider* (OpenAI's format differs from Anthropic's). **MCP** standardizes the *whole integration surface* across hosts and servers: discovery (server/discover), tools (list/call), resources (list/read), prompts, transports, versions. One function-calling integration serves one provider's models; one MCP server serves every host — Claude Code, VS Code, Cursor, custom apps. Different layers, complementary, not competing." },
+    { "t": "table", "headers": ["Concern", "Function calling", "MCP"], "rows": [["Scope", "One provider's model↔tools syntax", "Cross-host/server standard (tools, resources, prompts)"], ["Discovery", "Manual wiring per integration", "tools/list + server/discover"], ["Context sources", "Ad hoc", "Resources with URIs"], ["Reuse", "Per provider", "Any host (N+M economics)"]] },
+    { "t": "h", "text": "What belongs in MCP servers" },
+    { "t": "p", "text": "Servers expose **capabilities with stable contracts**: catalog search, order lookup, policy text, triage prompts — versioned, permissioned, auditable. Application logic (routing, orchestration, UI) stays in hosts. The boundary test: would a *second, different host* use this? Catalog lookup yes (server); this quarter's dashboard layout no (app code). Servers are products with consumers plural." },
+    { "t": "practice", "sim": "js-playground", "title": "Price your integrations", "query": "function bespoke(h, s) { return h * s; }\nfunction standard(h, s) { return h + s; }\nconsole.log('today 3x2: bespoke=' + bespoke(3, 2) + ' standard=' + standard(3, 2));\nconsole.log('scaled 12x8: bespoke=' + bespoke(12, 8) + ' standard=' + standard(12, 8));\nconsole.log('13th host marginal: bespoke+8 standard+1');", "note": "Run it: 6 vs 5 today (standards barely win small), 96 vs 20 at scale (standards dominate). Adoption math favors growth trajectories — count your roadmap, not just today." },
+    { "t": "keytakeaways", "items": ["N+M vs N×M: standards linearize integration cost — counts compound per added party", "Function calling = per-provider syntax; MCP = cross-host standard (discovery, tools, resources, prompts)", "Servers hold reusable contracted capabilities; app-specific logic stays in hosts"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice pricer for your org's real host/source counts (stated). (b) Classify three integrations (order lookup, dashboard layout, policy text) as server vs app with the second-host test. (c) State the one condition under which bespoke still wins, honestly.",
+    "hints": [
+      "Plug real numbers: marginal cost per added party is the decision metric, not today's totals.",
+      "Order lookup + policy text: servers (reused across hosts). Dashboard layout: app (single-consumer presentation).",
+      "Bespoke wins: single host + single source + stable forever (no growth, no reuse) — standards tax simplicity when N=M=1 permanently."
+    ],
+    "solution": "// (a) real counts priced both ways (marginals compared).\n// (b) lookup+policy → servers (second-host test passes); layout → app.\n// (c) N=M=1 forever: standards cost more than they save — stated, not assumed.",
+    "why": "Adoption decisions need org-specific math plus the honest exception: standards serve growth and reuse; permanent singletons don't need them. Say the exception aloud or teams standardize cargo-cult.",
+    "code": "// Integration-pricing pattern: totals + marginals + the N=M=1 exception.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Twelve hosts, eight sources, all bespoke. MCP's math?",
+      "options": ["Faster JSON", "96 bespoke wirings → 20 protocol implementations (N+M); each added party costs +1, not +N/+M", "Bigger models", "Fewer tools"],
+      "answer": 1,
+      "explain": "Quadratic-to-linear collapse plus compounding marginals: the economic case is arithmetic, not aesthetics."
+    },
+    {
+      "q": "Function calling vs MCP — rivals?",
+      "options": ["Yes — pick one", "Different layers: per-provider syntax vs cross-host standard (discovery/tools/resources/prompts); complementary", "MCP replaces all APIs", "Unrelated"],
+      "answer": 1,
+      "explain": "Syntax standard versus integration standard. One function-calling integration serves one provider; one MCP server serves every host."
+    },
+    {
+      "q": "Dashboard layout as an MCP server. Verdict?",
+      "options": ["Yes — everything belongs", "No: single-consumer presentation fails the second-host test — app code, not server capability", "Only with tools", "Yes if JSON"],
+      "answer": 1,
+      "explain": "Servers hold reusable contracted capabilities across hosts. Single-use presentation is app code wearing a protocol costume."
+    }
+  ],
+  "summary": "N+M economics, complementary layers (not rivals), second-host test for serverhood. Adopt on math; exempt honest singletons.",
+  "next": "Economics settled — now the machinery: hosts, clients, servers, transports, and the JSON-RPC discovery dance. Next: architecture."
+}

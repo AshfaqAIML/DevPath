@@ -1,0 +1,51 @@
+{
+  "title": "Prompts: Templates That Package Expertise",
+  "slug": "05-prompts-templates",
+  "objective": "After this lesson you will be able to author MCP prompts (reusable interaction templates with arguments), decide prompt-vs-tool-vs-resource per need, and version templates alongside the servers they steer.",
+  "why": "Every team re-derives the same triage instructions, classification rubrics, and review checklists per conversation. MCP prompts package them server-side: user-driven templates (slash-command style) with typed arguments, discoverable via prompts/list, rendered via prompts/get. Expertise ships once, used everywhere — the few-shot packs from Prompt 101, distributed.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    { "t": "h", "text": "Prompts are user-driven templates" },
+    { "t": "p", "text": "MCP **prompts** are reusable message templates with **arguments** (e.g. `triage-ticket` taking `ticket`): clients list them, users pick (often as slash commands), servers render filled messages. Unlike tools (model-invoked actions) or resources (data), prompts are *human-initiated interaction patterns* — the team's best triage rubric, review checklist, or classification few-shots, maintained in one place." },
+    { "t": "code", "lang": "js", "code": "// Prompt shape (v2 SDK concepts; your Node project)\n// server.registerPrompt(\"triage-ticket\", {\n//   title: \"Triage Ticket\",\n//   description: \"Classify + route a support ticket with the house rubric\",\n//   argsSchema: z.object({ ticket: z.string().describe(\"Raw ticket text\") }),\n// }, ({ ticket }) => ({\n//   messages: [\n//     { role: \"user\", content: { type: \"text\", text: `Classify into [billing, shipping, returns]:\\n${ticket}` } },\n//   ],\n// }));\n// Client: prompts/list → user picks → prompts/get {ticket} → messages → model.", "caption": "Arguments in, rendered messages out — expertise on tap" },
+    { "t": "h", "text": "Prompt vs tool vs resource (final routing)" },
+    { "t": "p", "text": "Three-way routing completes the primitive map: **human initiates a pattern** → prompt (slash commands, rubrics, checklists). **Model needs data** → resource (policy text, catalog rows). **Model must act/compute** → tool (lookups, refunds). Misplacements cost: prompts doing live lookups (stale by render time), tools serving static text (latency + reasoning waste), resources holding actions (unexecutable context)." },
+    { "t": "callout", "variant": "tip", "title": "Prompts are team assets", "text": "A prompt pack (system + few-shots + contracts from Prompt 101) ports directly into MCP prompts: same content, distributed delivery. Maintain packs in version control, render through prompts/get, and test with the gold sets that already exist — no duplication between 'prompt engineering' and 'MCP prompts'." },
+    { "t": "practice", "sim": "js-playground", "title": "Route the primitive", "query": "function routePrimitive(need) {\n  if (need.humanInitiates && need.pattern) return 'prompt:' + need.name;\n  if (need.stable && need.addressable) return 'resource:' + need.name;\n  if (need.computed || need.live || need.acts) return 'tool:' + need.name;\n  return 'prompt:clarify-need';\n}\nconst cases = [\n  [{ humanInitiates: true, pattern: true, name: 'triage-ticket' }, 'prompt:triage-ticket'],\n  [{ stable: true, addressable: true, name: 'policy' }, 'resource:policy'],\n  [{ live: true, name: 'lookup-order' }, 'tool:lookup-order'],\n  [{ acts: true, name: 'issue-refund' }, 'tool:issue-refund'],\n  [{ vague: true }, 'prompt:clarify-need'],\n];\nlet pass = 0;\nfor (const [need, expected] of cases) {\n  const got = routePrimitive(need);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(need) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' primitives routed');", "note": "Run it: expect 5/5. Three-way routing (pattern/data/action) completes the primitive map from Ch.4 — every MCP addition starts with this question." },
+    { "t": "keytakeaways", "items": ["Prompts package team expertise as user-driven templates with typed arguments", "Three-way routing: human-pattern → prompt; stable-data → resource; compute/live/act → tool", "Version templates with their servers; unchanged prompts across server versions lie about capabilities"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice router and confirm 5/5. (b) Author a review-checklist prompt (arguments: draft text; renders length/tone/offer checks) in the v2 shape with one-line rationale per check. (c) State what breaks when the prompt stays v1 while its server ships v2 tools.",
+    "hints": [
+      "Baseline 5/5; each case exercises one routing rule including the clarify fallback.",
+      "Checklist prompt: argsSchema {draft}, messages encoding the three checks — mirrors the Prompt 101 verifier as a distributed template.",
+      "Stale prompts reference renamed tools/dead fields: template-server version skew produces confident misdirection — version together."
+    ],
+    "solution": "// (a) 5/5 routed by pattern/data/action.\n// (b) review-checklist prompt per hints (three checks as rendered messages).\n// (c) version skew: stale templates misdirect against new tools — co-version required.",
+    "why": "Template authoring (expertise packaged) plus primitive routing (pattern/data/action) plus co-versioning (templates track servers) are the three prompt judgments.",
+    "code": "// Prompt template: args in, rendered checklists out, versioned with server.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Triage rubric used by five teammates, copy-pasted per chat. MCP shape?",
+      "options": ["Tool", "Prompt: user-driven reusable template with ticket argument — maintained once, discovered via list", "Resource", "Nothing"],
+      "answer": 1,
+      "explain": "Human-initiated patterns belong in prompts: discoverable, versioned, consistent across the team. Copy-paste is the pre-protocol symptom."
+    },
+    {
+      "q": "Live inventory count as a prompt. Verdict?",
+      "options": ["Fine", "Misuse: live data needs tool calls (fresh per invocation); prompts render static patterns, not live reads", "Faster", "Cheaper"],
+      "answer": 1,
+      "explain": "Prompts template interactions; they don't fetch. Live needs belong to tools with fresh execution per call."
+    },
+    {
+      "q": "Prompt v1 references tool names renamed in server v2. Fix?",
+      "options": ["Nothing — names don't matter", "Co-version templates with servers: stale prompts misdirect confidently; version together, test together", "Delete prompts", "Freeze servers"],
+      "answer": 1,
+      "explain": "Template-server skew produces confident misdirection (right pattern, dead names). Versioning binds them; tests prove the binding."
+    }
+  ],
+  "summary": "Prompts distribute team expertise as versioned, user-driven templates. Route pattern/data/action correctly; co-version templates with servers.",
+  "next": "Capabilities exposed — now the locks: scopes, gates, and elicitation for destructive power. Next: permissions that hold."
+}

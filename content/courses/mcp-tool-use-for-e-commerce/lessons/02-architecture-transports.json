@@ -1,0 +1,54 @@
+{
+  "title": "Architecture: Hosts, Clients, Transports",
+  "slug": "02-architecture-transports",
+  "objective": "After this lesson you will be able to map host/client/server roles, choose stdio vs Streamable HTTP transports, and trace the JSON-RPC discovery sequence (server/discover, _meta, capabilities) that opens every relationship.",
+  "why": "MCP deployments fail at the seams teams skip: wrong transport for multi-client needs, missing discovery handling, confusion about who runs the model. The architecture is small (three roles, two transports, one discovery dance) — learn it exactly once from the spec (2026-07-28), and every later lesson's code has somewhere to live.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Three roles, one connection each" },
+    { "t": "p", "text": "**Host**: the AI app (Claude Code, VS Code, your assistant) coordinating everything. **Client**: one per server connection, owned by the host — VS Code talking to filesystem + Sentry servers holds two clients. **Server**: exposes tools/resources/prompts over its connection. Models live in hosts; servers never see them directly (sampling, the old exception, is deprecated as of 2026-07-28 — servers needing completions call provider APIs)." },
+    { "t": "diagram", "caption": "Host → N clients → N servers, one dedicated connection each", "nodes": ["MCP Host (your assistant app)", "Client 1 → Catalog server (local)", "Client 2 → Orders server (local)", "Client 3 → Payments server (remote)"] },
+    { "t": "h", "text": "Transports: stdio vs Streamable HTTP" },
+    { "t": "p", "text": "**stdio**: same-machine process I/O — one client, no network, minimal ops; stdout carries protocol (log to stderr!). **Streamable HTTP**: remote servers, many clients, standard HTTP auth (bearer/OAuth). Same JSON-RPC 2.0 messages either way — transport changes deployment and auth, never protocol semantics. Decide by locality + client count + auth needs." },
+    { "t": "table", "headers": ["Need", "Transport"], "rows": [["Claude Desktop + local inventory DB", "stdio (one client, same machine)"], ["Backend serving 5 agent services + OAuth", "Streamable HTTP (remote, many clients, HTTP auth)"], ["CI job calling one local tool", "stdio (simplest ops)"]] },
+    { "t": "h", "text": "Discovery: server/discover + _meta everywhere" },
+    { "t": "p", "text": "Every request carries `_meta` (protocolVersion 2026-07-28, clientCapabilities, clientInfo); every server must implement **`server/discover`** advertising versions + capabilities + identity. Clients *may* discover first or send directly and handle version errors. Stateless by design: servers infer nothing from history — each request self-describes. Version negotiation is explicit errors listing supported versions, not silent fallback." },
+    { "t": "code", "lang": "js", "code": "// Discovery handshake shape (JSON-RPC 2.0, per spec 2026-07-28)\nconst discoverRequest = {\n  jsonrpc: \"2.0\", id: 1, method: \"server/discover\",\n  params: { _meta: {\n    \"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\",\n    \"io.modelcontextprotocol/clientInfo\": { name: \"store-assistant\", version: \"1.0.0\" },\n    \"io.modelcontextprotocol/clientCapabilities\": { elicitation: {} },\n  } },\n};\n// Response advertises: supportedVersions, capabilities {tools, resources},\n// serverInfo, cacheable with ttlMs. Mismatched versions → explicit error.", "caption": "Stateless discovery: versions + capabilities negotiated per request metadata" },
+    { "t": "practice", "sim": "js-playground", "title": "Negotiate versions", "query": "function negotiate(clientVersions, serverVersions) {\n  const ok = clientVersions.filter((v) => serverVersions.includes(v));\n  if (!ok.length) return { ok: false, error: 'UnsupportedProtocolVersion', serverSupports: serverVersions };\n  return { ok: true, version: ok[0] };\n}\nconsole.log(JSON.stringify(negotiate(['2026-07-28'], ['2026-07-28'])));\nconsole.log(JSON.stringify(negotiate(['2024-11-05'], ['2026-07-28'])));\nconsole.log(JSON.stringify(negotiate(['2026-07-28', '2024-11-05'], ['2024-11-05'])));", "note": "Run it: agreed version, explicit version error listing server support, then highest-mutual selection. Negotiation is explicit errors, never silent fallback — the wire equivalent of fail-closed." },
+    { "t": "keytakeaways", "items": ["Host owns N clients (one per server); servers expose context; models live in hosts (sampling deprecated)", "stdio: local single-client; Streamable HTTP: remote multi-client + HTTP auth; same JSON-RPC either way", "server/discover + per-request _meta (version, capabilities, identity); stateless; explicit version errors"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice negotiator on all three cases and map outcomes. (b) Choose transports for: Claude Desktop + local catalog DB; backend serving 3 agent services with OAuth; CI lint job calling one local checker — with one-line reasons. (c) State what breaks if a stdio server logs to stdout.",
+    "hints": [
+      "Outcomes: agreed 2026-07-28 / explicit UnsupportedProtocolVersion error / mutual fallback 2024-11-05.",
+      "Desktop+local → stdio (same machine, one client). Backend+OAuth → Streamable HTTP (remote, many, auth). CI → stdio (simplest).",
+      "stdout pollution corrupts JSON-RPC framing (parse failures on every message) — log to stderr/OpenTelemetry."
+    ],
+    "solution": "// (a) agree / explicit-error / mutual-fallback (in order).\n// (b) stdio / Streamable HTTP / stdio (locality+clients+auth decide).\n// (c) framing corruption: stdout IS the wire; logs belong on stderr.",
+    "why": "Transport choice (locality/clients/auth) plus wire hygiene (stdout discipline) plus version explicitness are the three deployment judgments — each practiced on concrete cases.",
+    "code": "// Transport-decision pattern: locality + client count + auth → transport.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "VS Code talks to filesystem + Sentry servers. Client count?",
+      "options": ["One total", "One per server (two clients) — dedicated connections per server", "One per tool", "Zero — direct"],
+      "answer": 1,
+      "explain": "Host owns N clients, one per server connection. Local stdio servers typically serve one client; remote HTTP serves many."
+    },
+    {
+      "q": "Backend, 3 agent services, OAuth. Transport?",
+      "options": ["stdio", "Streamable HTTP: remote multi-client with standard HTTP auth", "No transport needed", "Files"],
+      "answer": 1,
+      "explain": "Remote + many clients + auth Sieg HTTP. Same-machine single-client would take stdio."
+    },
+    {
+      "q": "Version mismatch handling in MCP?",
+      "options": ["Silent fallback to oldest", "Explicit UnsupportedProtocolVersionError listing supported versions; client retries mutually supported", "Crash", "Ignore versions"],
+      "answer": 1,
+      "explain": "Stateless explicitness extends to versions: errors name supported versions, clients negotiate openly. Never silent."
+    }
+  ],
+  "summary": "Hosts own clients per server; transports by locality/clients/auth; discovery via server/discover with _meta everywhere; stdout is sacred. Spec 2026-07-28 throughout.",
+  "next": "Wires understood — now the payload: tools with Zod schemas, descriptions that steer models, and validation that fails fast. Next: registerTool mastery."
+}

@@ -1,0 +1,56 @@
+{
+  "title": "Build: The Store MCP Server",
+  "slug": "08-store-server-build",
+  "objective": "After this lesson you will be able to scaffold a version-pinned MCP server (TS SDK v2) with catalog/order tools, a policy resource, and a triage prompt — wired to serve over stdio with Inspector verification at every step.",
+  "why": "Seven lessons of pieces; one lesson of assembly. The store server (catalog search, order lookup, gated refund, shipment tracking + policy resource + triage prompt) is the reference implementation every later pattern points at — and your capstone's starting fork. Build order matters: read-only first, gated money last, verification at each arrow.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Scaffold pinned: versions stated once" },
+    { "t": "p", "text": "Pin everything: `@modelcontextprotocol/server` (v2 line), `zod/v4`, Node 20+, `type: module` (ESM only), spec 2026-07-28 in the README. Pins convert 'works on my machine' into reproducible builds — and the Inspector version check (below) verifies the wire matches the pins." },
+    { "t": "code", "lang": "js", "code": "// Scaffold (your Node project): npm init -y; npm pkg set type=module\n// npm install @modelcontextprotocol/server zod tsx\n// src/index.ts — createServer factory (testable without transport!)\nimport { McpServer } from \"@modelcontextprotocol/server\";\nimport { serveStdio } from \"@modelcontextprotocol/server/stdio\";\nimport * as z from \"zod/v4\";\nfunction createServer() {\n  const server = new McpServer({ name: \"store-ops\", version: \"1.0.0\" });\n  // tools/resources/prompts register here (below), factory returns server\n  return server;\n}\nserveStdio(createServer);\n// Factory shape enables in-memory testing (import + call, no processes).", "caption": "createServer factory: build testable, serve thin" },
+    { "t": "h", "text": "Read-only first: catalog + orders" },
+    { "t": "p", "text": "Register reads before writes: `search-orders` (query + limit≤50), `lookup-order` (exact ID, outputSchema + structuredContent), policy `resource`, triage `prompt`. Verify each with the Inspector before adding the next — working reads prove transport, schemas, and discovery; money comes only on proven ground." },
+    { "t": "code", "lang": "js", "code": "// Read tools (v2 shapes; wire to your catalog DB in production)\n// server.registerTool(\"search-orders\",\n//   { title: \"Search Orders\",\n//     description: \"Search orders by customer text. For exact-ID fetch use lookup-order instead.\",\n//     inputSchema: z.object({ query: z.string().describe(\"Substring over customer/item text\"), limit: z.number().int().max(50).optional() }) },\n//   async ({ query, limit }) => ({ content: [{ type: \"text\", text: hits.join(\"\\n\") }] }));\n// server.registerTool(\"lookup-order\", { ... outputSchema: z.object({ total: z.number(), status: z.string() }) },\n//   async ({ orderId }) => ({ content: [...], structuredContent: {...} }));", "caption": "Reads first with sibling descriptions and structured outputs" },
+    { "t": "h", "text": "Money last: gated refund with the full stack" },
+    { "t": "p", "text": "Refund arrives with everything: Zod schema (orderId pattern + amount bounds), idempotency key required, elicitation approval over thresholds, isError discipline, audit logging, stdout-clean handler. Gated money on proven read ground — never first, never ungated, never unlogged." },
+    { "t": "code", "lang": "js", "code": "// Gated refund: schema + key + approval + audit (v2 shapes, your Node project)\n// server.registerTool(\"issue-refund\",\n//   { title: \"Issue Refund (Gated)\",\n//     description: \"Refund an order post-approval ONLY. Never call without an approval verdict.\",\n//     inputSchema: z.object({\n//       orderId: z.string().regex(/^ORD-[0-9]+$/),\n//       amount: z.number().min(1).max(500),\n//       idempotencyKey: z.string(),\n//       approvalRef: z.string().describe(\"Elicitation verdict ID authorizing this call\"),\n//     }) },\n//   async (args) => { /* check key store → approval record → execute → audit → content+structuredContent */ });", "caption": "Money tools carry keys, bounds, and approval references in-schema" },
+    { "t": "h", "text": "Verify with Inspector at every arrow" },
+    { "t": "p", "text": "The **MCP Inspector** connects to your server for interactive tools/list, tools/call with forms, resources/read, and prompt rendering — the fastest loop for schema mistakes (invalid args rejected visibly), description quality (would *you* pick correctly?), and transport health. Verify reads → resources/prompts → gated money, in that order; each green gate before the next arrow." },
+    { "t": "practice", "sim": "js-playground", "title": "Order the build", "query": "const steps = [\n  'scaffold-pinned',\n  'read-tools',\n  'resource-prompt',\n  'inspector-verify-reads',\n  'gated-refund',\n  'inspector-verify-money',\n];\nconst rules = { 'gated-refund': ['read-tools', 'inspector-verify-reads'] };\nfunction orderOK(order) {\n  const pos = {};\n  order.forEach((s, i) => (pos[s] = i));\n  for (const [step, deps] of Object.entries(rules))\n    for (const d of deps) if (pos[d] > pos[step]) return 'violated: ' + step + ' before ' + d;\n  return 'order sound';\n}\nconsole.log(orderOK(steps));\nconsole.log(orderOK(['gated-refund', 'scaffold-pinned', 'read-tools', 'resource-prompt', 'inspector-verify-reads', 'inspector-verify-money']));", "note": "Run it: expect 'order sound' then the violation naming money-before-reads. Build order is a dependency graph: reads prove ground that money requires." },
+    { "t": "keytakeaways", "items": ["Pin versions (SDK/zod/Node/spec) + createServer factory for testability", "Reads → resources/prompts → Inspector-verified ground → gated money last", "Money carries keys, bounds, approval refs in-schema; Inspector gates every arrow"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice ordering check on both orders and explain the violation. (b) Write the shipment-tracking tool spec (name/title/description with sibling sentence/schema/outputSchema) in v2 shape. (c) List the Inspector verifications per stage (reads, resource, prompt, refund) with what green means each time.",
+    "hints": [
+      "Sound order vs money-first violation: reads prove transport/schemas/discovery that money requires.",
+      "Tracking tool mirrors lookup-order shape with tracking-number pattern + status outputSchema; sibling sentence vs order-status tools.",
+      "Inspector gates: tools/list shows all → call forms validate → resources read → refund path exercises approval → audit entries appear."
+    ],
+    "solution": "// (a) sound vs money-before-reads violation (named explicitly).\n// (b) tracking tool v2 spec per hints (pattern + outputSchema + sibling line).\n// (c) per-stage Inspector gates: list → call → read → gated path → audit.",
+    "why": "Build-order discipline (reads prove ground), spec authorship (new tool in house style), and Inspector gating (verify per arrow) are the three build judgments — each performed, not described.",
+    "code": "// Build-order pattern: reads → verify → money; Inspector per arrow.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "First tool to build on a greenfield MCP server?",
+      "options": ["Refund issuance", "A read-only lookup: proves transport, schemas, discovery with zero blast radius", "Delete user", "Bulk import"],
+      "answer": 1,
+      "explain": "Reads prove ground money requires. Blast-radius ordering: reads → resources → gated writes, verified per arrow."
+    },
+    {
+      "q": "createServer factory shape buys you…",
+      "options": ["Nothing", "In-memory testing without transports: import, call tools directly, assert — transport is the thin last layer", "Faster protocol", "Free hosting"],
+      "answer": 1,
+      "explain": "Testability by construction: factories separate build from serve. Transport wiring stays thin and late."
+    },
+    {
+      "q": "Inspector shows the refund tool but approval never triggers. Missing?",
+      "options": ["More tools", "Elicitation wiring + approvalRef schema requirement: the gate path untested end to end — verify gated paths, not just listings", "Bigger descriptions", "New transport"],
+      "answer": 1,
+      "explain": "Listings prove advertisement; gated paths need end-to-end exercise (elicit → verdict → execute/audit). Verify behavior, not presence."
+    }
+  ],
+  "summary": "Pinned scaffold, reads first, Inspector per arrow, gated money last with keys and approval refs. Build order is dependency order with proof.",
+  "next": "Built and green — now break it professionally: Inspector workflows, tracing, versions, and error codes. Next: debugging like an operator."
+}

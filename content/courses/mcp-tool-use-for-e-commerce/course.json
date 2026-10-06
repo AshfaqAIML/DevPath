@@ -1,0 +1,172 @@
+{
+  "courseSlug": "mcp-tool-use-for-e-commerce",
+  "subtitle": "Give agents hands: the Model Context Protocol, tool schemas, permissions, and safe execution patterns for catalog and order operations",
+  "audience": "Developers who finished LangGraph for E-commerce (tools chapter) and Prompt Engineering 101, now standardizing agent integrations. Version basis stated once, used everywhere: MCP spec 2026-07-28 + TypeScript SDK v2 (@modelcontextprotocol/server, zod v4, Node 20+). Protocol machinery runs as executable JS in the playground; SDK code targets your Node project.",
+  "outcomes": [
+    "Explain why MCP exists (N×M integrations) and how it differs from bespoke function calling",
+    "Map the architecture: host, clients, servers, transports (stdio vs Streamable HTTP), JSON-RPC + discovery",
+    "Define tools with registerTool: names, descriptions, Zod input schemas, titles, and annotations",
+    "Expose catalog data as resources (URIs, direct vs tool-mediated) and prompts as reusable templates",
+    "Scope permissions per tool, gate destructive operations, and use elicitation for confirmations",
+    "Execute safely: SDK validation, timeouts, idempotency keys, audit logging, isError discipline",
+    "Build a store MCP server (catalog lookup + order tools) with the v2 SDK",
+    "Debug with the Inspector, tracing, version negotiation, and error-code reading",
+    "Evaluate tool-calling end to end: selection accuracy, argument validity, and safe-failure paths",
+    "Ship an order-operations MCP server consumed by an agent, measured and audited"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "langgraph-for-e-commerce"],
+  "technologies": ["MCP spec 2026-07-28", "TypeScript SDK v2 (@modelcontextprotocol/server)", "zod v4", "Node.js 20+", "stdio + Streamable HTTP transports", "MCP Inspector"],
+  "skills": ["MCP architecture", "tool design", "resources and prompts", "permissions", "safe execution", "MCP debugging", "tool-call evaluation"],
+  "assessment": [
+    {
+      "q": "Twelve hosts × eight data sources, all bespoke integrations. MCP changes the math how?",
+      "options": ["Faster JSON", "Standard client↔server protocol: N hosts + M servers integrate N+M ways instead of N×M bespoke wirings", "Bigger models", "More tools"],
+      "answer": 1,
+      "explain": "Standards collapse integration matrices: each side implements the protocol once. N+M vs N×M is MCP's entire economic argument (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Host vs client vs server in MCP?",
+      "options": ["Synonyms", "Host runs the AI app and owns one client per server; clients hold connections; servers expose tools/resources/prompts", "Server runs the model", "Client runs tools"],
+      "answer": 1,
+      "explain": "VS Code (host) spawns a client per server (filesystem, Sentry); servers serve context. One client per connection (Ch.2).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "stdio vs Streamable HTTP transport — choose per case.",
+      "options": ["Interchangeable", "Local single-client process integration → stdio; remote multi-client with HTTP auth → Streamable HTTP", "HTTP always", "stdio always"],
+      "answer": 1,
+      "explain": "Locality + client count + auth needs decide: stdio (same machine, one client, no network) vs HTTP (remote, many clients, bearer/OAuth) (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "registerTool vs the old tool()?",
+      "options": ["Same thing", "v2 registerTool(name, config, handler) replaces v1 tool(); one Zod inputSchema yields advertised JSON Schema + pre-handler validation + inferred arg types", "tool() is newer", "Both deprecated"],
+      "answer": 1,
+      "explain": "Migration fact with teeth: single-schema source of truth (advertise + validate + infer). v1 code needs the codemod (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "lookup_order vs search_orders undescribed. Predict + fix?",
+      "options": ["Fine as-is", "Model mis-selects between overlapping tools — describe selection criteria per tool (when-each); descriptions are the only docs the model gets", "Merge them blindly", "Rename randomly"],
+      "answer": 1,
+      "explain": ".describe() survives into advertised JSON Schema: argument docs reach the model. Sibling disambiguation lives in descriptions (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Catalog text for grounding: resource vs tool?",
+      "options": ["Always tools", "Stable reference data → resources (direct reads, URIs); computed/filtered/live lookups → tools (Ch.4).", "Always resources", "Neither — prompts"],
+      "answer": 1,
+      "explain": "Direct context (files, rows, policy text) reads as resources; actions/computations invoke as tools. Shape follows access pattern."
+    },
+    {
+      "q": "issue_refund in an agent's hands, no gate. Design?",
+      "options": ["Trust the agent", "Gated destructive tool: permission scope + approval (elicitation/HITL) + audit log + idempotency — money moves under supervision", "Remove refunds", "Hide the tool"],
+      "answer": 1,
+      "explain": "Destructive tools need scopes, gates, and audit trails. Least privilege + approval paths (Ch.6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Tool throws on invalid stock ID. Correct result shape?",
+      "options": ["Throw across the protocol", "{content: [...explaining...], isError: true} — failures as readable results the model can react to, never raw crashes", "Empty response", "Retry silently"],
+      "answer": 1,
+      "explain": "isError results keep failures inside the protocol: readable, routable, loggable. Crashes break runs opaquely (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Same ticket re-runs issue_refund after a crash. Prevention?",
+      "options": ["Faster server", "Idempotency keys + check-before-act: re-execution returns the recorded outcome instead of double-charging", "No retries", "Bigger timeouts"],
+      "answer": 1,
+      "explain": "Retries/replays re-invoke tools: keys make repeats safe. Money tools without idempotency double-apply on recovery (Ch.7).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Sampling in new server code (2026-07-28 spec). Verdict?",
+      "options": ["Required", "Deprecated — integrate LLM provider APIs directly instead of sampling/createMessage", "Only for tools", "Encouraged"],
+      "answer": 1,
+      "explain": "Spec-deprecated client primitive: new code calls providers directly. Elicitation remains for user input (Ch.2/6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Tool list changed mid-conversation (new refund policy tool). How does the client learn?",
+      "options": ["Restart everything", "Opt-in subscriptions/listen for toolsListChanged → re-list on notification (plus polling fallback; best-effort delivery)", "It can't", "Guess"],
+      "answer": 1,
+      "explain": "Dynamic capabilities via opt-in notification streams with re-list on event; best-effort means polling backs it up (Ch.9).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "stdout vs stderr in a stdio MCP server?",
+      "options": ["Interchangeable", "stdout carries the protocol (JSON-RPC) — polluting it corrupts messages; log to stderr (or OpenTelemetry)", "stderr carries protocol", "No logging allowed"],
+      "answer": 1,
+      "explain": "Transport hygiene: stdout is the wire. Logging there breaks framing; stderr/OpenTelemetry keeps observability without corruption (Ch.7/9).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Order-Operations MCP Server",
+    "summary": "Ship a version-pinned MCP server (spec 2026-07-28, TS SDK v2) exposing catalog lookup, order tools (read + gated refund), a policy resource, and a triage prompt — consumed by an agent loop with routing tests, approval gates, audit logging, and an evaluation report. Standards-compliant hands for e-commerce agents.",
+    "requirements": [
+      "Server: McpServer (name/version) with 4+ tools (catalog search, order lookup, gated refund, shipment tracking), 1+ resource (policy text), 1+ prompt (triage template)",
+      "Schemas: Zod input schemas with .describe() on every argument; outputSchema + structuredContent on lookups; closed shapes",
+      "Permissions: refund tool gated (approval via elicitation/HITL design); tool audit (least-privilege manifest per consumer)",
+      "Safety: SDK validation first, timeouts, idempotency keys on money tools, isError discipline, stderr-only logging",
+      "Consumer: agent loop (route → call → validate → generate) with routing tests and loop budgets",
+      "Evaluation: tool-selection accuracy, argument-validity rate, safe-failure paths (invalid/unknown/refused), per-segment report"
+    ],
+    "technical": [
+      "Package basis: @modelcontextprotocol/server (v2), zod/v4, Node 20+, type: module; stdio transport (Streamable HTTP noted as extension)",
+      "Protocol machinery (validators, gates, audit) also demonstrated as runnable JS",
+      "Threads/conversations isolated; audit log append-only with tool/args/outcome per call",
+      "Numbers reproducible: gold tool-call set + router tests committed"
+    ],
+    "architecture": "Four sections: (1) Server map — tools/resources/prompts with schemas and permission rationale; (2) Consumer loop — routing, calls, validation, gates with traces; (3) Evaluation — selection accuracy, arg validity, safe-failure paths per segment; (4) Operations — version pinning, Inspector workflow, audit-log design, upgrade notes (v1→v2).",
+    "steps": [
+      " scaffold with createServer factory + one read-only tool; verify with Inspector",
+      "Add catalog/order tools with Zod schemas and descriptions; test invalid args (SDK rejects pre-handler)",
+      "Add policy resource + triage prompt; wire the consumer loop with routing tests",
+      "Gate the refund tool (approval + idempotency + audit); demonstrate approve/edit/skip",
+      "Build the gold tool-call set; baseline selection/validity/safety; iterate once; re-score",
+      "Write operations (pinning, Inspector, audit) and the findings memo"
+    ],
+    "evaluation": [
+      "All tools schema-closed with described args; outputSchema on lookups",
+      "Refund gated with approval path demonstrated; idempotency proven by re-run",
+      "Gold baseline + iteration with per-segment diffs; safe-failure paths all covered",
+      "Audit log complete per call (tool/args/outcome); stdout clean (protocol only)"
+    ],
+    "stretch": [
+      "Add Streamable HTTP transport with bearer auth and document the trade-offs vs stdio",
+      "Implement elicitation confirmation for refunds with a scripted user simulator",
+      "Add Tasks-extension handling for a long-running inventory reconciliation job"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Why does MCP exist when we already had function calling?",
+      "a": "Function calling standardizes model→tool syntax per provider; MCP standardizes the whole integration surface (discovery, tools, resources, prompts, transports, versions) across hosts and servers. One function-calling integration serves one provider's models; one MCP server serves every host (Claude Code, VS Code, Cursor, custom apps). N+M vs N×M — plus resources/prompts, which function calling never covered."
+    },
+    {
+      "q": "registerTool vs tool() — what changed and why does it matter?",
+      "a": "TS SDK v2's registerTool(name, config, handler) replaces v1's tool(): one Zod inputSchema now yields the advertised JSON Schema, pre-handler argument validation, and inferred handler types. It matters because validation moved into the framework — bad arguments reject before handlers run (fail fast with model-readable errors), and .describe() text becomes the model's only argument documentation. Migration needs the codemod plus package rename (@modelcontextprotocol/server)."
+    },
+    {
+      "q": "Design permissions for catalog lookup vs refund issuance.",
+      "a": "Lookup: read-only, ungated, broadly available (annotation readOnlyHint). Refund: destructive — scoped to finance consumers, approval-gated (elicitation/HITL over thresholds), idempotency-keyed, audit-logged per call. Selection tests prove agents pick correctly; gold attack items prove pressure tickets can't bypass the gate. Least privilege per consumer, validated at boundaries."
+    },
+    {
+      "q": "Sampling is deprecated — what do you do instead, and what remains for user input?",
+      "a": "Servers needing LLM completions call provider APIs directly (spec 2026-07-28 deprecated sampling/createMessage). User input stays via elicitation (elicitation/create with schemas) — servers requesting confirmation or details through the client. Confusing the two (sampling for confirmations) was always wrong; the deprecation just makes it official."
+    },
+    {
+      "q": "Stdio vs Streamable HTTP for a store's order-tools server?",
+      "a": "Same-machine single assistant (Claude Desktop + local inventory DB): stdio — no network, one client, simplest ops, stdout-discipline required. Multi-agent backend service with many clients + auth: Streamable HTTP with OAuth/bearer — remote, many clients, standard HTTP security. Decide by locality, client count, and auth needs; the JSON-RPC protocol is identical either way."
+    },
+    {
+      "q": "A tool throws on bad input mid-conversation. Correct handling end to end?",
+      "a": "Never throw across the protocol: return {content: [...readable...], isError: true} so the model can react (clarify, retry with fixed args, escalate). Validate pre-handler via schemas (most bad input never reaches code), log the failure with args, and cover the path in gold safe-failure items. Crashes break runs opaquely; isError results keep them debuggable and routable."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

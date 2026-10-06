@@ -1,0 +1,54 @@
+{
+  "title": "Tools: registerTool Mastery",
+  "slug": "03-tools-registertool",
+  "objective": "After this lesson you will be able to define tools with registerTool (names, descriptions, Zod input schemas, titles, output schemas), write sibling-disambiguating descriptions, and rely on SDK pre-handler validation with isError discipline.",
+  "why": "Tools are how models act — and the #1 tool failure is definitional: vague descriptions mis-select, loose schemas admit garbage, missing output schemas force prose parsing. TS SDK v2 concentrates all three into one Zod schema with framework-enforced validation. Version basis: @modelcontextprotocol/server (v2), zod v4, Node 20+ — registerTool replaces v1's tool().",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "One schema, three jobs" },
+    { "t": "p", "text": "`registerTool(name, config, handler)` with a Zod `inputSchema` object: the SDK derives the advertised JSON Schema (what the model sees), **validates arguments pre-handler** (bad calls never reach your code), and **infers handler arg types**. `.describe()` on fields survives conversion — it becomes the model's only argument documentation. One schema, three jobs; write it like the contract it is." },
+    { "t": "code", "lang": "js", "code": "// Real TS SDK v2 (your Node project: npm i @modelcontextprotocol/server zod tsx)\nimport { McpServer } from \"@modelcontextprotocol/server\";\nimport * as z from \"zod/v4\";\nconst server = new McpServer({ name: \"catalog\", version: \"1.0.0\" });\nserver.registerTool(\n  \"lookup-order\",\n  {\n    title: \"Order Lookup\",\n    description: \"Fetch ONE order by exact ID. Use when the ticket names an order. For browsing many orders use search-orders instead.\",\n    inputSchema: z.object({\n      orderId: z.string().regex(/^ORD-[0-9]+$/).describe(\"Exact order ID, e.g. ORD-4821\"),\n    }),\n    outputSchema: z.object({ total: z.number(), status: z.string() }),\n  },\n  async ({ orderId }) => ({\n    content: [{ type: \"text\", text: `Order ${orderId}: ...` }],\n    structuredContent: { total: 129, status: \"shipped\" },\n  })\n);\n// Invalid orderId shape rejects pre-handler as an isError result the model reads.", "caption": "v2 shapes: title, sibling-disambiguating description, Zod schema, structured output" },
+    { "t": "h", "text": "Names and descriptions steer selection" },
+    { "t": "p", "text": "Namespaced names (`lookup-order` vs `search-orders`, `calculator_arithmetic` style) plus **when-to-use sentences naming the sibling** ('For browsing many orders use search-orders instead') eliminate the overlap confusion that plagues toolsets. Titles render for humans; descriptions decide for models. Undescribed siblings get coin-flip selection — describe the boundary, not just the function." },
+    { "t": "h", "text": "outputSchema + structuredContent" },
+    { "t": "p", "text": "Add `outputSchema` and return matching **`structuredContent`** beside human-readable `content`: machines parse the structured half, models/humans read the text half. Handlers returning both serve dual consumers without format wars. Validation failures surface as `isError: true` results the model can react to (clarify, retry fixed, escalate) — never raw throws across the protocol." },
+    { "t": "code", "lang": "js", "code": "// isError discipline: failures as readable results (pattern)\n// async ({ orderId }) => {\n//   const row = db.orders[orderId];\n//   if (!row) return { content: [{ type: \"text\", text: `No order ${orderId}.` }], isError: true };\n//   return { content: [{ type: \"text\", text: describe(row) }], structuredContent: row };\n// }\n// Crashes break runs opaquely; isError results route debuggably.", "caption": "isError keeps failures inside the protocol — readable, routable, loggable" },
+    { "t": "callout", "variant": "info", "title": "v1 → v2 migration note", "text": "Coming from v1 (@modelcontextprotocol/sdk with server.tool()): run the codemod, rename the package to @modelcontextprotocol/server, convert tool() calls to registerTool(name, config, handler), and move schemas to Zod objects. Title precedence is title → annotations.title → name. Migration is mechanical; mixed-version fleets negotiate via server/discover versions." },
+    { "t": "practice", "sim": "js-playground", "title": "Validate like the SDK", "query": "function validateArgs(schema, args) {\n  const problems = [];\n  for (const [k, rule] of Object.entries(schema)) {\n    const v = args[k];\n    if (v === undefined) { if (rule.required) problems.push('missing:' + k); continue; }\n    if (rule.pattern && !new RegExp(rule.pattern).test(v)) problems.push('bad-format:' + k);\n    if (rule.max && v.length > rule.max) problems.push('too-long:' + k);\n  }\n  return problems.length ? { ok: false, isError: true, problems } : { ok: true };\n}\nconst orderSchema = { orderId: { required: true, pattern: '^ORD-[0-9]+$' } };\nconsole.log(JSON.stringify(validateArgs(orderSchema, { orderId: 'ORD-4821' })));\nconsole.log(JSON.stringify(validateArgs(orderSchema, { orderId: 'ten' })));\nconsole.log(JSON.stringify(validateArgs(orderSchema, {})));", "note": "Run it: expect ok, then bad-format, then missing — pre-handler rejection with named problems, mirroring SDK validation. Handlers run only on valid args; violations become model-readable isError results." },
+    { "t": "keytakeaways", "items": ["One Zod schema: advertised JSON Schema + pre-handler validation + inferred types; .describe() reaches the model", "Namespaced names + sibling-disambiguating descriptions steer selection; titles serve humans", "outputSchema + structuredContent serve machines and readers; isError keeps failures routable", "v2 registerTool replaces v1 tool(); migrate via codemod + package rename"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice validator on all three cases and map outcomes. (b) Write the registerTool definition for search-orders (query string + limit int ≤50 optional) with a description disambiguating from lookup-order, in real v2 SDK shape. (c) State what the SDK does with {query: 42} (number, not string) before your handler runs.",
+    "hints": [
+      "Outcomes: ok / bad-format:orderId / missing:orderId — pre-handler, named, no handler execution.",
+      "Mirror the lesson's lookup-order: title, sibling sentence ('For exact-ID fetch use lookup-order instead'), z.object with .describe()s, limit int max 50 optional.",
+      "Wrong-typed args reject pre-handler as isError results: handler never runs, model reads the failure and reacts."
+    ],
+    "solution": "// (a) ok / bad-format / missing (pre-handler, in order).\n// (b) search-orders v2 shape per hints (title + sibling sentence + Zod schema).\n// (c) SDK rejects pre-handler → isError result naming the violation; handler untouched.",
+    "why": "Schema-as-triple-duty (advertise/validate/infer) plus sibling descriptions plus pre-handler rejection are the three v2 mechanics — each verified, with migration knowledge making old code readable too.",
+    "code": "// v2 tool template: name + title + sibling description + Zod schema + structured output.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "lookup_order vs search_orders, undescribed. Predict + fix?",
+      "options": ["Fine as-is", "Coin-flip selection between overlapping tools — describe when-each with sibling sentences; descriptions are the model's only docs", "Merge blindly", "Rename randomly"],
+      "answer": 1,
+      "explain": ".describe() survives into advertised schemas. Sibling disambiguation ('use X instead for Y') is the highest-value description sentence."
+    },
+    {
+      "q": "{orderId: 'ten'} arrives for pattern ^ORD-[0-9]+$. v2 behavior?",
+      "options": ["Handler coerces it", "SDK rejects pre-handler → isError result naming the violation; handler never runs", "Crash", "Silent default"],
+      "answer": 1,
+      "explain": "Single-schema validation gates handlers: bad args become model-readable failures, never code paths. Quarantine-with-evidence at protocol level."
+    },
+    {
+      "q": "v1 tool() code in the wild. Migrate how?",
+      "options": ["Rewrite from scratch", "Codemod + package rename to @modelcontextprotocol/server + registerTool(name, config, handler) with Zod object schemas", "Keep v1 forever", "Delete tools"],
+      "answer": 1,
+      "explain": "Mechanical migration: codemod converts calls, packages rename, schemas become Zod objects. Mixed fleets negotiate versions via discovery."
+    }
+  ],
+  "summary": "One schema (advertise/validate/infer), sibling-aware descriptions, structured outputs, isError discipline, v2 migration fluency. Definitions steer models.",
+  "next": "Actions defined — now direct context: resources with URIs for stable reference data. Next: read, don't call."
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Resources: Direct Context, No Calls",
+  "slug": "04-resources-direct-context",
+  "objective": "After this lesson you will be able to expose stable reference data as MCP resources (URIs, list/read), choose resources vs tools correctly, and design resource hierarchies that stay navigable as catalogs grow.",
+  "why": "Not everything needs a function call: policy text, catalog snapshots, config files are *read directly* more cheaply than tool-mediated. Resources give clients addressable context (URIs) with list/read semantics — no argument schemas, no execution, no side effects. Misusing tools for static reads wastes latency and model reasoning on solved addressing.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Resources vs tools: address vs invoke" },
+    { "t": "p", "text": "**Resources** expose data by URI (`policy://returns/30-day`, `catalog://products/SH-1`): list to discover, read to fetch — no arguments beyond the address, no execution, no side effects. **Tools** compute or act with validated arguments. Rule: stable reference content → resources; parameterized computation, live lookups, or actions → tools. Policy text as a resource; order lookup as a tool." },
+    { "t": "code", "lang": "js", "code": "// Resource shape (v2 SDK concepts; your Node project)\n// server.registerResource(\"returns-policy\", \"policy://returns/30-day\", {\n//   title: \"Returns Policy\",\n//   description: \"Current 30-day returns policy text\",\n//   mimeType: \"text/markdown\",\n// }, async (uri) => ({\n//   contents: [{ uri: uri.href, mimeType: \"text/markdown\", text: POLICY_MD }],\n// }));\n// Client: resources/list → pick URI → resources/read → context. No args, no effects.", "caption": "URI-addressed context: discover, read, cite — never executed" },
+    { "t": "h", "text": "Hierarchy design that scales" },
+    { "t": "p", "text": "URI schemes encode navigation: `catalog://category/shoes`, `catalog://product/SH-1`, `policy://returns/30-day`. List operations stay bounded per level (categories list products; products don't list the catalog). Templates (`catalog://product/{sku}`) address infinite spaces finitely. Flat single-level URI dumps become unlistable past dozens of entries — hierarchy is pagination by design." },
+    { "t": "h", "text": "Freshness and staleness on resources" },
+    { "t": "p", "text": "Resources can stale silently (policy edited, resource cached): mitigate with versioned URIs or versions in metadata (`policy://returns/30-day@v14`), short TTLs on lists where supported, and as-of dates inside content (the RAG staleness discipline, applied to MCP). Clients should display provenance (URI + version) with cited content — citations need addresses." },
+    { "t": "practice", "sim": "js-playground", "title": "Route address-vs-invoke", "query": "function addressOrInvoke(need) {\n  if (need.stable && need.addressable) return 'resource:' + need.uri;\n  if (need.computed || need.live || need.acts) return 'tool:' + need.tool;\n  return 'resource:' + (need.uri || 'unknown');\n}\nconst cases = [\n  [{ stable: true, addressable: true, uri: 'policy://returns/30-day' }, 'resource:policy://returns/30-day'],\n  [{ computed: true, tool: 'price-quote' }, 'tool:price-quote'],\n  [{ live: true, tool: 'lookup-order' }, 'tool:lookup-order'],\n  [{ acts: true, tool: 'issue-refund' }, 'tool:issue-refund'],\n];\nlet pass = 0;\nfor (const [need, expected] of cases) {\n  const got = addressOrInvoke(need);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(need) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' needs routed');", "note": "Run it: expect 4/4. Stable-addressable reads become URIs; computed/live/acting needs become tools. The routing question precedes every MCP addition." },
+    { "t": "keytakeaways", "items": ["Resources: URI-addressed stable context (list/read), no args, no effects; tools: computed/live/actions", "Hierarchical URI schemes with templates scale; flat dumps don't; versions + as-of dates fight staleness", "Route every addition by access pattern before building"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice router and confirm 4/4. (b) Design URIs for: returns policy v14, product SH-1, category shoes listing — with scheme rationale per URI. (c) State which gets a tool instead among: live inventory count, shipping-rate calc, refund issuance — with one-line reasons.",
+    "hints": [
+      "Baseline 4/4; each case exercises one routing rule (stable-addressable vs computed/live/acting).",
+      "policy://returns/v14 (versioned!), catalog://product/SH-1, catalog://category/shoes — hierarchy + versions + templates.",
+      "All three are tools (live/computed/acting); resources would stale or side-effect. One line each names the disqualifier."
+    ],
+    "solution": "// (a) 4/4 routed by access pattern.\n// (b) versioned policy URI, product URI, category listing URI (hierarchy + versions).\n// (c) all tools: live inventory (freshness), rate calc (computed), refund (acts).",
+    "why": "Access-pattern routing (address vs invoke) plus URI design (hierarchy, versions, templates) are the two resource judgments — each practiced on concrete catalog needs.",
+    "code": "// Addition-router pattern: stable+addressable → resource; else tool.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Policy text via tool call with no arguments. Verdict?",
+      "options": ["Fine", "Misuse: stable reference reads belong as URI-addressed resources — tools add latency, reasoning, and failure modes to solved addressing", "Faster", "More secure"],
+      "answer": 1,
+      "explain": "Address beats invocation for static content: list/read semantics, no schemas, no execution. Tools are for computed/live/acting needs."
+    },
+    {
+      "q": "200 products in one flat resource listing. Problem + fix?",
+      "options": ["None", "Unnavigable past dozens: hierarchical URIs (category → product) with templates bound the listing per level", "More tools", "Bigger responses"],
+      "answer": 1,
+      "explain": "Hierarchy is pagination by design; flat dumps don't scale. Templates address infinite spaces finitely."
+    },
+    {
+      "q": "Cached policy resource edited upstream. Mitigations?",
+      "options": ["Hope clients refresh", "Versioned URIs + short TTLs + as-of dates in content + provenance display — staleness fought on four fronts", "Delete cache", "More resources"],
+      "answer": 1,
+      "explain": "Silent staleness corrupts answers citing old policy. Versions, TTLs, dates, and displayed provenance keep freshness auditable."
+    }
+  ],
+  "summary": "Address stable context (hierarchical versioned URIs); invoke computed/live/acting needs (tools). Route by access pattern, never habit.",
+  "next": "Data addressed, actions defined — now reusable interaction templates: prompts as slash-command-grade assets. Next: prompts that package expertise."
+}

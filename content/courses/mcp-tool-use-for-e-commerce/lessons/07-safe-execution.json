@@ -1,0 +1,108 @@
+{
+  "title": "Safe Execution: Timeouts to Audit",
+  "slug": "07-safe-execution",
+  "objective": "After this lesson you will be able to bound tool execution (timeouts, retries with backoff), make money tools idempotent, return isError results instead of throwing, and keep stdout protocol-clean with audit flowing elsewhere.",
+  "why": "Exposed tools meet production reality: slow upstreams, duplicate deliveries, crashing handlers, noisy logs. Each failure mode has a structural answer — timeouts with budgets, idempotency keys with check-before-act, isError envelopes, stderr logging. Safe execution is what separates demo servers from deployed ones; this lesson is the deployment checklist as engineering.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Bound everything: timeouts + budgeted retries"
+    },
+    {
+      "t": "p",
+      "text": "Every tool call gets a **timeout** (slow upstreams must not hang runs) and **bounded retries with backoff** (transients deserve chances, persistents deserve escalation). Timeouts compose: tool timeout < caller timeout < run budget — nested limits with headroom at each level. Retry budgets count attempts AND time; attempts-only budgets hang on slow failures."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Bounded call: timeout + retries + backoff (plain JS pattern)\nasync function boundedCall(fn, { timeoutMs = 5000, tries = 2, backoffMs = 500 } = {}) {\n  let lastError;\n  for (let i = 0; i < tries; i++) {\n    try {\n      return { ok: true, value: await Promise.race([\n        fn(),\n        new Promise((_, rej) => setTimeout(() => rej(new Error(\"timeout\")), timeoutMs)),\n      ]) };\n    } catch (e) { lastError = e; await new Promise((r) => setTimeout(r, backoffMs * (i + 1))); }\n  }\n  return { ok: false, error: String(lastError && lastError.message || lastError) };\n}\n// Attempts AND time bounded; backoff linear-ish; failure as data, never thrown.",
+      "caption": "Timeouts race, retries backoff, failures return — never throw, never hang"
+    },
+    {
+      "t": "h",
+      "text": "Idempotency: money tools run twice safely"
+    },
+    {
+      "t": "p",
+      "text": "Retries, replays, and crash recovery re-invoke tools — **idempotency keys** (caller-supplied per logical operation) plus **check-before-act** (key seen? return recorded outcome) make repeats safe. Refunds, charges, and sends all key by operation ID; lookups stay naturally idempotent. Unkeyed money tools double-apply on recovery — the incident class idempotency exists to delete."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Idempotent executor: keys + recorded outcomes (plain JS)\nfunction makeIdempotent() {\n  const seen = new Map(); // key -> recorded outcome\n  return async function run(key, fn) {\n    if (seen.has(key)) return { ok: true, outcome: seen.get(key), replay: true };\n    const outcome = await fn();\n    seen.set(key, outcome);\n    return { ok: true, outcome, replay: false };\n  };\n}\n// Crash between execute and record still double-applies: production stores\n// keys durably (DB unique constraint) — memory map demonstrates semantics.",
+      "caption": "Keys + check-before-act: repeats return records, never re-execute"
+    },
+    {
+      "t": "h",
+      "text": "isError envelopes + stdout hygiene"
+    },
+    {
+      "t": "p",
+      "text": "Handler failures return `{content: [...readable...], isError: true}` — the model reads, reacts (clarify, retry fixed, escalate), and the run continues debuggably. Raw throws break runs opaquely mid-protocol. And **stdout carries JSON-RPC**: log to stderr (or OpenTelemetry); one stray console.log on stdout corrupts framing for every subsequent message. Transport hygiene is a deployment gate, not a suggestion."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Prove idempotency",
+      "query": "// Sync twin (same key semantics, no awaits — playground-safe)\nfunction makeIdempotent() {\n  const seen = new Map();\n  return function run(key, fn) {\n    if (seen.has(key)) return { ok: true, outcome: seen.get(key), replay: true };\n    const outcome = fn();\n    seen.set(key, outcome);\n    return { ok: true, outcome, replay: false };\n  };\n}\nlet charges = 0;\nconst run = makeIdempotent();\nfunction charge() { charges++; return { charged: 129 }; }\nconst r1 = run('op-1', charge);\nconst r2 = run('op-1', charge);\nconsole.log('charges after repeat=' + charges);\nconsole.log('r1 replay=' + r1.replay + ' r2 replay=' + r2.replay);\nconst r3 = run('op-2', charge);\nconsole.log('r3 fresh=' + (!r3.replay) + ' charges=' + charges);",
+      "note": "Run it: expect charges=1 after the repeat (replay, not re-execution), r2 flagged replay, then a fresh key executing (charges=2). Crash-recovery duplicates become free — keys convert replays into records."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Timeouts race, retries backoff with attempt+time budgets; failures return as data",
+        "Idempotency keys + check-before-act (+durable key store in production) make repeats safe",
+        "isError envelopes keep failures routable; stdout stays protocol-clean (stderr/OpenTelemetry for logs)"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice idempotency proof and confirm charges=1 across the repeat. (b) Extend with a failing first attempt (throw once, then succeed) wrapped in boundedCall: prove retry-then-success with attempts counted. (c) State where the memory-map keys must move for production durability, and what breaks if they don't.",
+    "hints": [
+      "Baseline: charges=1, r2 replay=true, r3 fresh with charges=2 — repeats are records.",
+      "Fail-once fn + boundedCall(tries 2): first throws, backoff, second succeeds — attempts counted, failure never thrown outward.",
+      "Production: keys in durable store (DB unique constraint on operation key); memory maps die with crashes — the exact window idempotency must cover."
+    ],
+    "solution": "// (a) charges=1, replay flags correct, fresh key executes (in order).\n// (b) throw-once + bounded retry → success on attempt 2, counted.\n// (c) durable key store (DB unique op-key); memory dies with the process —\n//     covering crashes requires surviving them.",
+    "why": "Repeat-safety (keys), transient-tolerance (bounded retries), and durability (surviving crashes) are the three execution guarantees — each verified, with the production gap (memory vs durable keys) stated honestly."
+  },
+  "quiz": [
+    {
+      "q": "Refund tool retried after a crash double-charges. Missing?",
+      "options": [
+        "Faster server",
+        "Idempotency keys + check-before-act in a durable store — repeats return records",
+        "No retries ever",
+        "Bigger timeouts"
+      ],
+      "answer": 1,
+      "explain": "Recovery re-invokes: unkeyed money tools double-apply. Keys make repeats safe; durability (DB unique) covers crashes."
+    },
+    {
+      "q": "console.log debugging inside a stdio MCP server. Risk?",
+      "options": [
+        "None",
+        "stdout corruption: protocol framing breaks on non-JSON-RPC bytes — log to stderr/OpenTelemetry",
+        "Slower logs",
+        "Bigger responses"
+      ],
+      "answer": 1,
+      "explain": "stdout IS the wire for stdio transport. One stray log corrupts every subsequent message's framing."
+    },
+    {
+      "q": "Tool hangs on slow upstream with no timeout. Fix shape?",
+      "options": [
+        "Wait longer",
+        "Race with timeout + bounded backoff retries; failures return as data — nested limits with headroom per level",
+        "More threads",
+        "Cache everything"
+      ],
+      "answer": 1,
+      "explain": "Unbounded waits hang runs opaquely. Timeouts race, retries backoff, budgets bound attempts AND time."
+    }
+  ],
+  "summary": "Bounded calls, idempotent money, isError envelopes, clean stdout. Safe execution is deployment checklist as code.",
+  "next": "Safe primitives ready — now assemble the store server: catalog tools, order tools, policy resource, triage prompt. Next: the build walkthrough."
+}

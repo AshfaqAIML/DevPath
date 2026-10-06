@@ -1,0 +1,52 @@
+{
+  "title": "Capstone: Order-Ops Server + Consumer",
+  "slug": "10-order-ops-capstone",
+  "objective": "After this lesson you will be able to assemble the complete order-operations MCP server (tools, resources, prompts, gates, audit) with an agent consumer, evaluate tool-calling end to end, and present it as traced runs plus a findings memo — ready for the final assessment and your capstone project.",
+  "why": "Nine lessons of protocol pieces; one lesson of shipped server. The walkthrough performs the full build once — pinned scaffold, catalog/order tools, policy resource, triage prompt, gated refund, audit logging, consumer loop, gold evaluation — so your project repeats a demonstrated shape with numbers attached. Assembly is the final MCP skill.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "Assembly manifest (gates per arrow)" },
+    { "t": "p", "text": "Build in dependency order with verification per stage: (1) **scaffold pinned** (SDK/zod/Node/spec versions + Inspector connects); (2) **read tools + resource + prompt** (list/call/read/get green); (3) **gated refund** (elicitation path demonstrated, idempotency proven by re-run); (4) **consumer loop** (route → call → validate → generate with routing tests); (5) **gold evaluation** (selection/validity/safety per segment + one iteration). No stage starts on unverified prior output." },
+    { "t": "code", "lang": "js", "code": "// Assembly manifest: stages with gates (plain JS)\nconst manifest = {\n  pins: { sdk: \"@modelcontextprotocol/server v2\", zod: \"v4\", node: \"20+\", spec: \"2026-07-28\" },\n  server: { tools: [\"search-orders\", \"lookup-order\", \"issue-refund@gated\", \"track-shipment\"], resources: [\"policy://returns/v14\"], prompts: [\"triage-ticket\"] },\n  safety: { approval: \"elicitation\", idempotency: \"keys+durable-store\", audit: \"append-only\", stdout: \"protocol-only\" },\n  consumer: { routerTests: \"6/6\", loopBudget: true, quarantinePaths: true },\n  eval: { gold: 15, gate: \"no-regressions + money-veto\" },\n};\n// Every entry measured, contracted, or audited — manifest as machine-checkable build.", "caption": "Manifest-first: pins, server map, safety, consumer, eval gates" },
+    { "t": "h", "text": "Three traced runs (the demo that proves)" },
+    { "t": "p", "text": "Lookup run (SKU path → structuredContent → cited answer, one round trip), gated run ($500 refund → elicitation → edited amount → re-validated → executed → audited), attack run (injection ticket → quarantined pre-tool with logged attempt). Each with trace (JSON-RPC methods + verdicts), state, and timing: capability, governance, and defense demonstrated — not described." },
+    { "t": "h", "text": "Findings memo (your project's shape)" },
+    { "t": "p", "text": "Baseline per segment with weakest named (selection accuracy, arg validity, safe-failure coverage), one iterated fix with delta (sibling descriptions after mis-selections), gate health (approval latency design), audit completeness statement, and deferred list (Streamable HTTP + OAuth next, Tasks extension later). Measured, cited, improvable." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the manifest", "query": "const manifest = {\n  pins: { sdk: 'v2', zod: 'v4', node: '20+', spec: '2026-07-28' },\n  server: { tools: ['search-orders', 'lookup-order', 'issue-refund@gated'], resources: ['policy://returns/v14'], prompts: ['triage-ticket'] },\n  safety: { approval: 'elicitation', audit: true },\n  eval: { gold: 15 },\n};\nconst checks = [\n  ['versions pinned', manifest.pins.spec === '2026-07-28' && manifest.pins.sdk === 'v2'],\n  ['money gated', manifest.server.tools.some((t) => t.endsWith('@gated'))],\n  ['resource versioned', manifest.server.resources.every((r) => /v\\d+$/.test(r))],\n  ['eval sized', manifest.eval.gold >= 12],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'manifest sound' : 'manifest BROKEN');", "note": "Run it: expect four PASS lines then 'manifest sound'. Version pins, gated money, versioned resources, sized gold — architecture audited before a single server starts." },
+    { "t": "keytakeaways", "items": ["Assemble in dependency order with per-stage gates: pins → reads → gated money → consumer → gold eval", "Trace one run per kind (lookup/gated/attack) with methods, verdicts, timing", "Memo: baselines, iterated delta, gate health, audit statement, deferred list"]} ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm soundness. (b) Break it (drop the @gated suffix) and state the real-world harm the audit now catches. (c) Draft your capstone manifest (same shape, your domain's tools/resources/prompts) with version pins and one gate per destructive tool.",
+    "hints": [
+      "Baseline sound (4 PASS); suffix dropped → money-gated check FAILs — the audit catches ungated money statically.",
+      "Harm: autonomous ungated refunds the moment any consumer mis-selects — amounts move without approval or audit.",
+      "Your manifest needs pins, per-tool gate flags, versioned resources, sized gold — coverage thinking for builds."
+    ],
+    "solution": "// (a) 4 PASS + sound.\n// (b) gate check FAILs; harm: ungated autonomous money movement.\n// (c) domain manifest with pins, gate flags, versioned resources, sized gold.",
+    "why": "Static money-gate auditing (suffix conventions checked in code review/CI) plus manifest-driven builds make safety structural: the audit catches what enthusiasm misses, before servers start.",
+    "code": "// Manifest-audit pattern: pins, gates, versions, gold size as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the MCP server?",
+      "options": ["Money first", "Pinned scaffold → reads/resource/prompt → Inspector-verified ground → gated money → consumer → gold eval — dependencies first, verified per arrow", "Eval first", "Gates optional"],
+      "answer": 1,
+      "explain": "Blast-radius ordering with per-arrow verification: reads prove ground that money requires; eval measures the assembled whole."
+    },
+    {
+      "q": "Audit flags refund tool without @gated. Meaning?",
+      "options": ["Cosmetic", "Static safety failure: ungated money tool shippable — fix before starting the server, not after an incident", "Performance hint", "Rename suggestion"],
+      "answer": 1,
+      "explain": "Gate flags are machine-checkable safety invariants. Missing gates block builds the way failing tests block merges."
+    },
+    {
+      "q": "Three traced runs cover lookup/gated/attack. Why these three?",
+      "options": ["Arbitrary", "Capability (can it work), governance (is money supervised), defense (do attacks fail safe) — the three properties stakeholders fund", "Cheapest to demo", "Shortest traces"],
+      "answer": 1,
+      "explain": "Coverage by property: function, supervision, and safety. Happy-only demos prove none of the three that matter."
+    }
+  ],
+  "summary": "Manifest-audited assembly, one traced run per property (capability/governance/defense), findings with per-segment truth. Nine lessons become one operating server — assessment next, capstone after.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship the Order-Ops MCP Server capstone — and step into production agents."
+}
