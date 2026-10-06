@@ -83,8 +83,6 @@ layer on top (unchanged order).
 
 ## Open decision (needs owner)
 
-A) Continue the **e-commerce list order** (RAG Agents next) with the new quality
-   bar applied (failure-driven lessons, eval-first, version-checked APIs).
-B) Pivot to the **24-track order** from Course 1 (AI Engineering Foundations).
-C) Hybrid: finish the agent cluster (RAG Agents → MCP → Production Agents →
-   Harnesses), then backfill 1–6 + 8–14 + 16–24.
+DECIDED 2026-10-06: **A) E-commerce list order** — continue RAG Agents →
+MCP → Production Agents → Harnesses with the new quality bar applied
+(failure-driven lessons, eval-first, version-checked APIs, no invented APIs).
