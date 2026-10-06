@@ -319,6 +319,189 @@ export async function getAnalyticsSummary() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Analytics dashboard aggregation (powers the admin + learner charts).
+// Pre-bucketed series + period-over-period deltas so charts render from a
+// single fetch. Bounded with `take` so it stays cheap at demo scale.
+
+export type DashboardRange = "7d" | "30d" | "90d";
+
+const RANGE_DAYS: Record<DashboardRange, number> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+};
+
+export function parseDashboardRange(raw: unknown): DashboardRange | null {
+  return raw === "7d" || raw === "30d" || raw === "90d" ? raw : null;
+}
+
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfDay(d: Date): Date {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+}
+
+const LEARNING_TYPES = ["lesson_view", "lesson_complete"];
+const ASSESSMENT_TYPES = ["quiz_attempt", "assessment_pass"];
+const SIMULATOR_TYPES = [
+  "simulator_view",
+  "challenge_complete",
+  "sandbox_deep_link",
+];
+const DISCOVERY_TYPES = ["item_view", "category_view", "card_click", "search"];
+
+export async function getAnalyticsDashboard(range: DashboardRange) {
+  const days = RANGE_DAYS[range];
+  const now = new Date();
+  const currentStart = startOfDay(
+    new Date(now.getTime() - (days - 1) * 86_400_000)
+  );
+  const previousStart = new Date(currentStart.getTime() - days * 86_400_000);
+
+  const events = await db.analyticsEvent.findMany({
+    where: { createdAt: { gte: previousStart } },
+    select: { type: true, slug: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+    take: 20000,
+  });
+
+  const inCurrent = (d: Date) => d >= currentStart;
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    keys.push(dayKey(new Date(now.getTime() - i * 86_400_000)));
+  }
+
+  // Per-day buckets for the current window
+  const buckets = new Map(
+    keys.map((k) => [
+      k,
+      { learning: 0, assessment: 0, simulators: 0, discovery: 0, total: 0 },
+    ])
+  );
+  // KPI counters: current vs previous window
+  const cur: Record<string, number> = {};
+  const prev: Record<string, number> = {};
+  const bump = (m: Record<string, number>, t: string) => {
+    m[t] = (m[t] ?? 0) + 1;
+  };
+
+  for (const e of events) {
+    const at = new Date(e.createdAt);
+    if (inCurrent(at)) {
+      bump(cur, e.type);
+      const b = buckets.get(dayKey(at));
+      if (b) {
+        b.total += 1;
+        if (LEARNING_TYPES.includes(e.type)) b.learning += 1;
+        else if (ASSESSMENT_TYPES.includes(e.type)) b.assessment += 1;
+        else if (SIMULATOR_TYPES.includes(e.type)) b.simulators += 1;
+        else if (DISCOVERY_TYPES.includes(e.type)) b.discovery += 1;
+      }
+    } else {
+      bump(prev, e.type);
+    }
+  }
+
+  const delta = (type: string): number | null => {
+    const c = cur[type] ?? 0;
+    const p = prev[type] ?? 0;
+    if (p === 0) return c > 0 ? 100 : null;
+    return ((c - p) / p) * 100;
+  };
+
+  const sparkFor = (type: string): number[] =>
+    keys.map((k) => {
+      // rebuild per-type daily spark from the raw events (bounded set)
+      let n = 0;
+      for (const e of events) {
+        if (e.type === type && dayKey(new Date(e.createdAt)) === k) n++;
+      }
+      return n;
+    });
+
+  const kpiDefs: { key: string; label: string; type: string }[] = [
+    { key: "lessons", label: "Lessons completed", type: "lesson_complete" },
+    { key: "quizzes", label: "Quiz attempts", type: "quiz_attempt" },
+    { key: "assessments", label: "Assessments passed", type: "assessment_pass" },
+    { key: "simulators", label: "Simulator sessions", type: "simulator_view" },
+    { key: "discovery", label: "Content views", type: "item_view" },
+  ];
+
+  // Top courses by item views in the current window
+  const courseViews = new Map<string, number>();
+  for (const e of events) {
+    if (e.type === "item_view" && e.slug && inCurrent(new Date(e.createdAt))) {
+      courseViews.set(e.slug, (courseViews.get(e.slug) ?? 0) + 1);
+    }
+  }
+  const topSlugs = [...courseViews.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  const titleRows =
+    topSlugs.length > 0
+      ? await db.resourceItem.findMany({
+          where: { slug: { in: topSlugs.map(([s]) => s) } },
+          select: { slug: true, title: true },
+        })
+      : [];
+  const titleMap = new Map(titleRows.map((r) => [r.slug, r.title]));
+
+  // Top simulators in the current window
+  const simViews = new Map<string, number>();
+  const simCompletes = new Map<string, number>();
+  for (const e of events) {
+    if (!e.slug || !inCurrent(new Date(e.createdAt))) continue;
+    if (e.type === "simulator_view")
+      simViews.set(e.slug, (simViews.get(e.slug) ?? 0) + 1);
+    if (e.type === "challenge_complete")
+      simCompletes.set(e.slug, (simCompletes.get(e.slug) ?? 0) + 1);
+  }
+  const topSimulators = [
+    ...new Set([...simViews.keys(), ...simCompletes.keys()]),
+  ]
+    .map((slug) => ({
+      slug,
+      views: simViews.get(slug) ?? 0,
+      completes: simCompletes.get(slug) ?? 0,
+    }))
+    .sort((a, b) => b.views + b.completes - (a.views + a.completes))
+    .slice(0, 6);
+
+  const funnelStages: { stage: string; type: string }[] = [
+    { stage: "Discovered", type: "item_view" },
+    { stage: "Lesson opened", type: "lesson_view" },
+    { stage: "Lesson completed", type: "lesson_complete" },
+    { stage: "Assessment passed", type: "assessment_pass" },
+  ];
+
+  return {
+    range,
+    kpis: kpiDefs.map((k) => ({
+      key: k.key,
+      label: k.label,
+      value: cur[k.type] ?? 0,
+      delta: delta(k.type),
+      spark: sparkFor(k.type),
+    })),
+    engagement: keys.map((date) => ({
+      date,
+      ...buckets.get(date)!,
+    })),
+    topCourses: topSlugs.map(([slug, views]) => ({
+      slug,
+      title: titleMap.get(slug) ?? slug,
+      views,
+    })),
+    topSimulators,
+    funnel: funnelStages.map((f) => ({ stage: f.stage, count: cur[f.type] ?? 0 })),
+  };
+}
+
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "devpath-admin";
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,24 @@
+{
+  "courseSlug": "sql-intermediate",
+  "subtitle": "Go beyond SELECT-FROM-WHERE: subqueries, CTEs, set logic, conditional expressions and the multi-table query patterns real analytics work demands",
+  "audience": "Developers who finished SQL Fundamentals (or can SELECT, filter, sort, aggregate and JOIN confidently) and now hit queries that need queries-inside-queries. All patterns are written against the same developers / courses / enrollments dataset from SQL Fundamentals: flat building-block queries run live in the SQL Query Sandbox, while full nested and WITH queries target real PostgreSQL or SQLite — the sandbox engine teaches flat SELECT, and this course is honest about where each query runs.",
+  "outcomes": [
+    "Decompose any multi-step question into nested subqueries and explain exactly when the inner query runs relative to the outer one",
+    "Write scalar, IN-list, EXISTS and derived-table subqueries and choose the right shape for each problem",
+    "Restructure nested logic into readable WITH clauses (CTEs), including multi-CTE pipelines",
+    "Combine result sets correctly with UNION, UNION ALL, INTERSECT and EXCEPT, including duplicate and ordering semantics",
+    "Branch inside queries with CASE expressions for bucketing, conditional aggregation and safe division",
+    "Manipulate text and dates with SUBSTR, LIKE, string concatenation, date arithmetic and EXTRACT-style extraction",
+    "Encapsulate reusable logic in VIEWs and reason about what views can and cannot do",
+    "Diagnose the classic intermediate traps: NULL in NOT IN, duplicate-row fanout in joins, and misplaced aggregate filters"
+  ],
+  "prereqSlugs": ["sql-fundamentals"],
+  "technologies": ["ANSI SQL", "SQLite 3 (sandbox engine)", "PostgreSQL", "CTEs", "Views"],
+  "skills": ["subqueries", "CTEs", "set operations", "conditional logic", "string and date functions", "views", "query decomposition"],
+  "assessment": [],
+  "passScore": 70,
+  "project": null,
+  "interviewQs": [],
+  "version": "0.1.0",
+  "contentStatus": "draft"
+}

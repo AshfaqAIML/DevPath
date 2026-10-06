@@ -3,9 +3,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   checkRateLimit,
+  getAnalyticsDashboard,
   getAnalyticsSummary,
   isAdminRequest,
   logAnalyticsEvent,
+  parseDashboardRange,
 } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
@@ -56,10 +58,25 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/analytics — summary for the admin console
+// GET /api/analytics — summary for the admin console.
+// ?view=dashboard&range=7d|30d|90d returns the pre-bucketed dashboard payload
+// (KPIs with deltas + sparklines, engagement series, top courses/simulators,
+// funnel). Plain GET keeps the legacy summary shape.
 export async function GET(req: NextRequest) {
   if (!isAdminRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const view = req.nextUrl.searchParams.get("view");
+  if (view === "dashboard") {
+    const range = parseDashboardRange(req.nextUrl.searchParams.get("range") ?? "7d");
+    if (!range) {
+      return NextResponse.json(
+        { error: "Invalid range (expected 7d, 30d or 90d)" },
+        { status: 400 }
+      );
+    }
+    const dashboard = await getAnalyticsDashboard(range);
+    return NextResponse.json(dashboard);
   }
   const summary = await getAnalyticsSummary();
   return NextResponse.json(summary);

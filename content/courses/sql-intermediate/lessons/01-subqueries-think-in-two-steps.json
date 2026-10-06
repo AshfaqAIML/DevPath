@@ -1,0 +1,74 @@
+{
+  "title": "Subqueries: Think in Two Steps",
+  "slug": "01-subqueries-think-in-two-steps",
+  "objective": "After this lesson you will be able to break a two-step question into an inner query that computes a value (or set of values) and an outer query that uses it — using scalar subqueries, IN-lists, EXISTS, and derived tables — and predict exactly what each shape returns.",
+  "why": "Real questions are rarely one step. 'Developers above the average hours' needs the average first, then the comparison. 'Courses nobody enrolled in' needs the enrolled set first, then the exclusion. The moment you can nest one query inside another, hundreds of ticket-style questions collapse into a pattern you already know.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The idea: a query whose answer feeds another query" },
+    { "t": "p", "text": "A **subquery** is a complete `SELECT` inside parentheses that runs as part of a bigger (**outer**) query. Think of it as answering a small question first, then plugging that answer into the big question. The inner query always produces either **one value**, a **list of values** (one column, many rows), or a **table** (many columns, many rows) — and each shape plugs into a different slot of the outer query." },
+    { "t": "diagram", "caption": "The three subquery shapes", "nodes": ["Scalar: one value → goes where a value goes (WHERE = , SELECT list)", "List: one column, N rows → goes inside IN / NOT IN", "Table: N columns, M rows → goes in FROM as a derived table"] },
+    { "t": "h", "text": "Shape 1 — scalar: one value, used like a value" },
+    { "t": "p", "text": "A **scalar subquery** returns exactly one row and one column. Anywhere a single value is legal — after `=`, `>` or inside the `SELECT` list — a scalar subquery is legal. Classic use: compare against an aggregate you must compute first." },
+    { "t": "code", "lang": "sql", "code": "-- Step 1 (inner): the average hours across all developers\n-- Step 2 (outer): developers strictly above it\nSELECT name, hours_studied\nFROM developers\nWHERE hours_studied > (\n  SELECT AVG(hours_studied) FROM developers\n);", "caption": "Scalar subquery: the inner query computes one number, the outer compares against it" },
+    { "t": "p", "text": "Read the execution inside-out: the database evaluates the parenthesized query once, gets a single number (say 512.4), then runs the outer query as if you had typed that number. If the inner query ever returned two rows, the database raises an error — a scalar slot holds one value, and the engine enforces it." },
+    { "t": "callout", "variant": "warn", "title": "Scalar means single", "text": "A scalar subquery must return one row. `SELECT name FROM developers` as a scalar fails the moment the table holds two developers. When you need many values, switch to the IN-list shape below instead of fighting this error." },
+    { "t": "h", "text": "Shape 2 — IN-list: many values, tested with IN" },
+    { "t": "p", "text": "When the inner question has many answers ('which courses have enrollments?'), the subquery returns one column with many rows, and the outer query tests membership with **`IN`**. This is the workhorse pattern for *belongs-to-the-set* questions." },
+    { "t": "code", "lang": "sql", "code": "-- Courses that have at least one enrollment\nSELECT title, topic\nFROM courses\nWHERE id IN (\n  SELECT course_id FROM enrollments\n);", "caption": "IN-list subquery: one column out, membership test outside" },
+    { "t": "p", "text": "Negation is the same shape with `NOT IN` — but it hides the most famous intermediate trap in SQL. If the inner list contains even one **NULL**, `NOT IN` returns **zero rows, always**. Why: `x NOT IN (1, 2, NULL)` expands to `x <> 1 AND x <> 2 AND x <> NULL`, and `x <> NULL` is UNKNOWN, which kills the whole AND chain. The safe habit: either add `WHERE course_id IS NOT NULL` inside the subquery, or prefer `NOT EXISTS` (next section), which is NULL-immune." },
+    { "t": "code", "lang": "sql", "code": "-- DANGEROUS if enrollments.course_id can be NULL:\n-- returns zero rows when any NULL sneaks into the list\nSELECT title FROM courses\nWHERE id NOT IN (SELECT course_id FROM enrollments);\n\n-- SAFE: exclude NULLs from the list first\nSELECT title FROM courses\nWHERE id NOT IN (\n  SELECT course_id FROM enrollments WHERE course_id IS NOT NULL\n);", "caption": "The NOT IN + NULL trap and its one-line fix" },
+    { "t": "h", "text": "Shape 3 — EXISTS: asking about presence, not values" },
+    { "t": "p", "text": "**`EXISTS`** does not compare values at all — it asks *did the inner query find at least one row?* The inner query is **correlated**: it references the outer row (`d.id`), so conceptually it re-runs per outer row and stops at the first match. Because it never compares to NULL, it is immune to the trap above." },
+    { "t": "code", "lang": "sql", "code": "-- Developers who completed at least one enrollment (grade the presence, not the value)\nSELECT name, role\nFROM developers d\nWHERE EXISTS (\n  SELECT 1 FROM enrollments e\n  WHERE e.developer_id = d.id AND e.completed = 1\n);", "caption": "Correlated EXISTS: the inner query borrows d.id from the outer row" },
+    { "t": "p", "text": "Two things to notice. `SELECT 1` is conventional because the *values* are discarded — only row presence matters. And the correlation (`e.developer_id = d.id`) is what makes it per-developer: without it, EXISTS would be true for everybody or nobody. Interviewers love this question because the answer reveals whether you think in sets or in loops." },
+    { "t": "table", "headers": ["Pattern", "Inner returns", "Outer test", "NULL-safe?"], "rows": [["Scalar `=` / `>`", "1 row, 1 column", "value comparison", "Yes (single value)"], ["`IN` / `NOT IN`", "N rows, 1 column", "membership", "IN yes / NOT IN no — filter NULLs"], ["`EXISTS` / `NOT EXISTS`", "presence only", "true/false", "Yes — preferred for NOT"], ["Derived table in FROM", "full table", "join / filter", "Yes"]] },
+    { "t": "h", "text": "Shape 4 — derived table: a subquery in FROM with an alias" },
+    { "t": "p", "text": "A subquery in **`FROM`** produces a temporary table you must **alias** (`AS per_course`). Use it when the inner step aggregates or reshapes, and the outer step filters or joins on that result. The alias is mandatory — the engine needs a name for the temporary table." },
+    { "t": "code", "lang": "sql", "code": "-- Step 1 (inner): enrollment count per course.\n-- Step 2 (outer): keep only courses with 3+ enrollments.\nSELECT per_course.title, per_course.n\nFROM (\n  SELECT c.title AS title, COUNT(e.id) AS n\n  FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id\n  GROUP BY c.id\n) AS per_course\nWHERE per_course.n >= 3\nORDER BY per_course.n DESC;", "caption": "Derived table: aggregate inside, filter outside" },
+    { "t": "p", "text": "Why not do it in one level with `HAVING`? Here you could — but the derived-table shape scales: the outer query can join `per_course` to other tables, compute on `n`, or feed a second aggregation. Lesson 3 gives this shape a name (`WITH`) and makes it readable; for now, notice the *power*: FROM can hold any query, not just table names." },
+    { "t": "practice", "query": "SELECT AVG(hours_studied) FROM developers;", "note": "Run this inner step in the sandbox — it is a flat SELECT, so it runs fine. Note the number, then plug it into the full nested query from this lesson in a real database (PostgreSQL or SQLite): the sandbox teaches flat queries, while nesting is real-database SQL. Bonus: also run SELECT MAX(hours_studied) FROM developers and predict how many developers the full > MAX version would return." },
+    { "t": "callout", "variant": "tip", "title": "The decomposition habit", "text": "Stuck on a complex question? Write the inner query first and RUN it in the sandbox — inner steps are flat SELECTs, so the sandbox runs them. Look at the result. Then assemble the full nested query for a real database (PostgreSQL/SQLite). Professionals decompose exactly like this — nobody writes three nesting levels in one go." },
+    { "t": "keytakeaways", "items": ["A subquery returns one value (scalar), a value list (IN), a presence flag (EXISTS), or a table (FROM) — match the shape to the slot", "Scalar slots hold exactly one row; more rows is an error, not a warning", "NOT IN with a NULL in the list returns zero rows — filter NULLs inside or use NOT EXISTS", "EXISTS is correlated (references the outer row) and checks presence, ignoring values entirely", "Derived tables in FROM must be aliased and let you aggregate first, filter or join second"]} ],
+  "exercise": {
+    "prompt": "The catalog team asks: 'List the titles of courses that have ZERO enrollments — courses nobody chose.' Write it two ways: (a) with NOT IN, NULL-safe; (b) with NOT EXISTS. Verify your logic in the sandbox with the flat absence check below (it runs there), then run the full nested forms in PostgreSQL or SQLite and confirm both agree. Finally answer in one sentence: why is (b) the safer default for production code?",
+    "hints": [
+      "Both versions share the same outer query: SELECT title FROM courses WHERE <absence test>. The difference is only the absence test.",
+      "For (a): the inner list is SELECT course_id FROM enrollments WHERE course_id IS NOT NULL. For (b): the inner test is SELECT 1 FROM enrollments e WHERE e.course_id = courses.id — note the correlation to the outer courses row.",
+      "The one-sentence answer mentions NULL: NOT EXISTS never compares values, so a NULL course_id cannot silently wipe out the result the way NOT IN does."
+    ],
+    "solution": "SELECT title FROM courses\nWHERE id NOT IN (\n  SELECT course_id FROM enrollments WHERE course_id IS NOT NULL\n);\n\nSELECT title FROM courses\nWHERE NOT EXISTS (\n  SELECT 1 FROM enrollments e WHERE e.course_id = courses.id\n);",
+    "why": "Both say 'keep courses with no matching enrollment row'. The NOT IN version builds the enrolled-id set explicitly and must exclude NULLs or the whole answer collapses to zero rows. The NOT EXISTS version checks per-course presence and never compares against NULL, so stray NULLs are harmless — that NULL-immunity is why teams default to NOT EXISTS for absence checks in production.",
+    "code": "-- Sandbox check (flat — runs here): the same absences via LEFT JOIN\nSELECT c.title FROM courses c\nLEFT JOIN enrollments e ON e.course_id = c.id\nWHERE e.id IS NULL;\n\n-- Full forms (real PostgreSQL / SQLite):\n-- (a) NULL-safe NOT IN\nSELECT title FROM courses\nWHERE id NOT IN (\n  SELECT course_id FROM enrollments WHERE course_id IS NOT NULL\n);\n\n-- (b) NULL-immune NOT EXISTS\nSELECT title FROM courses\nWHERE NOT EXISTS (\n  SELECT 1 FROM enrollments e WHERE e.course_id = courses.id\n);",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "The inner query SELECT AVG(hours_studied) FROM developers returns one row. Where can it be used?",
+      "options": ["Only in the SELECT list", "Anywhere a single value is legal: after =, >, <, or in the SELECT list", "Only inside IN", "Only in FROM"],
+      "answer": 1,
+      "explain": "A scalar (one row, one column) fits any single-value slot. IN expects a list and FROM expects a table — both valid shapes, but different slots for different subquery shapes."
+    },
+    {
+      "q": "enrollments.course_id contains one NULL. What does WHERE id NOT IN (SELECT course_id FROM enrollments) return?",
+      "options": ["All courses except enrolled ones, as intended", "Zero rows — the NULL poisons the whole NOT IN test", "Only the NULL row", "An error"],
+      "answer": 1,
+      "explain": "NOT IN expands to a chain of <> comparisons ANDed together, and comparing anything to NULL yields UNKNOWN, which fails the WHERE. One NULL in the list wipes out every row. Fix: filter IS NOT NULL inside, or use NOT EXISTS."
+    },
+    {
+      "q": "In WHERE EXISTS (SELECT 1 FROM enrollments e WHERE e.developer_id = d.id AND e.completed = 1), what does SELECT 1 mean and what makes the subquery correlated?",
+      "options": ["It selects the id 1; correlation comes from EXISTS itself", "Values are discarded (only presence matters); correlation is the reference to outer alias d.id", "It limits the check to one row; correlation is the number 1", "It is a syntax error — EXISTS requires SELECT *"],
+      "answer": 1,
+      "explain": "EXISTS cares only whether rows exist, so SELECT 1 is idiomatic. The subquery is correlated because it borrows d.id from the outer developers row, re-evaluating per row instead of running once."
+    },
+    {
+      "q": "Why does a derived table in FROM require an alias?",
+      "options": ["Aliases make queries run faster", "The temporary result needs a name so outer clauses can reference its columns", "Without an alias the inner GROUP BY is illegal", "It doesn't — aliases are optional everywhere"],
+      "answer": 1,
+      "explain": "FROM items are tables, and tables have names. The alias (AS per_course) names the temporary result so SELECT, WHERE, JOIN and ORDER BY outside can address its columns unambiguously."
+    }
+  ],
+  "summary": "Subqueries let you answer in two steps: the inner query computes a value, list, presence flag or table, and the outer query consumes it. Scalar goes where values go, IN tests membership, EXISTS tests presence (correlated, NULL-immune), and derived tables in FROM aggregate first and filter second. The NOT IN + NULL trap is the lesson to carry forward: never let an unfiltered list into a NOT IN.",
+  "next": "Nesting works — but three levels of parentheses stop being readable. Next lesson gives the same logic a flat, named structure: common table expressions (WITH), the multi-step pipeline style analysts actually maintain."
+}
