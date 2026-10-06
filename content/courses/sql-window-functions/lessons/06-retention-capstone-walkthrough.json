@@ -1,0 +1,63 @@
+{
+  "title": "Capstone Walkthrough: Engagement Tiers",
+  "slug": "06-retention-capstone-walkthrough",
+  "objective": "After this lesson you will be able to combine ranking, NTILE tiers, LAG deltas, running aggregates, and FILTER metrics into one staged cohort-style analysis — and present it as cited findings with caveats, ready for the final assessment and your capstone.",
+  "why": "Window courses often end at function reference; analysts end at narratives. This walkthrough fuses all five lessons on one question — 'who are our learners, really?' — into tiered, ranked, delta-measured findings. It is the worked example your capstone mirrors and the closest thing to a real analytics deliverable this platform teaches.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The brief: tier the learners" },
+    { "t": "p", "text": "*'Segment our developers by engagement and tell us who leads, who lags, and where the gaps are.'* Three analytic cuts: (1) **tiers** — NTILE quartiles by hours (who sits where); (2) **gaps** — LAG deltas between consecutive learners (where are the cliffs?); (3) **context** — role averages attached to every row (is a lagging learner actually above their role?). Each cut is one lesson; the report is their fusion." },
+    { "t": "h", "text": "Cut 1 — tiers with NTILE" },
+    { "t": "p", "text": "Quartile everyone by hours studied: NTILE(4) over descending hours. The tier table is the report's skeleton — every later finding hangs a row on it. Persist the tier labels with the analysis date: recomputed quartiles drift as data grows (Ch.2 remainder rules), and undated tiers are unactionable." },
+    { "t": "code", "lang": "sql", "code": "-- Tier skeleton: every learner, labeled (real SQLite/PostgreSQL)\nSELECT name, role, hours_studied,\n  NTILE(4) OVER (ORDER BY hours_studied DESC) AS tier\nFROM developers\nORDER BY hours_studied DESC;", "caption": "NTILE tiers: the report's skeleton (14 rows: 4,4,3,3)" },
+    { "t": "h", "text": "Cut 2 — cliffs with LAG" },
+    { "t": "p", "text": "Gaps between consecutive learners expose cliffs: a 200-hour drop between ranks 3 and 4 means the top tier stands apart. LAG over the same ordering, differenced, ordered by gap descending — the biggest structural breaks surface first. Cliffs justify tier boundaries better than arbitrary cutoffs." },
+    { "t": "code", "lang": "sql", "code": "-- Cliff hunt: biggest drops between consecutive learners (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  LAG(hours_studied, 1) OVER (ORDER BY hours_studied DESC) AS prev_hours,\n  LAG(hours_studied, 1, hours_studied) OVER (ORDER BY hours_studied DESC) - hours_studied AS cliff\nFROM developers\nORDER BY cliff DESC;", "caption": "LAG deltas ordered by size: structural breaks first" },
+    { "t": "h", "text": "Cut 3 — context with role averages" },
+    { "t": "p", "text": "A bottom-quartile fullstack developer above the fullstack average is a different story than one below it. Attach `AVG(...) OVER (PARTITION BY role)` to every row (Ch.1 shape) and flag the mismatch tier-vs-context explicitly — findings with this structure ('Q3 overall, above role average') are the ones stakeholders quote." },
+    { "t": "code", "lang": "sql", "code": "-- Full fusion: tier + cliff + role context in one staged query\n-- (real SQLite/PostgreSQL)\n-- WITH tiered AS (\n--   SELECT name, role, hours_studied,\n--     NTILE(4) OVER (ORDER BY hours_studied DESC) AS tier,\n--     AVG(hours_studied) OVER (PARTITION BY role) AS role_avg\n--   FROM developers\n-- )\n-- SELECT name, role, hours_studied, tier,\n--   ROUND(role_avg, 1) AS role_avg,\n--   CASE WHEN hours_studied >= role_avg THEN 'above role' ELSE 'below role' END AS vs_role\n-- FROM tiered ORDER BY hours_studied DESC;", "caption": "Fusion: three lessons, one staged query, quotable rows" },
+    { "t": "callout", "variant": "tip", "title": "Findings, not rows", "text": "The deliverable is sentences with citations, not result dumps: 'The top tier (4 learners, 783h+) stands 200h+ clear of tier 2 (cliff Q); two Q3 learners sit above their role averages — coaching candidates, not at-risk.' Every clause traces to a query; small samples carry caveats." },
+    { "t": "practice", "query": "SELECT MIN(hours_studied) AS lo, MAX(hours_studied) AS hi, COUNT(*) AS n FROM developers;", "note": "Run this range snapshot in the sandbox — the span your tiers slice and your cliffs dissect. Tier widths and cliff sizes mean nothing without the total range in mind: ground every window finding in flat descriptives first." },
+    { "t": "keytakeaways", "items": ["Tier (NTILE) for structure, gaps (LAG) for cliffs, context (partition averages) for meaning — fuse all three", "Persist tier labels with dates; recomputed quantiles drift", "Flag tier-vs-context mismatches explicitly — they are the quotable findings", "Deliver cited sentences with caveats, never raw result dumps"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the range snapshot plus the per-role GROUP BY baseline; record both. (b) In real SQLite/PostgreSQL, build the three cuts (tiers, cliffs, fusion with vs_role flags). (c) Write three finding bullets in the quotable style (tier + cliff/context + caveat), each citing its cut.",
+    "hints": [
+      "Baselines first: range (MIN/MAX/COUNT) plus role averages — every window number below must be reconcilable with these flats.",
+      "Cuts mirror the lesson code: NTILE tiering, LAG cliff ordered DESC, fusion CTE with CASE vs_role. Verify tier sizes (4,4,3,3) and cliff arithmetic by hand on two rows.",
+      "Bullet shape: claim (numbers) + cut citation + caveat. Example: 'Tier 1 holds 4 learners above 780h (cut 1); the tier1→2 cliff exceeds 100h (cut 2); n=14 total, treat tier edges as approximate.'"
+    ],
+    "solution": "-- (b) three cuts (real SQLite / PostgreSQL — see lesson code)\n-- tiers: NTILE(4) OVER (ORDER BY hours_studied DESC)\n-- cliffs: LAG difference ordered DESC\n-- fusion: tier + AVG OVER (PARTITION BY role) + CASE vs_role\n-- (c) example bullets: tier composition (cut 1), biggest cliff (cut 2),\n-- above-role Q3 learners (cut 3) — each with n-caveats.",
+    "why": "The exercise performs the analyst loop at capstone scale: flat grounding, staged window analysis, cited prose with caveats. Queries are evidence; sentences are the product — rehearsed here, graded in the project.",
+    "code": "-- Sandbox grounding (flat — run here)\nSELECT MIN(hours_studied) AS lo, MAX(hours_studied) AS hi, COUNT(*) AS n FROM developers;\nSELECT role, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role;\n\n-- Three cuts (real SQLite / PostgreSQL — see lesson).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Why persist NTILE tier labels with their analysis date?",
+      "options": ["Labels expire legally", "Recomputed quantiles drift as data grows — undated tiers from different runs are incomparable", "Tiers must be secret", "NTILE changes syntax yearly"],
+      "answer": 1,
+      "explain": "Quantile boundaries move with the data (remainder rules + growth). A 'Q1 learner' means nothing without as-of dating — comparability requires versioning."
+    },
+    {
+      "q": "A 200-hour gap between ranks 3 and 4 justifies tier boundaries better than arbitrary cutoffs because…",
+      "options": ["Bigger numbers impress", "Cliffs are data-structural breaks: the distribution itself separates there, rather than an analyst's round number", "Gaps are always errors", "Ranks require gaps"],
+      "answer": 1,
+      "explain": "Distribution-led segmentation (cliffs) beats analyst-imposed cutoffs: boundaries sit where the data actually breaks, making tiers defensible rather than decorative."
+    },
+    {
+      "q": "A Q3 learner sits above their role average. Correct reporting?",
+      "options": ["At-risk — bottom quartile", "Flag the mismatch explicitly: below overall, above role — a coaching candidate with context, not a plain laggard", "Ignore role context", "Average the two signals"],
+      "answer": 1,
+      "explain": "Tier-vs-context mismatches are the quotable findings: single-metric labels mislead where fused signals inform. Report both, interpret the tension."
+    },
+    {
+      "q": "Report shows result tables without sentences. What's missing?",
+      "options": ["More queries", "Findings: cited claims with caveats — queries are evidence, sentences are the product", "Charts", "Longer queries"],
+      "answer": 1,
+      "explain": "Stakeholders decide on sentences, not dumps. Every bullet traces to a cut; small samples carry caveats. That is the analyst's deliverable."
+    }
+  ],
+  "summary": "Tier for structure, gaps for cliffs, role context for meaning — fused in staged windows, delivered as cited, caveated sentences. Course complete: assessment, then the leaderboard-and-tiers capstone.",
+  "next": "Course complete: take the 10-question final assessment (70% to pass), then build the capstone — ranked tiers with cliffs and context — and close with interview prep."
+}

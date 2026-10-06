@@ -1,0 +1,61 @@
+{
+  "title": "Navigation: LAG, LEAD & Neighbors",
+  "slug": "03-navigation-lag-lead",
+  "objective": "After this lesson you will be able to compare each row with its neighbors using LAG/LEAD (offsets, defaults, partitions), fetch endpoints with FIRST_VALUE/LAST_VALUE (with correct framing), and express deltas and streaks without self-joins.",
+  "why": "Rankings order rows; navigation *relates* them — hour gaps between consecutive learners, progress jumps between enrollments, first-vs-current comparisons. Pre-window SQL did this with self-joins on row numbers (fragile, slow); navigation functions read neighbors directly in one pass. Month-over-month reports are LAG queries wearing business clothes.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "LAG/LEAD: the neighbor functions" },
+    { "t": "p", "text": "**`LAG(col, offset, default)`** reads a previous row's value; **`LEAD`** reads ahead — within the partition, along the ORDER BY. Defaults handle edges (first row has no previous: `LAG(x, 1, 0)` yields 0 instead of NULL). Offsets beyond 1 compare across gaps (week-over-week-same-weekday needs offset 7 thinking, applied to daily series)." },
+    { "t": "code", "lang": "sql", "code": "-- Hour gaps between consecutively-ranked developers (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  LAG(hours_studied, 1) OVER (ORDER BY hours_studied DESC) AS prev_hours,\n  hours_studied - LAG(hours_studied, 1, hours_studied) OVER (ORDER BY hours_studied DESC) AS gap_below\nFROM developers\nORDER BY hours_studied DESC;", "caption": "LAG with a self-default: first row gaps to zero instead of NULL" },
+    { "t": "p", "text": "The default trick (`hours_studied` as its own default) makes edge arithmetic clean: first row's gap computes to 0, not NULL — no COALESCE wrapper needed downstream. Choose defaults deliberately per column (0 for measures, '' for text, endpoint values for bounded series)." },
+    { "t": "h", "text": "FIRST_VALUE/LAST_VALUE and the frame trap" },
+    { "t": "p", "text": "**`FIRST_VALUE`** returns the partition's first row value; **`LAST_VALUE`** returns the *frame's* last — and the default growing frame makes LAST_VALUE mean 'last so far', i.e. the current row, almost never what you want. The fix is the explicit full-partition frame (`ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`) — LAST_VALUE's most famous bug, worth memorizing as a pair." },
+    { "t": "code", "lang": "sql", "code": "-- First vs last hours per role: FIRST works by luck, LAST needs the frame\n-- (real SQLite/PostgreSQL)\nSELECT DISTINCT role,\n  FIRST_VALUE(hours_studied) OVER w AS top_hours,\n  LAST_VALUE(hours_studied) OVER w AS bottom_hours_WRONG,\n  LAST_VALUE(hours_studied) OVER (\n    PARTITION BY role ORDER BY hours_studied DESC\n    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\n  ) AS bottom_hours\nFROM developers\nWINDOW w AS (PARTITION BY role ORDER BY hours_studied DESC);", "caption": "LAST_VALUE without a full frame returns 'last so far' — usually the current row" },
+    { "t": "p", "text": "Two bonuses in one query: the **WINDOW clause** names a window definition once (`WINDOW w AS (…)`) and reuses it — DRY for multi-function queries (supported in SQLite and PostgreSQL). And `SELECT DISTINCT` collapses the per-row repetition when you only want one row per partition — the standard endpoint-summary shape." },
+    { "t": "h", "text": "Deltas and streaks without self-joins" },
+    { "t": "p", "text": "Neighbor arithmetic replaces whole classes of self-joins: deltas (`x - LAG(x)`), changes (`LAG` comparison for flip detection), running extrema (`MAX(x) OVER (ORDER BY t)` as peak-so-far). Each is one ordered pass instead of a join plus dedupe — simpler plans, simpler reading, no pair-dedupe predicates." },
+    { "t": "practice", "query": "SELECT name, hours_studied FROM developers ORDER BY hours_studied DESC LIMIT 5;", "note": "Run this ordered top-5 in the sandbox — it is the sequence LAG/LEAD walk. Read adjacent pairs and compute one gap by hand: that hand computation is exactly what the neighbor functions automate, and verifying it grounds every query in this lesson." },
+    { "t": "keytakeaways", "items": ["LAG/LEAD read neighbors along ORDER BY within partitions; offsets + defaults handle edges and gaps", "LAST_VALUE needs an explicit full-partition frame — default growing frames make it 'last so far'", "WINDOW clause names definitions once (SQLite + PG); DISTINCT collapses endpoint summaries", "Deltas, flips, and running extrema replace self-join patterns in one ordered pass"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the ordered top-5 and hand-compute two adjacent gaps. (b) In real SQLite/PostgreSQL, write: (i) full ordered list with prev_hours and gap_below (self-defaulted); (ii) per-role top and bottom hours using FIRST_VALUE + framed LAST_VALUE with a named WINDOW; (iii) developers whose hours exceed the previous developer's by 100+ (gap filter outside). (c) State why (iii) needs the outer query.",
+    "hints": [
+      "Hand gaps first — e.g., 947→912 = 35. Your LAG query must reproduce these exact numbers; mismatch means wrong ORDER BY.",
+      "(ii) needs PARTITION BY role + ORDER BY hours DESC, one named WINDOW reused by both functions, and the explicit UNBOUNDED FOLLOWING frame on LAST_VALUE only.",
+      "(iii) filters on a window alias → pipeline order (Ch.1): compute inside, filter outside. Gap >= 100 on gap_below."
+    ],
+    "solution": "-- (b-i) gaps (real SQLite / PostgreSQL)\nSELECT name, hours_studied,\n  hours_studied - LAG(hours_studied, 1, hours_studied) OVER (ORDER BY hours_studied DESC) AS gap_below\nFROM developers ORDER BY hours_studied DESC;\n-- (b-ii) endpoints with named window\nSELECT DISTINCT role,\n  FIRST_VALUE(hours_studied) OVER w AS top_hours,\n  LAST_VALUE(hours_studied) OVER (PARTITION BY role ORDER BY hours_studied DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS bottom_hours\nFROM developers WINDOW w AS (PARTITION BY role ORDER BY hours_studied DESC);\n-- (b-iii) big jumpers: wrap (i), filter gap_below >= 100 outside.",
+    "why": "Hand computation first makes the functions checkable, not magical; the framed LAST_VALUE fixes the lesson's signature bug by construction; the outer filter rehearses pipeline order for the third time — repetition across lessons is how staging rules stick.",
+    "code": "-- Sandbox hand-check (flat — run here)\nSELECT name, hours_studied FROM developers ORDER BY hours_studied DESC LIMIT 5;\n\n-- Neighbor suite (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "LAG(hours, 1) on the first ordered row returns?",
+      "options": ["0", "NULL (no previous row) unless a default is given", "The last row's value", "An error"],
+      "answer": 1,
+      "explain": "Edges have no neighbors: LAG/LEAD yield NULL past the boundary. Defaults (LAG(x, 1, 0)) make edge arithmetic clean — choose per column."
+    },
+    {
+      "q": "LAST_VALUE(x) OVER (PARTITION BY r ORDER BY h DESC) returns the current row's value on every row. Why?",
+      "options": ["LAST_VALUE is broken", "Default growing frame: 'last of peers-so-far' is the current row — add ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", "Needs DISTINCT", "Wrong partition"],
+      "answer": 1,
+      "explain": "ORDER BY flips the default frame to running prefix, so LAST_VALUE sees only rows up to current. The explicit full frame is the mandatory pairing — memorize them together."
+    },
+    {
+      "q": "What does WINDOW w AS (PARTITION BY role ORDER BY hours DESC) buy you?",
+      "options": ["Faster execution automatically", "Names the definition once for reuse across functions — DRY multi-function queries (SQLite + PG)", "New functionality", "Nothing — syntax sugar that changes semantics"],
+      "answer": 1,
+      "explain": "Same semantics, single definition: FIRST_VALUE, LAST_VALUE, RANK over identical windows without repetition drift. Repeat the definition thrice and they will diverge during maintenance."
+    },
+    {
+      "q": "Filtering gap_below >= 100 must wrap the LAG query. Why?",
+      "options": ["LAG is slow in WHERE", "Pipeline: windows evaluate after WHERE — the alias doesn't exist at filter time", "Gaps can't be filtered", "Needs HAVING"],
+      "answer": 1,
+      "explain": "Same staging rule as ranks (Ch.1–2): compute inside, filter outside. WHERE predates windows in every engine."
+    }
+  ],
+  "summary": "Neighbors overtake self-joins: LAG/LEAD with offsets and defaults, FIRST/LAST with mandatory framing, WINDOW naming, DISTINCT summaries. Deltas and streaks become one ordered pass — and filters still wrap outside.",
+  "next": "Neighbors compare points — frames aggregate spans. Next: frame mastery (ROWS/RANGE/GROUPS, moving averages, exclusion) and the running-total subtleties this course opened with."
+}

@@ -1,0 +1,64 @@
+{
+  "title": "Frames Mastery: ROWS, RANGE, GROUPS",
+  "slug": "04-frames-mastery",
+  "objective": "After this lesson you will be able to choose correctly among ROWS, RANGE and GROUPS frames; write running and moving aggregates with explicit bounds; use EXCLUDE to drop peers, ties, or the current row; and predict frame behavior on duplicate ORDER BY values.",
+  "why": "Frames are where window beginners plateau: running totals work, then moving averages misbehave on duplicate dates, then RANGE does something mysterious. The three frame modes exist precisely for peer-tie semantics — physical positions (ROWS), logical peers (RANGE), group-aware spans (GROUPS) — and choosing wrong silently shifts numbers. Mastery here is what separates primer graduates from analysts.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "ROWS: physical positions" },
+    { "t": "p", "text": "**ROWS** counts row positions: `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` always covers exactly 3 rows (or fewer at edges). Predictable, fast, and wrong whenever ties matter — two developers with identical hours get different running values depending on arbitrary tie order. Use ROWS for position-defined spans (last 3 enrollments, moving average of N readings)." },
+    { "t": "code", "lang": "sql", "code": "-- 3-row moving average of hours (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  AVG(hours_studied) OVER (\n    ORDER BY hours_studied DESC\n    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW\n  ) AS moving_avg3\nFROM developers\nORDER BY hours_studied DESC;", "caption": "ROWS: exactly N physical rows, ties split arbitrarily" },
+    { "t": "h", "text": "RANGE: logical peers" },
+    { "t": "p", "text": "**RANGE** groups by ORDER BY *value*: `RANGE BETWEEN 100 PRECEDING AND CURRENT ROW` covers peers whose value falls in [current−100, current] — ties included together, always. Same-tied rows share identical frames, so results are tie-deterministic where ROWS is not. Price: the engine must handle value ranges (and SQLite restricts RANGE offsets to a single ORDER BY expression — know your engine's frame limits)." },
+    { "t": "code", "lang": "sql", "code": "-- Peers within 100 hours: ties travel together (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  COUNT(*) OVER (\n    ORDER BY hours_studied\n    RANGE BETWEEN 100 PRECEDING AND CURRENT ROW\n  ) AS peers_within_100\nFROM developers\nORDER BY hours_studied DESC;", "caption": "RANGE: value-based peer sets — deterministic under ties" },
+    { "t": "h", "text": "GROUPS: peer groups as units" },
+    { "t": "p", "text": "**GROUPS** (PostgreSQL; SQLite support varies by version — verify before relying) counts *peer groups*: `GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW` covers the current tie-group plus the previous tie-group whole. It is the precision tool for ranked data — 'this tier plus the tier above' — where ROWS would split a tie group mid-span and RANGE would over-include by value." },
+    { "t": "table", "headers": ["Mode", "Unit", "Ties", "Use for"], "rows": [["ROWS", "Physical positions", "Split arbitrarily", "Last-N readings, positional windows"], ["RANGE", "ORDER BY values", "Travel together", "Value bands (±100 hours, ±7 days)"], ["GROUPS", "Peer groups", "Whole groups", "Tier-above/below logic on ranked data"]] },
+    { "t": "h", "text": "EXCLUDE: sculpting the frame" },
+    { "t": "p", "text": "**EXCLUDE** removes frame parts: `EXCLUDE CURRENT ROW` (peers only — 'average of everyone else'), `EXCLUDE TIES` (peers plus current, dropping fellow ties), `EXCLUDE GROUP` (everything but the current tie group). 'How do I compare against others, not myself?' is an EXCLUDE question — and self-comparison bias in leaderboards is the business reason it exists." },
+    { "t": "code", "lang": "sql", "code": "-- Average of *other* developers in the same role (real PostgreSQL; SQLite: verify GROUPS/EXCLUDE support)\nSELECT name, role, hours_studied,\n  AVG(hours_studied) OVER (\n    PARTITION BY role\n    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\n    EXCLUDE CURRENT ROW\n  ) AS others_avg\nFROM developers;", "caption": "EXCLUDE CURRENT ROW: the peer baseline without self-bias" },
+    { "t": "callout", "variant": "warn", "title": "Engine variance lives here", "text": "Frames are the least uniform window feature: SQLite historically limits RANGE offsets and GROUPS/EXCLUDE availability varies by version; PostgreSQL is complete. Test every frame construct on your actual engine version (the verify script pattern from this course's repo does exactly this) — never assume from documentation of another engine." },
+    { "t": "practice", "query": "SELECT country, COUNT(*) AS n FROM developers GROUP BY country HAVING COUNT(*) > 1;", "note": "Run this tie census in the sandbox — Japan appears twice (the dataset's tie), while hours_studied has zero duplicates. That contrast is the point: ties decide frame behavior, so census tie structure before choosing ROWS vs RANGE vs GROUPS." },
+    { "t": "keytakeaways", "items": ["ROWS positions (ties split) · RANGE values (ties travel) · GROUPS peer-groups (tiers as units)", "EXCLUDE sculpts frames: CURRENT ROW out for peer baselines, TIES/GROUP for tier logic", "Moving aggregates need explicit frames; defaults depend on ORDER BY presence (Ch.1)", "Frame support varies by engine/version — verify constructs, never assume"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the tie census (expect exactly one duplicate: Japan ×2) and confirm hours_studied has zero duplicates with the same query shape. (b) In real SQLite/PostgreSQL, write: (i) 3-row moving average (ROWS); (ii) peers-within-100 count (RANGE); (iii) per-role others-average (EXCLUDE CURRENT ROW, full frame). (c) State in one sentence what zero hour-duplicates implies for ROWS-vs-RANGE on hours ordering (identical results), and where the difference would surface instead.",
+    "hints": [
+      "Tie census first: Japan ×2 proves ties exist in this data, zero hour-dupes proves the hours ordering is tie-free — every frame answer below is checkable against that structure.",
+      "(i) ROWS BETWEEN 2 PRECEDING AND CURRENT ROW over ORDER BY hours DESC. (ii) RANGE BETWEEN 100 PRECEDING AND CURRENT ROW over ORDER BY hours (ascending reads naturally). (iii) PARTITION BY role, full UNBOUNDED frame, EXCLUDE CURRENT ROW.",
+      "The one sentence for (c): with zero hour-ties both modes agree on hours ordering — the divergence lives wherever ties exist (Japan pair under country ordering: ROWS splits it, RANGE keeps it whole)."
+    ],
+    "solution": "-- (b-i) moving average (real SQLite / PostgreSQL)\nSELECT name, AVG(hours_studied) OVER (ORDER BY hours_studied DESC ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS ma3 FROM developers;\n-- (b-ii) peers within 100\nSELECT name, COUNT(*) OVER (ORDER BY hours_studied RANGE BETWEEN 100 PRECEDING AND CURRENT ROW) AS peers FROM developers;\n-- (b-iii) others-average per role (see lesson; needs EXCLUDE support)\n-- (c) No hour ties → ROWS and RANGE agree on hours ordering; they diverge on tied orderings (e.g. the Japan country pair under country ordering, where ROWS would split the pair and RANGE keeps it whole).",
+    "why": "Ties-first methodology: census, then constructs, then the contrast sentence. Frame choice follows from tie structure — the exercise makes the dependency explicit instead of theoretical.",
+    "code": "-- Sandbox tie census (flat — run here; expect Japan ×2, hours clean)\nSELECT country, COUNT(*) AS n FROM developers GROUP BY country HAVING COUNT(*) > 1;\nSELECT hours_studied, COUNT(*) AS n FROM developers GROUP BY hours_studied HAVING COUNT(*) > 1;\n\n-- Frame suite (real SQLite / PostgreSQL — see solution; verify EXCLUDE/GROUPS support).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "ROWS BETWEEN 2 PRECEDING AND CURRENT ROW vs RANGE with the same bounds on tied data — difference?",
+      "options": ["None — synonyms", "ROWS takes exactly 3 physical rows (ties split arbitrarily); RANGE takes all peers in the value band (ties travel together)", "RANGE is faster", "ROWS is an error with ties"],
+      "answer": 1,
+      "explain": "Positions vs values: ROWS counts slots, RANGE counts peer values. Tied rows share RANGE frames and split ROWS windows — the core frame decision."
+    },
+    {
+      "q": "Leaderboard 'average of everyone else in my role' needs?",
+      "options": ["AVG over PARTITION BY role", "Full-partition frame with EXCLUDE CURRENT ROW — otherwise self-bias infects the baseline", "ORDER BY role", "DISTINCT role"],
+      "answer": 1,
+      "explain": "Plain partition averages include the subject row. EXCLUDE CURRENT ROW removes exactly one row — self — leaving the peer baseline. Self-comparison bias is a business bug, not a syntax one."
+    },
+    {
+      "q": "GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW is ideal for?",
+      "options": ["Last 3 readings", "Tier-above logic on ranked data — whole peer groups as units, never splitting ties", "Value bands", "Global totals"],
+      "answer": 1,
+      "explain": "GROUPS counts peer groups: current tier plus exactly one tier above, ties intact. ROWS would split a tied tier mid-span; RANGE would over-include by value."
+    },
+    {
+      "q": "Your frame construct works in PostgreSQL but errors in SQLite. Response?",
+      "options": ["SQLite is broken — switch engines", "Frame support varies by engine/version: verify constructs on the actual engine, rewrite with supported equivalents (often ROWS), and note the variance", "Remove all frames", "Use SELECT *"],
+      "answer": 1,
+      "explain": "Frames are the least uniform window feature. Professional practice: test on target versions, prefer portable ROWS where semantics allow, document engine-specific constructs."
+    }
+  ],
+  "summary": "ROWS positions, RANGE values, GROUPS tiers — plus EXCLUDE sculpting and explicit-frames-always discipline. Ties decide the mode; engine versions decide availability; verification decides truth.",
+  "next": "Frames aggregate spans — now the advanced toolkit: FILTER, named windows, QUALIFY emulation, and chaining windows through stages. Next: patterns that compose."
+}

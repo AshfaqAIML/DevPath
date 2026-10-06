@@ -1,0 +1,61 @@
+{
+  "title": "Advanced Patterns: FILTER, QUALIFY & Chaining",
+  "slug": "05-advanced-window-patterns",
+  "objective": "After this lesson you will be able to restrict window inputs with FILTER, emulate QUALIFY in SQLite/PostgreSQL, chain windows through CTE stages, and combine windowed subqueries with set operations for multi-cut analyses.",
+  "why": "Real analyses layer windows: rank, then aggregate the ranks; filter inputs per-function; express 'top quartile per role' without nesting three deep. These composition patterns turn single-window queries into window *programs* — and the QUALIFY gap (beloved in Snowflake/BigQuery, absent in SQLite/PG) is the portability trap every cross-engine analyst must master.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "FILTER: per-function WHERE" },
+    { "t": "p", "text": "**`FILTER (WHERE …)`** restricts one aggregate's input rows without touching others: `COUNT(*) FILTER (WHERE completed = 1)` counts completions while sibling aggregates see everything. Unlike CASE-inside-aggregate (equivalent, noisier), FILTER states intent per function — and unlike query-level WHERE, it doesn't starve other columns. Supported in SQLite and PostgreSQL for aggregates (not for ranking/navigation functions)." },
+    { "t": "code", "lang": "sql", "code": "-- Per-course totals + completions side by side, one grouped pass (real SQLite/PostgreSQL)\nSELECT course_id,\n  COUNT(*) AS total,\n  COUNT(*) FILTER (WHERE completed = 1) AS done,\n  COUNT(*) FILTER (WHERE completed = 0 AND progress >= 50) AS advanced\nFROM enrollments\nGROUP BY course_id;", "caption": "FILTER: each aggregate sees its own slice of the group" },
+    { "t": "h", "text": "QUALIFY doesn't exist here — emulate it" },
+    { "t": "p", "text": "Snowflake/BigQuery offer **`QUALIFY`** (WHERE for window aliases — filter ranks inline). SQLite and PostgreSQL don't. The emulation is the subquery wrapper from Ch.1 (compute inside, filter outside) — or a CTE stage for readability. Know the translation cold: every QUALIFY example in blog posts becomes a wrapper in your engines, mechanically." },
+    { "t": "code", "lang": "sql", "code": "-- Blog-post QUALIFY (Snowflake) vs portable emulation (real SQLite/PostgreSQL)\n-- Snowflake:  SELECT name, RANK() OVER (ORDER BY h DESC) AS rnk FROM devs QUALIFY rnk <= 3;\n-- Portable:\nSELECT name, rnk FROM (\n  SELECT name, RANK() OVER (ORDER BY hours_studied DESC) AS rnk\n  FROM developers\n) WHERE rnk <= 3;", "caption": "QUALIFY ≡ subquery wrapper: compute inside, filter outside" },
+    { "t": "h", "text": "Chaining: windows over windows via stages" },
+    { "t": "p", "text": "Windows can't nest directly (`RANK() OVER (… SUM() OVER …)` is illegal), but stages chain freely: CTE 1 ranks, CTE 2 aggregates the ranks ('average rank per role'), CTE 3 filters. Each stage is independently runnable — the pipeline-debugging discipline from Intermediate Ch.2, now with windowed stages. Name stages for their analytic role (ranked, summarized, shortlisted), not their mechanics." },
+    { "t": "code", "lang": "sql", "code": "-- Chained: rank developers, then average rank per role (real SQLite/PostgreSQL)\nWITH ranked AS (\n  SELECT role, RANK() OVER (ORDER BY hours_studied DESC) AS rnk\n  FROM developers\n),\nby_role AS (\n  SELECT role, AVG(rnk) AS avg_rank, COUNT(*) AS devs\n  FROM ranked GROUP BY role\n)\nSELECT role, ROUND(avg_rank, 1) AS avg_rank, devs\nFROM by_role ORDER BY avg_rank;", "caption": "Window stage feeding an aggregate stage — compose via CTEs" },
+    { "t": "callout", "variant": "tip", "title": "Named WINDOW + FILTER + stages compose", "text": "The full toolkit stacks: one WINDOW definition reused by RANK and running SUM, FILTER slicing aggregates per function, stages chaining windowed outputs into further analysis. Complexity lives in named, testable layers — never in one giant SELECT." },
+    { "t": "practice", "query": "SELECT completed, COUNT(*) AS n FROM enrollments GROUP BY completed;", "note": "Run this slice inventory in the sandbox — the two groups FILTER will separate. Every FILTER (WHERE completed = 1) below operates on exactly these slices: verify the raw groups first, then predict each filtered count." },
+    { "t": "keytakeaways", "items": ["FILTER slices per-aggregate input (aggregates only, SQLite + PG); CASE-equivalent but declarative", "No QUALIFY in these engines — the subquery/CTE wrapper is the mechanical translation", "Windows chain through stages (CTEs), never by nesting — name stages analytically", "Compose WINDOW + FILTER + stages; keep each layer independently runnable"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the slice inventory and record both counts. (b) In real SQLite/PostgreSQL, write a per-course dashboard row: total, done (FILTER), advanced (FILTER), pct_done — one grouped pass. (c) Wrap it: shortlist courses with pct_done < 50 via the QUALIFY-emulation wrapper, and state in one sentence why FILTER beats three separate queries.",
+    "hints": [
+      "Inventory gives two numbers (completed 0/1 counts) — your FILTER aggregates must reproduce them exactly per course when summed.",
+      "Dashboard row: GROUP BY course_id with three COUNT(*) variants (plain + two FILTERs) + the 100.0 rate with NULLIF. Shortlist wraps with WHERE pct_done < 50 outside.",
+      "One sentence: single grouped pass vs three scans — FILTER shares the grouping work across metrics instead of repeating it."
+    ],
+    "solution": "-- (b) dashboard row (real SQLite / PostgreSQL)\nSELECT course_id,\n  COUNT(*) AS total,\n  COUNT(*) FILTER (WHERE completed = 1) AS done,\n  COUNT(*) FILTER (WHERE completed = 0 AND progress >= 50) AS advanced,\n  ROUND(100.0 * COUNT(*) FILTER (WHERE completed = 1) / NULLIF(COUNT(*), 0), 1) AS pct_done\nFROM enrollments GROUP BY course_id;\n-- (c) shortlist: SELECT * FROM (<above>) WHERE pct_done < 50;\n-- FILTER wins: one grouping pass serves all metrics vs one scan per query.",
+    "why": "Single-pass multi-metric queries are the production payoff of FILTER, and the wrapper rehearses QUALIFY translation once more — the two portability skills this lesson exists to teach.",
+    "code": "-- Sandbox inventory (flat — run here)\nSELECT completed, COUNT(*) AS n FROM enrollments GROUP BY completed;\n\n-- Dashboard + shortlist (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "FILTER (WHERE completed = 1) vs CASE WHEN completed = 1 THEN 1 END inside COUNT — difference?",
+      "options": ["FILTER is faster always", "Semantically equivalent for aggregates; FILTER states per-function intent more readably (and only works on aggregates)", "CASE is deprecated", "FILTER works in WHERE"],
+      "answer": 1,
+      "explain": "Same rows counted; different readability. FILTER's restriction (aggregates only, SQLite+PG) versus CASE's universality is the real distinction to remember."
+    },
+    {
+      "q": "Translate Snowflake's QUALIFY rnk <= 3 to SQLite/PostgreSQL.",
+      "options": ["Impossible — different languages", "Subquery/CTE wrapper: compute the window inside, filter the alias outside", "Use HAVING", "Use LIMIT 3"],
+      "answer": 1,
+      "explain": "QUALIFY is WHERE-for-windows. Without it, the pipeline rule applies: windows evaluate after WHERE, so filtering needs an outer level. Mechanical translation, same rows."
+    },
+    {
+      "q": "Why can't windows nest (RANK() OVER (SUM() OVER …))?",
+      "options": ["They can — no restriction", "One evaluation level per SELECT: compose through CTE stages instead, each independently runnable", "Nesting is slow", "Only in MySQL"],
+      "answer": 1,
+      "explain": "SQL evaluates all windows at the same pipeline stage over the same input. Multi-level analysis stages explicitly — ranked CTE feeding aggregate CTE — gaining debuggability as a bonus."
+    },
+    {
+      "q": "FILTER vs query-level WHERE for 'completions alongside totals'?",
+      "options": ["WHERE is better", "WHERE would starve the totals column of non-matching rows; FILTER slices per function while siblings see everything", "Identical results", "FILTER requires GROUP BY role"],
+      "answer": 1,
+      "explain": "Query WHERE filters rows for all columns; FILTER filters per aggregate. Side-by-side metrics need per-function slices — FILTER (or CASE) is the only correct shape."
+    }
+  ],
+  "summary": "FILTER slices per aggregate, wrappers emulate QUALIFY, stages chain windows legally, and named WINDOWs keep multi-function queries DRY. Composition patterns turn window queries into window programs.",
+  "next": "Toolkit complete — now perform it end to end. Next and last: the retention-style analytics capstone, then your final assessment."
+}

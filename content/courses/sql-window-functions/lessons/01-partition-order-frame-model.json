@@ -1,0 +1,61 @@
+{
+  "title": "Partition, Order, Frame: The Mental Model",
+  "slug": "01-partition-order-frame-model",
+  "objective": "After this lesson you will be able to decompose any OVER clause into partition, ordering, and frame; predict exactly which rows each function sees; and explain the evaluation pipeline that makes windows legal where GROUP BY fails.",
+  "why": "The Advanced primer taught window shapes; this course teaches window *thinking*. Every subtle bug in window SQL — the running total that isn't, the rank that shifts, the LAG that looks at the wrong row — traces to a fuzzy model of partition/order/frame. Seniors debug windows by reciting these three components cold, and this lesson makes them unforgettable.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "OVER has three dials, not one" },
+    { "t": "p", "text": "Every window call is `FUNCTION(...) OVER (PARTITION BY … ORDER BY … FRAME …)`. **PARTITION BY** slices rows into peer groups (omit it: one global group). **ORDER BY** sequences rows *within* each partition — and silently changes default frames (the course's biggest gotcha, below). **FRAME** bounds which peers count (default: whole partition without ORDER BY, growing prefix with it). Three dials, each with a default you must know, not guess." },
+    { "t": "code", "lang": "sql", "code": "-- Same function, three dial configurations, three meanings (real SQLite/PostgreSQL)\n-- Global total on every row (no partition, no order: whole table is the peer set)\n-- SUM(hours_studied) OVER ()\n-- Per-role total on every row (partition slices, no order: whole slice counts)\n-- SUM(hours_studied) OVER (PARTITION BY role)\n-- Running total within role (order switches the default frame to growing!)\n-- SUM(hours_studied) OVER (PARTITION BY role ORDER BY hours_studied)", "caption": "Three OVER shapes: global, partitioned, running — dials decide, not the function" },
+    { "t": "h", "text": "The pipeline position explains everything" },
+    { "t": "p", "text": "Logical evaluation order: FROM → WHERE → GROUP BY → HAVING → **windows** → SELECT → DISTINCT → ORDER BY → LIMIT. Two consequences seniors exploit daily. **Windows see grouped/aggregated results** — you can window over GROUP BY output (rank the per-role averages directly). And **windows can't appear in WHERE** (they don't exist yet) — filter ranks outside via subquery, exactly as the primer taught." },
+    { "t": "code", "lang": "sql", "code": "-- Window over grouped output: rank the role averages (real SQLite/PostgreSQL)\nSELECT role, avg_hours,\n  RANK() OVER (ORDER BY avg_hours DESC) AS rnk\nFROM (\n  SELECT role, AVG(hours_studied) AS avg_hours\n  FROM developers GROUP BY role\n) AS per_role;", "caption": "GROUP BY first, windows second — pipeline order as a feature" },
+    { "t": "h", "text": "Default frames: the silent switch" },
+    { "t": "p", "text": "No frame specified? The default depends on ORDER BY's presence: **no ORDER BY → whole partition** (`RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` over unordered peers = everything); **ORDER BY present → growing prefix** (`… CURRENT ROW`) = running computation. Same function text, different peer sets. The professional rule from here on: *always write the frame explicitly* — three extra words that delete a whole bug class." },
+    { "t": "table", "headers": ["OVER shape", "Default frame", "SUM means"], "rows": [["OVER ()", "Whole table", "Grand total on every row"], ["OVER (PARTITION BY role)", "Whole partition", "Role total on every row"], ["OVER (ORDER BY x)", "Growing prefix (..CURRENT ROW)", "Running total"], ["OVER (PARTITION BY r ORDER BY x)", "Growing prefix per partition", "Running total within group"]] },
+    { "t": "callout", "variant": "warn", "title": "The ORDER BY you added for display", "text": "Adding ORDER BY inside OVER 'just to sort the output' silently converts whole-partition aggregates into running ones — the most common window surprise in code review. Output sorting belongs in the query's own ORDER BY; OVER's ORDER BY defines peer sequence for ranking and frames. Two different jobs, two different clauses." },
+    { "t": "practice", "query": "SELECT role, COUNT(*) AS devs, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role ORDER BY avg_hours DESC;", "note": "Run this grouped baseline in the sandbox — it is the inner query of the rank-the-averages pattern above. The window version (real SQLite/PostgreSQL) ranks exactly these four rows: verify the baseline first, then predict each rank before running the full query." },
+    { "t": "keytakeaways", "items": ["OVER = PARTITION (peer slices) + ORDER (sequence, changes defaults!) + FRAME (which peers count)", "Pipeline: windows evaluate after GROUP BY/HAVING, before SELECT/DISTINCT/ORDER BY — hence rank-inside/filter-outside", "No ORDER BY → whole-partition default; ORDER BY → growing-prefix default — always write frames explicitly", "OVER's ORDER BY sequences peers; the query's ORDER BY presents output — never confuse the two"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the per-role GROUP BY baseline and record the four averages in order. (b) In real SQLite/PostgreSQL, write the ranked version (RANK() OVER (ORDER BY avg_hours DESC) on the grouped subquery) plus a running-total version (SUM(avg_hours) OVER (ORDER BY avg_hours DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)). (c) State in one sentence what changes if you delete the frame clause from (b)'s running total.",
+    "hints": [
+      "Baseline gives four rows (frontend/backend/fullstack/devops averages) — the window queries consume exactly these rows. Predict ranks from the baseline before running.",
+      "Ranked version wraps the GROUP BY in a subquery (windows can't rank ungrouped rows into per-role ranks). Running version adds the explicit frame — compare with the frameless twin.",
+      "Deleting the frame changes nothing here (ORDER BY present → growing prefix is already the default) — which is precisely why explicit frames are discipline, not necessity, in this case."
+    ],
+    "solution": "-- (b) ranked (real SQLite / PostgreSQL)\nSELECT role, avg_hours, RANK() OVER (ORDER BY avg_hours DESC) AS rnk\nFROM (SELECT role, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role) AS p;\n-- running with explicit frame\nSELECT role, avg_hours,\n  SUM(avg_hours) OVER (ORDER BY avg_hours DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running\nFROM (SELECT role, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role) AS p;",
+    "why": "The exercise makes pipeline order tangible (windows over grouped output) and defaults visible (frame deletion changes nothing *here* — the dangerous lesson is that it changes everything *somewhere else*, which is why explicitness is the rule).",
+    "code": "-- Sandbox baseline (flat — run here)\nSELECT role, AVG(hours_studied) AS avg_hours FROM developers GROUP BY role ORDER BY avg_hours DESC;\n\n-- Ranked + running versions (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "SUM(x) OVER (PARTITION BY role) vs SUM(x) OVER (PARTITION BY role ORDER BY x) — difference?",
+      "options": ["None — ORDER BY only sorts output", "First: whole-partition total on every row; second: growing-prefix running total (ORDER BY flips the default frame)", "Second is an error", "First is an error"],
+      "answer": 1,
+      "explain": "OVER's ORDER BY sequences peers and switches the default frame to running. Same function, different peer sets — the silent switch behind most window surprises."
+    },
+    {
+      "q": "Why must top-N-per-group filter ranks in an outer query?",
+      "options": ["Style preference", "Pipeline order: WHERE evaluates before windows exist — rank inside, filter outside", "Subqueries run faster", "RANK is non-deterministic"],
+      "answer": 1,
+      "explain": "FROM → WHERE → GROUP BY → windows → SELECT → ORDER BY. Same-level WHERE predates the window alias; the wrapper is structural, not stylistic."
+    },
+    {
+      "q": "You add ORDER BY inside OVER 'to sort the output'. What breaks?",
+      "options": ["Nothing — that's its purpose", "Aggregates silently become running computations (default frame flips); output sorting belongs in the query's ORDER BY", "Syntax error", "Partitions merge"],
+      "answer": 1,
+      "explain": "OVER's ORDER BY defines peer sequence for ranking/frames, not presentation. Display sorting is the query-level ORDER BY's job — confusing them converts totals into running totals."
+    },
+    {
+      "q": "When is an explicit frame unnecessary yet still recommended?",
+      "options": ["Never — omit it when defaults suffice", "When the default already matches (e.g., growing prefix wanted): explicitness documents intent and immunizes against future edits that change defaults", "Only in interviews", "Only for RANK"],
+      "answer": 1,
+      "explain": "Explicit frames are discipline: today's correct default becomes tomorrow's bug when someone adds ORDER BY. Three words delete a bug class."
+    }
+  ],
+  "summary": "Partition slices, order sequences (and flips defaults), frame bounds — three dials, pipeline position after grouping, explicit frames always. The model that makes every later lesson predictable.",
+  "next": "Model set — now rank properly: tie policies, NTILE buckets, and top-N patterns without the classic mistakes. Next: ranking done right."
+}

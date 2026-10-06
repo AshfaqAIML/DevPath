@@ -1,0 +1,156 @@
+{
+  "courseSlug": "sql-window-functions",
+  "subtitle": "Rank, compare, and aggregate without collapsing: OVER clauses, tie-correct rankings, neighbor navigation, frame mastery, and staged window programs",
+  "audience": "Developers comfortable with GROUP BY, subqueries, and CTEs (SQL Intermediate; the ranking primer in SQL Advanced Ch.5 is helpful but repeated briefly here) who need leaderboards, top-N-per-group, running totals, deltas, and quantile tiers. Flat baseline queries run in the SQL Query Sandbox; all window SQL targets real SQLite or PostgreSQL with engine differences called out explicitly.",
+  "outcomes": [
+    "Decompose any OVER clause into partition, ordering, and frame — and predict peer sets exactly",
+    "Exploit evaluation order: windows over grouped output, rank-inside/filter-outside staging",
+    "Choose ROW_NUMBER, RANK, DENSE_RANK, and NTILE by contract, with deterministic tiebreakers",
+    "Navigate with LAG/LEAD/FIRST_VALUE/LAST_VALUE, including framing fixes and named WINDOWs",
+    "Command ROWS, RANGE, and GROUPS frames plus EXCLUDE for moving, peer, and tier logic",
+    "Compose FILTER metrics, QUALIFY emulations, and multi-stage window programs through CTEs",
+    "Deliver tiered, cliff-measured, context-rich analyses as cited findings with caveats"
+  ],
+  "prereqSlugs": ["sql-fundamentals", "sql-intermediate"],
+  "technologies": ["SQLite 3 window functions", "PostgreSQL window functions", "ANSI OVER clause", "Frames (ROWS/RANGE/GROUPS)"],
+  "skills": ["window functions", "ranking", "NTILE bucketing", "LAG/LEAD navigation", "frame semantics", "FILTER", "cohort-style analysis"],
+  "assessment": [
+    {
+      "q": "SUM(x) OVER (PARTITION BY role) vs SUM(x) OVER (PARTITION BY role ORDER BY x) — difference?",
+      "options": ["None", "Whole-partition total vs growing-prefix running total — ORDER BY flips the default frame", "Second is an error", "First is an error"],
+      "answer": 1,
+      "explain": "OVER's ORDER BY sequences peers and switches defaults to running. Same function, different peer sets (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Why must WHERE rn <= 2 wrap the ROW_NUMBER query instead of sharing its level?",
+      "options": ["Style", "Pipeline order: WHERE evaluates before windows exist — compute inside, filter outside", "Speed", "Reserved word"],
+      "answer": 1,
+      "explain": "FROM → WHERE → GROUP BY → windows → SELECT → ORDER BY. Same-level filtering predates the alias (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Fixed 10-row feed uses RANK and shows 9–12 rows intermittently. Fix and reason?",
+      "options": ["Add LIMIT 10", "ROW_NUMBER with deterministic order — exactly 10 numbers always exist; RANK shares on ties", "NTILE(10)", "Remove ORDER BY"],
+      "answer": 1,
+      "explain": "Cardinality contracts: ROW_NUMBER guarantees N rows; RANK guarantees honest ties. Slot type dictates function (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "14 rows into NTILE(4). Sizes and rule?",
+      "options": ["4,4,4,2", "4,4,3,3 — differ by ≤1, earlier buckets take remainders", "Equal thirds", "7,7"],
+      "answer": 1,
+      "explain": "14 = 3×4 + 2: first two buckets absorb remainders. Persist labels; boundaries drift with growth (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "LAST_VALUE(x) OVER (PARTITION BY r ORDER BY h DESC) returns each row's own value. Why + fix?",
+      "options": ["Broken function", "Default growing frame makes it 'last so far' — add ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", "Needs DISTINCT", "Wrong partition"],
+      "answer": 1,
+      "explain": "ORDER BY flips defaults to running prefix; LAST_VALUE then reads the current row. Full frame is the mandatory pairing (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "LAG(x, 1) on the first ordered row yields?",
+      "options": ["0", "NULL (no previous row) unless a default is supplied", "Last row's value", "Error"],
+      "answer": 1,
+      "explain": "Edges lack neighbors. Self-defaults (LAG(x,1,x)) keep edge arithmetic clean (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "ROWS vs RANGE frames on tied ORDER BY values?",
+      "options": ["Synonyms", "ROWS splits ties across windows by position; RANGE carries each tie group together by value", "RANGE is faster", "ROWS errors on ties"],
+      "answer": 1,
+      "explain": "Positions vs values is the frame decision; ties expose it. Choose by whether ties must travel together (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "'Average of everyone else in my group' needs?",
+      "options": ["Plain partition average", "Full-partition frame with EXCLUDE CURRENT ROW — removes self-bias", "ORDER BY only", "DISTINCT"],
+      "answer": 1,
+      "explain": "Baselines must exclude the subject. EXCLUDE sculpts exactly that (Ch.4).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Translate Snowflake QUALIFY rnk <= 3 to SQLite/PostgreSQL.",
+      "options": ["Impossible", "Subquery/CTE wrapper: compute window inside, filter alias outside", "HAVING", "LIMIT 3"],
+      "answer": 1,
+      "explain": "No QUALIFY here: pipeline order forces the wrapper. Mechanical translation, identical rows (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "NTILE tier labels from January vs March disagree on the same learners. Proper handling?",
+      "options": ["Pick the flattering one", "Persist labels with as-of dates; recomputed quantiles drift — undated tiers are incomparable", "Average them", "NTILE is non-deterministic"],
+      "answer": 1,
+      "explain": "Quantile boundaries move with data. Comparability requires versioned labels (Ch.6).",
+      "difficulty": "medium"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "Leaderboard, Tiers & Cliffs",
+    "summary": "Build the engagement leaderboard suite for the DevPath catalog: deterministic global ranking, per-role top-3, quartile tiers with cliffs, and role-context flags — delivered as stage-named queries plus a findings memo with caveats. The window-program capstone: five cuts, one staged pipeline family, cited sentences.",
+    "requirements": [
+      "Cut 1 — deterministic global leaderboard: ROW_NUMBER with unique tiebreaker over hours, full ordered list",
+      "Cut 2 — top-3 per role via partitioned ranking with outer filter; state the tie policy and its consequence",
+      "Cut 3 — NTILE(4) tiers with sizes verified (expect 4,4,3,3) and as-of dating on the labels",
+      "Cut 4 — cliff analysis: LAG gaps ordered DESC with the top-3 structural breaks named",
+      "Cut 5 — fusion: tier + role_avg + vs_role flags in one staged query; list every tier-vs-context mismatch explicitly",
+      "Memo: five finding bullets (tier composition, biggest cliff, mismatch learners, role comparison, data caveats), each citing its cut"
+    ],
+    "technical": [
+      "Flat grounding queries run in the SQL Query Sandbox; all window SQL runs in real SQLite or PostgreSQL",
+      "Every window query states its frame explicitly; every ranking states its tie policy",
+      "Tier sizes and cliff arithmetic hand-verified on at least two rows per cut",
+      "Engine-variant constructs (GROUPS/EXCLUDE) flagged with support notes, not assumed"
+    ],
+    "architecture": "Three sections: (1) Leaderboard suite — cuts 1–2 with tie policies and shortlists; (2) Tier & cliff analysis — cuts 3–5 with the fusion query and mismatch table; (3) Findings memo — five cited bullets plus caveats (n-sizes, tier drift, tie handling) and one proposal (which segment to intervene on first, backed by numbers).",
+    "steps": [
+      "Ground in sandbox flats: range snapshot, role baselines, tie census — record all three tables",
+      "Build cuts in order (tiers → cliffs → fusion), verifying sizes and two hand-checked rows per cut",
+      "Write the memo last, once a mismatch or cliff has surprised you",
+      "Audit every query for explicit frames, deterministic orders, and outer filters",
+      "Flag engine-specific constructs; provide ROWS-based fallbacks where required"
+    ],
+    "evaluation": [
+      "Leaderboard deterministic (tiebreaker present); top-3 policy stated with consequence",
+      "Tier sizes verified 4,4,3,3 with as-of dating; cliffs ordered with top breaks named",
+      "Fusion flags every tier-vs-context mismatch; no bare partition averages presented as peer baselines",
+      "Memo bullets cite cuts and carry n-caveats; at least one non-obvious finding",
+      "All window SQL states frames; no QUALIFY-isms without emulation"
+    ],
+    "stretch": [
+      "Add moving-average trend (3-row) over hours with ROWS frame and interpret two inflections",
+      "Rebuild one cut with FILTER-based conditional metrics and compare readability",
+      "Benchmark the fusion query with EXPLAIN before/after an index and report"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "ROW_NUMBER vs RANK vs DENSE_RANK — when each?",
+      "a": "ROW_NUMBER (+ unique tiebreaker) for exact cardinalities: fixed feeds, pagination, dedup-by-first. RANK for honest shared placements with gaps: prizes, competitions. DENSE_RANK for tier labels without gaps. The through-line is tie contracts: arbitrary order, shared-with-skip, shared-dense — matched to product need (exact N vs honest ties vs tier names)."
+    },
+    {
+      "q": "Why does LAST_VALUE need a frame when FIRST_VALUE seemingly doesn't?",
+      "a": "FIRST_VALUE reads the partition/frame start, which the default growing frame always includes — correct by luck. LAST_VALUE reads the frame end, which under the default growing frame is the current row — 'last so far', almost never intended. The fix (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) is mandatory pairing, and the asymmetry is the favorite window interview trap."
+    },
+    {
+      "q": "ROWS vs RANGE vs GROUPS — one-line each plus when it matters.",
+      "a": "ROWS: physical positions — last-N readings, positional windows; ties split arbitrarily. RANGE: ORDER BY values — value bands where ties travel together; deterministic under ties. GROUPS: peer groups — tier-above/below logic without splitting tied tiers. It matters wherever ties exist: rankings, bands, and tier logic give different numbers per mode."
+    },
+    {
+      "q": "How do you filter on a window result in Postgres/SQLite, and why that shape?",
+      "a": "Subquery/CTE wrapper: compute inside, filter outside — because windows evaluate after WHERE in the logical pipeline, so same-level filtering predates the alias. (Snowflake/BigQuery's QUALIFY is exactly this wrapper made syntax.) Same rule covers HAVING-like filtering on ranks and top-N-per-group patterns."
+    },
+    {
+      "q": "NTILE(4) = 1 shortlist: what do you tell stakeholders about stability?",
+      "a": "Bucket sizes follow remainder rules (earlier buckets absorb extras) and boundaries drift as data grows — so persist labels with as-of dates, never compare undated tiers across runs, and pair shortlists with n-sizes. A top-quartile claim without dating and denominators is a future embarrassment."
+    },
+    {
+      "q": "Running total query returns per-row values that look like partial sums. Diagnosis?",
+      "a": "Almost certainly correct behavior, not a bug: ORDER BY in OVER flips the default frame to growing-prefix (running semantics). If a grand total was intended, remove the ORDER BY or state the full-partition frame explicitly. The meta-lesson: defaults depend on ORDER BY presence, so always write frames explicitly — three words that delete the ambiguity."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

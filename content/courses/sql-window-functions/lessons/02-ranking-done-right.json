@@ -1,0 +1,61 @@
+{
+  "title": "Ranking Done Right",
+  "slug": "02-ranking-done-right",
+  "objective": "After this lesson you will be able to choose correctly among ROW_NUMBER, RANK, DENSE_RANK and NTILE; write deterministic top-N-per-group queries; and avoid the three classic ranking bugs (nondeterministic ties, paged RANK gaps, NTILE sizing surprises).",
+  "why": "Rankings drive leaderboards, prizes, shortlists, and paginated feeds — all places where wrong ties cost money or trust. The primer named the functions; this lesson teaches their contracts: what each guarantees under ties, how NTILE distributes remainders, and why ROW_NUMBER without a unique order is a shuffling bug wearing a ranking costume.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Tie contracts, precisely" },
+    { "t": "p", "text": "**ROW_NUMBER**: 1,2,3,… — ties broken arbitrarily (which tied row gets which number is *unspecified* and can vary run to run). **RANK**: shared numbers with gaps (1,1,3 — competition '1224' style… precisely 1,2,2,4). **DENSE_RANK**: shared without gaps (1,2,2,3 — tiers). The choice is a product decision: prizes → RANK (shared prize, next skipped), tiers/labels → DENSE_RANK, stable pagination → ROW_NUMBER *with a unique tiebreaker*." },
+    { "t": "code", "lang": "sql", "code": "-- Deterministic ranking: unique order kills tie arbitrariness (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  ROW_NUMBER() OVER (ORDER BY hours_studied DESC, id) AS rn,\n  RANK() OVER (ORDER BY hours_studied DESC) AS rnk,\n  DENSE_RANK() OVER (ORDER BY hours_studied DESC) AS dense_rnk\nFROM developers\nORDER BY hours_studied DESC, id;", "caption": "The id tiebreaker makes ROW_NUMBER stable; RANK/DENSE_RANK need none" },
+    { "t": "p", "text": "The `, id` tiebreaker is the whole lesson in one clause: ROW_NUMBER over non-unique ordering is nondeterministic — same query, different runs, different numbers for tied rows. Any downstream use (pagination, shortlists, dedup by rn = 1) inherits the instability. Unique total order or it isn't a ranking, it's a shuffle." },
+    { "t": "h", "text": "NTILE: buckets, with remainder rules" },
+    { "t": "p", "text": "**`NTILE(n)`** splits ordered rows into n near-equal buckets: sizes differ by at most one, with **earlier buckets getting the extra rows**. 14 developers into 4 quartiles → 4,4,3,3 (buckets 1–2 hold 4). The remainder rule matters whenever you label 'top quartile' — NTILE(4) = 1 is the top ~quarter, and bucket boundaries shift as data grows, so persist labels, never recompute-and-compare across time naively." },
+    { "t": "code", "lang": "sql", "code": "-- Quartile buckets + top-quartile shortlist (real SQLite/PostgreSQL)\nSELECT name, hours_studied,\n  NTILE(4) OVER (ORDER BY hours_studied DESC) AS quartile\nFROM developers;\n-- Shortlist: wrap and filter quartile = 1 (rank-inside/filter-outside, Ch.1 pipeline).", "caption": "NTILE buckets: earlier buckets absorb remainders" },
+    { "t": "h", "text": "Top-N per group, production-grade" },
+    { "t": "p", "text": "Combine partitioning with ranking: `ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC, id)` then `WHERE rn <= N` outside. Three production details: partition by the grouping dimension, order deterministically *within* partitions (tiebreaker!), and remember ties policy — top-2 with RANK can return 3+ rows on ties (sometimes desired for prizes, disastrous for fixed-size feeds)." },
+    { "t": "callout", "variant": "warn", "title": "RANK in fixed-size slots", "text": "Leaderboard showing exactly 10 rows must use ROW_NUMBER (exactly 10 numbers exist) — RANK with ties returns 9 or 12 unpredictably. Conversely, prize tiers must use RANK/DENSE_RANK (ties share honestly). Mismatching function to slot is the classic leaderboard bug." },
+    { "t": "practice", "query": "SELECT role, COUNT(*) AS devs FROM developers GROUP BY role ORDER BY devs DESC;", "note": "Run this partition inventory in the sandbox — 4 roles, their sizes. Every top-N-per-group query below operates inside these partitions: know the group sizes before ranking within them (a group of 2 makes 'top 3' meaningless)." },
+    { "t": "keytakeaways", "items": ["ROW_NUMBER: arbitrary tie-breaks (add unique order) · RANK: shared with gaps · DENSE_RANK: shared tiers", "NTILE(n): near-equal buckets, earlier buckets take remainders — persist labels, don't compare across time naively", "Top-N per group: partition + deterministic order + outer filter; RANK can overfill fixed slots", "Tiebreaker (`, id`) converts shuffles into rankings"]} ],
+  "exercise": {
+    "prompt": "(a) In the sandbox, run the partition inventory and note the smallest role group. (b) In real SQLite/PostgreSQL, write: (i) deterministic ROW_NUMBER leaderboard with tiebreaker; (ii) top-2 per role; (iii) quartile buckets with a top-quartile shortlist. (c) State which function serves a 10-row fixed feed vs a shared-prize contest, with the one-line reason each.",
+    "hints": [
+      "Leaderboard: ROW_NUMBER() OVER (ORDER BY hours_studied DESC, id). Top-2-per-role: PARTITION BY role, same deterministic order, outer WHERE rn <= 2.",
+      "Quartiles: NTILE(4) OVER (ORDER BY hours_studied DESC), outer filter = 1. Check bucket sizes sum to 14 (4+4+3+3).",
+      "Fixed feed → ROW_NUMBER (exactly N numbers exist). Shared prizes → RANK (ties share honestly, gaps reflect it)."
+    ],
+    "solution": "-- (b-i) deterministic leaderboard (real SQLite / PostgreSQL)\nSELECT name, hours_studied,\n  ROW_NUMBER() OVER (ORDER BY hours_studied DESC, id) AS rn\nFROM developers ORDER BY rn;\n-- (b-ii) top-2 per role\nSELECT role, name FROM (\n  SELECT role, name,\n    ROW_NUMBER() OVER (PARTITION BY role ORDER BY hours_studied DESC, id) AS rn\n  FROM developers) WHERE rn <= 2;\n-- (b-iii) quartiles + shortlist\nSELECT name FROM (\n  SELECT name, NTILE(4) OVER (ORDER BY hours_studied DESC) AS q FROM developers)\nWHERE q = 1;\n-- (c) fixed feed: ROW_NUMBER (exact cardinality); prizes: RANK (honest ties).",
+    "why": "Three ranking jobs, three correct functions, one discipline (deterministic order where cardinality matters). The exercise makes function choice a product decision, not a habit.",
+    "code": "-- Sandbox inventory (flat — run here)\nSELECT role, COUNT(*) AS devs FROM developers GROUP BY role;\n\n-- Ranking suite (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "ROW_NUMBER() OVER (ORDER BY hours_studied DESC) with tied hours returns different numbers across runs. Why, and fix?",
+      "options": ["Engine bug — restart", "Ties break arbitrarily without a unique order — add a tiebreaker (e.g. , id) for a deterministic total order", "Need DENSE_RANK instead", "Add LIMIT 1"],
+      "answer": 1,
+      "explain": "Non-unique ordering leaves tie assignment unspecified. Unique tiebreakers convert shuffles into stable rankings — mandatory for pagination and shortlists."
+    },
+    {
+      "q": "14 rows, NTILE(4) ORDER BY x DESC. Bucket sizes?",
+      "options": ["4,4,4,2", "4,4,3,3 — sizes differ by ≤1, earlier buckets take remainders", "3,3,4,4", "Equal 3.5 each"],
+      "answer": 1,
+      "explain": "Remainder rule: 14 = 3×4 + 2, so the first two buckets hold 4. Persist quartile labels; recomputation shifts boundaries as data grows."
+    },
+    {
+      "q": "Fixed 10-row leaderboard uses RANK and sometimes shows 9 or 12 rows. Fix?",
+      "options": ["Add more rows", "Switch to ROW_NUMBER with deterministic order — exactly 10 numbers always exist; RANK shares numbers on ties", "Use NTILE(10)", "Remove ORDER BY"],
+      "answer": 1,
+      "explain": "Cardinality contracts differ: ROW_NUMBER guarantees N rows for top-N; RANK guarantees honest ties. Slot type dictates function."
+    },
+    {
+      "q": "Top-2-per-role with RANK returns 3 developers for a role. Bug or correct?",
+      "options": ["Bug — top-2 means 2", "Correct if 2nd place ties: RANK shares honestly, overfilling fixed expectations — decide intended policy explicitly", "Engine error", "Needs DISTINCT"],
+      "answer": 1,
+      "explain": "RANK's honesty overfills fixed slots. For prizes this is correct (shared 2nd); for feeds switch to ROW_NUMBER. Policy first, function second."
+    }
+  ],
+  "summary": "Rank by contract: ROW_NUMBER (+tiebreaker) for exact cardinalities, RANK for honest prizes, DENSE_RANK for tiers, NTILE for quantile buckets with known remainder rules. Top-N per group partitions deterministically and filters outside.",
+  "next": "Ranked rows stand alone — now relate them to neighbors: previous/next comparisons, deltas, and running state with LAG/LEAD. Next: navigation functions."
+}
