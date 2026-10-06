@@ -1,0 +1,187 @@
+{
+  "title": "The Staging Area: Building the Next Snapshot",
+  "slug": "03-the-staging-area",
+  "objective": "After this lesson you will be able to stage file content deliberately with git add, explain why edits made after staging are not included, read git status and git diff to see exactly what is staged versus unstaged, and unstage a file without losing any work.",
+  "why": "The staging area is what separates a professional commit history from a Friday-night slurry — it lets you curate exactly what the next snapshot will contain before it becomes permanent. The one subtlety that bites every beginner — git add stages the content as it exists at that moment, not the file 'in general' — is responsible for the classic 'I committed the wrong version' bug, and it dissolves the moment you can see both versions in git status at once.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Why history needs a waiting room" },
+    { "t": "p", "text": "If Git snapshotted your project on every save, history would be keystroke noise — three commits that say \"wip\", one that says \"oops\". The staging area is the fix: a place to **assemble the next snapshot deliberately** before it becomes permanent. You add exactly the changes that belong together, review the draft, and `git commit` freezes it as one checkpoint. The result is **atomic history** — commits that each do one thing, which is what makes them reviewable, revertible, and findable later." },
+    {
+      "t": "diagram",
+      "caption": "The staging area sits between your edits and history",
+      "nodes": [
+        "working directory — live files; every edit lands here instantly",
+        "git add <file>  →  copies the file's CURRENT content into the draft",
+        "staging area (the index) — the exact contents the next snapshot will contain",
+        "git commit  →  freezes the draft into permanent, hash-named history",
+        "nothing reaches history without passing through staging first"
+      ]
+    },
+    { "t": "p", "text": "Physically, the staging area is a single file — `.git/index` — listing every file and the stored snapshot of the version you staged. You will hear it called both **the staging area** and **the index**; they are two names for the same file. Don't go looking for it as a folder in your project: nothing you stage appears in your working directory. It is pure bookkeeping — a draft snapshot under construction — and `git status` is the window onto it." },
+    { "t": "h", "text": "git add stages content, not files" },
+    { "t": "p", "text": "Here is the subtlety that bites every single beginner, usually around week two: **`git add` stages the file's content as it exists at that moment** — a photograph of the whiteboard, not a camera left in the room. If you edit the file after staging, the draft still holds the *old* photograph. Commit later and the newer edits are not in the commit; they are still in your working directory, waiting for a re-add. Nothing is lost — but \"I committed the wrong version\" is almost always this photograph going stale." },
+    {
+      "t": "diagram",
+      "caption": "git add takes a photograph, not a subscription",
+      "nodes": [
+        "echo \"day 2\" >> journal.md — the working copy gains a line",
+        "git add journal.md — the content AT THIS MOMENT is copied into staging",
+        "echo \"day 3\" >> journal.md — the working copy gains another line",
+        "staging still holds the day-2 version — the day-3 line stays unstaged",
+        "git commit now would freeze the day-2 version, not day 3"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git init\necho \"DevPath journal\" > journal.md\necho \"day 1: learned the staging area\" >> journal.md\ngit add journal.md\necho \"day 2: staged content is a snapshot\" >> journal.md\ngit status\n# On branch main\n#\n# No commits yet\n#\n# Changes to be committed:\n#   (use \"git rm --cached <file>...\" to unstage)\n#   new file:   journal.md\n#\n# Changes not staged for commit:\n#   (use \"git add <file>...\" to update what will be committed)\n#   modified:   journal.md",
+      "caption": "journal.md in both sections at once — the staged draft (two lines) is older than the working copy (three lines)",
+      "highlight": [4, 5, 13, 17]
+    },
+    { "t": "p", "text": "Nothing is half-staged — there are simply **two versions of the file in play**. The staged version contains the first two lines; the working copy contains those plus the day-2 line. Status reports both because both exist: 'Changes to be committed' describes the draft, 'Changes not staged' describes the drift between draft and working copy. If you committed right now, the two-line version would enter history and the third line would stay in your working directory — as a modification, not as a loss. Want the newest content in the next commit? `git add journal.md` again." },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "A file in both sections is not an error",
+      "text": "It means exactly: 'the staged draft is older than the working copy.' Nothing is wrong, nothing is stuck — you simply decide which version belongs in the next snapshot: re-add the file to refresh the draft, or commit as-is and let the newer edits ride the next checkpoint."
+    },
+    { "t": "h", "text": "git diff: the edits that didn't make the draft" },
+    { "t": "p", "text": "`git diff` compares the **working directory to the staging area** — so it shows precisely the edits made *after* your last `git add`: the stuff that would NOT be in the next commit if you committed right now. A completely empty diff is the equally informative case: working copy and draft agree, so everything you see is everything history would get." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git diff\n# diff --git a/journal.md b/journal.md\n# index 1a2b3c4..5d6e7f8 100644\n# --- a/journal.md\n# +++ b/journal.md\n# @@ -1,2 +1,3 @@\n#  DevPath journal\n#  day 1: learned the staging area\n# +day 2: staged content is a snapshot",
+      "caption": "How to read a diff: the --- side is the staged draft, the +++ side is the working copy, @@ counts lines on each side, and + marks lines the working copy has that the draft doesn't",
+      "highlight": [4, 5, 9]
+    },
+    {
+      "t": "table",
+      "headers": ["Command", "Compares", "Answers"],
+      "rows": [
+        ["git diff", "working directory ↔ staging area", "\"what have I edited since my last git add?\" — the edits that would NOT be in the next commit"],
+        ["git diff --staged", "staging area ↔ last commit", "\"what will the next commit actually contain?\" (real-world flag — the playground implements the core git diff)"],
+        ["git status", "everything, summarized by filename", "which files are in which state, with suggested commands"]
+      ]
+    },
+    { "t": "h", "text": "Curating the snapshot: staging as an editorial act" },
+    { "t": "p", "text": "Because staging is selective, it is editorial. Fix a bug and refactor something unrelated in the same working session, and staging lets you ship them as two honest commits instead of one confusing one. `git add <file>` stages one file; `git add .` stages everything in the folder — fast, but run `git status` first so that 'everything' is a decision rather than an accident." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "# a busy afternoon leaves two unrelated edits in the working directory…\ngit add cart.js\ngit commit -m \"Reject negative quantities in the cart\"\ngit add styles.css\ngit commit -m \"Restyle the empty cart state\"",
+      "caption": "Two logical changes, two commits — the staging area is the editorial line between them (files exist from earlier in the session)",
+      "highlight": [2, 4]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Real-world Git can stage hunks, not just files",
+      "text": "git add -p walks you through your edits piece by piece and lets you stage individual hunks with y/n — surgical commits out of a messy working directory. The playground works at whole-file granularity while you build the model, which is the right order: learn what staging IS before learning how fine-grained it can get."
+    },
+    { "t": "h", "text": "Unstaging: taking content back out of the draft" },
+    { "t": "p", "text": "Staged something prematurely? `git restore --staged <file>` pulls it out of the next snapshot's draft — and that is all it does. Two outcomes, depending on the file's history: if the file has **never been committed**, the draft entry is removed and the file goes back to *untracked*; if an older version already exists in history, the draft resets to that version and your working copy shows up as *modified, not staged*. In both cases the content on disk is untouched — `--staged` shuffles states, it never deletes work." },
+    {
+      "t": "diagram",
+      "caption": "What git restore --staged actually moves",
+      "nodes": [
+        "staged: the file's current draft sits in the index",
+        "git restore --staged <file>",
+        "never committed before → the file becomes untracked again",
+        "an older version in history → the file shows as modified, not staged",
+        "either way: the working copy's content is untouched — only the draft changed"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "danger",
+      "title": "git restore without --staged throws work away",
+      "text": "git restore <file> (no flag) replaces the working copy with the staged or committed version — your uncommitted edits are gone, and gone means gone. The flag is the difference between 'take this out of the next commit' (safe) and 'erase my edits' (destructive). Read that flag twice before pressing Enter."
+    },
+    { "t": "p", "text": "Run the sequence below in the Git History Playground and watch the moment this whole lesson is built around: after the second `echo`, `git status` lists journal.md **twice** — once staged, once modified — and `git diff` reports exactly one line: the one that exists in the working copy but not in the draft. Then narrate why before reading the practice note." },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "The two-versions moment",
+      "query": "git init\necho \"DevPath journal\" > journal.md\necho \"day 1: learned the staging area\" >> journal.md\ngit add journal.md\ngit status\necho \"day 2: staged content is a snapshot\" >> journal.md\ngit status\ngit diff",
+      "note": "journal.md is BOTH staged (old content) and modified (new line) — git add stages the file's content at that moment, later edits need re-adding"
+    },
+    { "t": "keytakeaways", "title": "Lesson 3 in five lines", "items": [
+      "The staging area (the index) is the draft of the next snapshot — nothing enters history without passing through it",
+      "git add stages the file's content AS IT IS at that moment; edits made afterwards are unstaged until you re-add",
+      "A file can appear under both 'Changes to be committed' AND 'Changes not staged' — an older staged version and a newer working copy, not an error",
+      "git diff compares the working directory to the staging area: it shows exactly what would be left OUT of the next commit, and silence means the draft is current",
+      "git restore --staged <file> pulls a file out of the draft without touching its content on disk — plain git restore <file> discards working edits and is destructive"
+    ] },
+    {
+      "t": "interview",
+      "q": "Why does Git have a staging area at all? Other systems commit the working tree directly.",
+      "a": "The index buys you atomic, curated commits: you can review exactly what the next snapshot will contain (git diff --staged) before making it permanent, stage one file while leaving unrelated dirt behind, and assemble one logical change across several files before committing. Systems that commit the working tree wholesale make 'everything in the folder right now' the unit of history, which pollutes commits with accidents. The cost is the famous two-step rhythm plus the stale-draft trap — editing after git add and committing the older version — which teams mitigate with habits (re-add before commit) or the real-world shortcut git commit -a, which stages tracked files automatically but still skips untracked ones. The framing that lands: the staging area is the boundary between 'my mess' and 'my history', and Git makes you cross it deliberately."
+    }
+  ],
+  "exercise": {
+    "prompt": "Make the two-versions moment happen, inspect it, then resolve it. In the playground: start a repository, create list.md containing the line \"shopping list\", and stage it. Now append \"milk\" — a line Git has not seen. Run git status and find list.md in both sections. Run git diff — only the milk line shows. Finally re-add the file and run git diff again — silence. Predict both diff outputs before you run them.",
+    "hints": [
+      "echo \"shopping list\" > list.md creates the file with one line; echo \"milk\" >> list.md appends. Single > overwrites; double >> adds to the end.",
+      "After the first git add, staging holds the one-line version. git diff compares that draft to the working copy — so it shows +milk and nothing else.",
+      "git add list.md again refreshes the draft to include milk; now working copy and draft match, so the final git diff prints nothing. Silence is the answer."
+    ],
+    "solution": "git init\necho \"shopping list\" > list.md\ngit add list.md\necho \"milk\" >> list.md\ngit status\ngit diff\ngit add list.md\ngit diff",
+    "why": "You produce, inspect, and then resolve the exact state that trips beginners: a file with a staged version and a newer working version. The first git diff proves Git is comparing draft-to-working (only milk shows); the re-add refreshes the draft; the second, silent git diff proves the two are back in sync — and 'diff says nothing' becomes a check you can trust for the rest of your career.",
+    "code": "# Run me in the Git History Playground\n# TODO 1: initialize the repository\n# TODO 2: create list.md containing: shopping list\n# TODO 3: stage it\n# TODO 4: append the line: milk\n# TODO 5: git status — spot list.md in BOTH sections\n# TODO 6: git diff — expect exactly one line\n# TODO 7: refresh the draft, then git diff again — expect silence",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "What does git add journal.md actually do?",
+      "options": [
+        "Records journal.md's current content in the draft of the next snapshot",
+        "Commits journal.md to permanent history",
+        "Creates a backup copy of journal.md inside .git",
+        "Marks the file as ignored by Git"
+      ],
+      "answer": 0,
+      "explain": "git add records the file's content as it exists *at that moment* into the staging area — the draft of the next snapshot. It is not a commit (option B: that is git commit's job, and it only freezes the draft); not a backup copy (option C: Git stores snapshots in its object database when you commit — add is bookkeeping, not vaulting); and not an ignore marker (option D: that is .gitignore's job, real-world). Think of add as a promise: 'this content, in the next snapshot.'",
+      "difficulty": "easy"
+    },
+    {
+      "q": "You stage journal.md, then append another line to it, then run git diff. What does the diff show?",
+      "options": [
+        "Nothing — the file is already staged",
+        "The entire file — git diff always shows full contents",
+        "Both versions of the file, side by side",
+        "Only the line appended after git add — the difference between the working copy and the staged draft"
+      ],
+      "answer": 3,
+      "explain": "git diff compares the working directory to the staging area, so it shows precisely what changed since your last add: the appended line, and only that. Option A mistakes 'staged' for 'synchronized' — staging holds the *older* content, which is exactly why the diff has something to say. Option B is backwards: diffs show only the differing lines, which is their entire value. Option C describes a visual merge tool, not git diff's line format. The empty diff is the equally informative opposite case: draft and working copy agree.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "journal.md is staged with two lines. You append a third line WITHOUT re-adding, then run git commit. What does the commit contain, and where is the third line?",
+      "options": [
+        "All three lines — commits always take the latest working copy",
+        "The two staged lines only — the commit freezes the draft, and the third line stays in the working directory as an unstaged modification",
+        "Nothing — Git blocks the commit while the working copy is dirty",
+        "All three lines, with the commit marked 'partial'"
+      ],
+      "answer": 1,
+      "explain": "A commit photographs the staging area, not the working directory. The draft holds the two-line version, so that is what history gets; the third line was never staged and simply remains a working-directory modification, ready for the next commit. Option A is the 'commit takes the working tree' myth (the closest real behavior is the real-world git commit -a shortcut, which stages tracked files first — and even that is a choice, not a law). Option C invents a dirty-tree block: Git happily commits a clean draft while the working tree is dirty. Option D's 'partial' marker is fiction — there is no such flag. This question is the course's number-one real-world bug.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You run git restore --staged draft.md on a file that has never been committed. What is its state immediately after?",
+      "options": [
+        "The file's content is deleted from the working directory",
+        "Untracked — the index entry is removed, so Git reports it as a new file again; the content on disk is untouched",
+        "Staged, but empty",
+        "Committed to history as an empty snapshot"
+      ],
+      "answer": 1,
+      "explain": "git restore --staged resets the index entry to match the last commit — and for a never-committed file there is no committed version to match, so the entry is removed entirely and the file goes back to untracked. The content on disk is untouched, because --staged manipulates the draft, never your files. Option A describes what plain git restore (no flag) can do — destructive, and a different command. Option B invents a blank draft entry, but the entry is gone, not empty. Option D invents commits that never happened. Same command, two outcomes worth memorizing: never-committed → untracked; previously-committed → modified but unstaged.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "The staging area is a deliberate draft of the next snapshot that you assemble file by file, and git add stages the file's content as it exists at that moment — so later edits stay unstaged until you re-add. That is why one file can sit under 'Changes to be committed' and 'Changes not staged for commit' at once: an older staged version and a newer working copy, not an error. git diff compares the working copy to the draft, showing exactly what would be left out of the next commit, and git restore --staged pulls a file back out of the draft without touching its content. Plain git restore, by contrast, discards working-copy edits — the one destructive command in this lesson.",
+  "next": "The draft is built and inspected — time to freeze it: next lesson you'll turn staged content into permanent hash-named checkpoints, write subject lines your future teammates will thank you for, and read the whole chain back with git log."
+}

@@ -1,0 +1,308 @@
+     1→{
+     2→  "title": "Objects and the Reference Trap",
+     3→  "slug": "03-objects-references",
+     4→  "objective": "After this lesson you will be able to trace object references through assignments, function calls and copies — predicting exactly which mutations are visible where — and defend shared state with shallow copies, structuredClone and honest deep-copy trade-offs.",
+     5→  "why": "The most expensive class of JavaScript bug in real codebases is a mutation that leaks: a function 'helpfully' edits the object you passed it, a copy turns out to share its insides with the original, two components hold the same object and the second render surprises the first. All of it falls out of one rule — objects are reference values, and assignment copies the reference, never the object. This lesson makes that rule mechanical: you will predict the output before running it, and when the prediction is wrong, the bug has nowhere left to hide.",
+     6→  "minutes": 20,
+     7→  "xp": 80,
+     8→  "blocks": [
+     9→    {
+    10→      "t": "h",
+    11→      "text": "One object, two labels"
+    12→    },
+    13→    {
+    14→      "t": "p",
+    15→      "text": "Lesson 1 sorted values into two categories; here is where that split earns its keep. **Primitives copy by value** — assignment duplicates the number, the string, the boolean, and the two boxes live independent lives. **Objects copy by reference** — assignment duplicates only the *pointer*, and both names end up pointing at one shared thing. Six lines of each, side by side:"
+    16→    },
+    17→    {
+    18→      "t": "code",
+    19→      "lang": "js",
+    20→      "code": "// Primitives: assignment copies the VALUE — two independent boxes\nlet score = 42;\nlet scoreCopy = score;\nscoreCopy = 100;\nconsole.log(score); // 42 — the original never heard about it\n\n// Objects: assignment copies the REFERENCE — two labels, one box\nconst profile = { name: 'Ada', level: 'advanced' };\nconst alias = profile; // no new object — a second name for the SAME one\nalias.level = 'mentor';\nconsole.log(profile.level);     // \"mentor\" — one object, two names\nconsole.log(profile === alias); // true — same identity",
+    21→      "caption": "The whole lesson in one run: primitives copy, objects alias",
+    22→      "highlight": [
+    23→        9,
+    24→        10,
+    25→        11,
+    26→        12
+    27→      ]
+    28→    },
+    29→    {
+    30→      "t": "diagram",
+    31→      "caption": "What const alias = profile actually does",
+    32→      "nodes": [
+    33→        "const profile = { name, level } → the engine creates ONE object, somewhere in memory",
+    34→        "the profile binding stores a reference — an arrow pointing at that object",
+    35→        "const alias = profile copies the ARROW, not the object — two bindings now point at the same thing",
+    36→        "alias.level = 'mentor' follows its arrow and edits the object itself",
+    37→        "profile.level follows its arrow to the same object: 'mentor'. There was never a second object to protect"
+    38→      ]
+    39→    },
+    40→    {
+    41→      "t": "p",
+    42→      "text": "One recap from Lesson 1 now has its mechanism: `const profile` never protected the object — it froze the *binding's arrow*, and that arrow still points at a fully mutable object. That is why `alias.level = 'mentor'` is ordinary, legal code, while re-pointing the arrow (`profile = {...}`) is the `TypeError`. Mutation edits the destination; reassignment swings the arrow — only the second one touches what `const` guards."
+    43→    },
+    44→    {
+    45→      "t": "h",
+    46→      "text": "The bug pattern: functions that edit their callers"
+    47→    },
+    48→    {
+    49→      "t": "code",
+    50→      "lang": "js",
+    51→      "code": "function applyDiscount(order, percent) {\n  order.total = order.total * (1 - percent / 100); // writes through the reference\n  return order;                                     // and hands the SAME object back\n}\n\nconst order = { total: 200 };\nconst discounted = applyDiscount(order, 20);\n\nconsole.log(order.total);          // 160 — the caller's object changed\nconsole.log(discounted === order); // true — \"returned a new order\" was an illusion",
+    52→      "caption": "The caller asked a question; the function performed surgery",
+    53→      "highlight": [
+    54→        2,
+    55→        9,
+    56→        10
+    57→      ]
+    58→    },
+    59→    {
+    60→      "t": "p",
+    61→      "text": "There is no `copy` step anywhere in that call — the function received a *reference* to the caller's object, followed it inward, and wrote. The `return order` makes it look like a transformation that produced something new; `===` settles that in one line. This is the signature of the nastiest shared-state bugs: the symptom (a total that is already discounted) appears far from the cause (a helper called during a preview), because the mutation and the observation happen in different files. You will meet the array twin of this pattern in Lesson 5, when `sort()` quietly reorders the very array the caller handed it."
+    62→    },
+    63→    {
+    64→      "t": "callout",
+    65→      "variant": "danger",
+    66→      "title": "The helper that edits its caller",
+    67→      "text": "A function that writes through a reference parameter mutates data it does not own. In production this surfaces as 'the list renders in the wrong order after we log it' or 'the saved record already has the discount applied' — reported against the *reader*, caused by a *writer* elsewhere. The discipline: a function either answers a question and touches nothing, or it owns its data and says so in its name (`sortInPlace`, `setLevel`). When a transform is needed, return a new object — the next lesson's spread makes that one line."
+    68→    },
+    69→    {
+    70→      "t": "h",
+    71→      "text": "=== compares identity, never contents"
+    72→    },
+    73→    {
+    74→      "t": "code",
+    75→      "lang": "js",
+    76→      "code": "const a = { id: 1 };\nconst b = { id: 1 };\nconst c = a;\n\nconsole.log(a === b); // false — same shape, different objects: === asks \"same one?\"\nconsole.log(a === c); // true  — one object, two names\nconsole.log([1, 2] === [1, 2]); // false — arrays are objects too\n\n// The contents comparison people reach for — and its fine print:\nconsole.log(JSON.stringify(a) === JSON.stringify(b)); // true... this once\nconst p = { id: 1, role: 'dev' };\nconst q = { role: 'dev', id: 1 };\nconsole.log(JSON.stringify(p) === JSON.stringify(q)); // false — property ORDER differs",
+    77→      "caption": "=== on objects is identity; the stringify trick works only when key order matches",
+    78→      "highlight": [
+    79→        5,
+    80→        12
+    81→      ]
+    82→    },
+    83→    {
+    84→      "t": "p",
+    85→      "text": "Two object literals — no matter how identical — are always two objects, so `===` between them is `false`; the only `true` is two names for the same object (identity). When you genuinely need contents-equality, the options all have fine print: `JSON.stringify` comparison is **order-sensitive** (and silently drops `undefined` and functions — the round-trip flaws below apply), comparing `Object.keys` + values by hand is exact but verbose, and real projects reach for a deep-equal helper (Node's `assert.deepStrictEqual`, lodash's `isEqual`). Most production code dodges the question: compare the `id`."
+    86→    },
+    87→    {
+    88→      "t": "h",
+    89→      "text": "Shallow copies: one level of independence"
+    90→    },
+    91→    {
+    92→      "t": "code",
+    93→      "lang": "js",
+    94→      "code": "const original = { title: 'TS Basics', hours: 8 };\n\nconst spreadCopy = { ...original };             // spread: copies own enumerable properties\nconst assignCopy = Object.assign({}, original); // same semantics, older syntax\n\nspreadCopy.title = 'TS Deep Dive';\nconsole.log(original.title); // \"TS Basics\" — the top level is now independent\nconsole.log(spreadCopy.title, '|', assignCopy.title); // \"TS Deep Dive | TS Basics\"",
+    95→      "caption": "Spread and Object.assign both build a fresh OUTER object — top-level writes stop leaking",
+    96→      "highlight": [
+    97→        3,
+    98→        4,
+    99→        7
+   100→      ]
+   101→    },
+   102→    {
+   103→      "t": "p",
+   104→      "text": "A shallow copy builds a **new outer object** and copies each property's *value* into it. For primitives that is a full copy. But when a property's value is itself an object, the value being copied is a **reference** — and copying a reference gives both objects the same nested one. That is the exact meaning of *shallow*: one level of independence, no more. `Object.assign({}, obj)` behaves identically (spread is the ES2018 object form of it), so pick one and be consistent."
+   105→    },
+   106→    {
+   107→      "t": "h",
+   108→      "text": "The nested-sharing trap"
+   109→    },
+   110→    {
+   111→      "t": "code",
+   112→      "lang": "js",
+   113→      "code": "const course = { title: 'TS Basics', instructor: { name: 'Ada' } };\n\nconst copy = { ...course };     // fresh outer object...\ncopy.title = 'renamed';         // ...so this stays private...\ncopy.instructor.name = 'Grace'; // ...but instructor's VALUE is a reference — shared!\n\nconsole.log(course.title);            // \"TS Basics\" — top-level: copied\nconsole.log(course.instructor.name);  // \"Grace\"     — nested: SHARED\nconsole.log(course.instructor === copy.instructor); // true — one instructor object",
+   114→      "caption": "One copy, two behaviors: top-level independent, nested shared — predict all three lines before running",
+   115→      "highlight": [
+   116→        5,
+   117→        8,
+   118→        9
+   119→      ]
+   120→    },
+   121→    {
+   122→      "t": "p",
+   123→      "text": "This is the block to internalize, because it is the exact shape of the 'my backup didn't back anything up' bug: `copy.title = 'renamed'` is isolated (a top-level write into a fresh outer object), while `copy.instructor.name = 'Grace'` *traveled* — it followed the shared reference and edited the original's instructor too. One spread gave you two behaviors in the same line of code, decided purely by depth: **top level copied, everything below shared**. Mutating a nested value through a shallow copy is indistinguishable from mutating the original."
+   124→    },
+   125→    {
+   126→      "t": "table",
+   127→      "headers": [
+   128→        "Strategy",
+   129→        "What you get",
+   130→        "What stays shared or lost",
+   131→        "Use when"
+   132→      ],
+   133→      "rows": [
+   134→        [
+   135→          "Plain assignment — `const alias = obj`",
+   136→          "a second name for the exact same object",
+   137→          "everything — there is no copy at all",
+   138→          "you WANT mutations visible from both names (rare, deliberate)"
+   139→        ],
+   140→        [
+   141→          "Spread / Object.assign — `{ ...obj }`",
+   142→          "a fresh outer object; top-level properties independent",
+   143→          "every nested object and array — one level deep, no more",
+   144→          "flat shapes, defensive copies, merges (next lesson)"
+   145→        ],
+   146→        [
+   147→          "JSON round-trip — `JSON.parse(JSON.stringify(obj))`",
+   148→          "a fully detached deep copy",
+   149→          "drops `undefined` and functions; `Date` → string; `NaN` → `null`",
+   150→          "data that is provably JSON-shaped (API payloads)"
+   151→        ],
+   152→        [
+   153→          "`structuredClone(obj)`",
+   154→          "a true deep copy, every level",
+   155→          "functions and class instances throw `DataCloneError`; everything plain survives",
+   156→          "nested plain data that must be fully independent"
+   157→        ]
+   158→      ]
+   159→    },
+   160→    {
+   161→      "t": "h",
+   162→      "text": "Deep copies: structuredClone and the JSON round-trip"
+   163→    },
+   164→    {
+   165→      "t": "code",
+   166→      "lang": "js",
+   167→      "code": "const noisy = { id: 1, nickname: undefined, save: () => 'saved', when: new Date(0), score: NaN };\nconst roundTripped = JSON.parse(JSON.stringify(noisy));\n\nconsole.log(JSON.stringify(Object.keys(roundTripped))); // [\"id\",\"when\",\"score\"]\nconsole.log(typeof roundTripped.when);                  // \"string\" — Dates serialize to text\nconsole.log(roundTripped.score);                        // null — NaN has no JSON form",
+   168→      "caption": "The JSON round-trip is a lossy deep copy: some keys vanish, some values change type",
+   169→      "highlight": [
+   170→        4,
+   171→        5,
+   172→        6
+   173→      ]
+   174→    },
+   175→    {
+   176→      "t": "code",
+   177→      "lang": "js",
+   178→      "code": "const course = { title: 'TS Basics', meta: { hours: 8, tags: ['ts'] }, updated: new Date(0) };\n\nconst deep = structuredClone(course);\ndeep.meta.hours = 99;               // nested object...\ndeep.meta.tags.push('advanced');    // ...nested INSIDE an array — still isolated\n\nconsole.log(course.meta.hours);            // 8\nconsole.log(course.meta.tags.join(','));   // \"ts\"\nconsole.log(deep.updated instanceof Date); // true — Dates survive as Dates\nconsole.log(deep.meta === course.meta);    // false — every level is new\n\ntry {\n  structuredClone({ save: () => 'saved' }); // functions are not cloneable data\n} catch (e) {\n  console.log(e.name); // \"DataCloneError\" — it throws instead of silently dropping\n}",
+   179→      "caption": "structuredClone: deep at every level, honest about what it refuses — and in every modern runtime",
+   180→      "highlight": [
+   181→        9,
+   182→        10,
+   183→        11,
+   184→        14
+   185→      ]
+   186→    },
+   187→    {
+   188→      "t": "p",
+   189→      "text": "Two deep-copy strategies, two philosophies. The **JSON round-trip** never throws, but it quietly *loses*: `undefined` properties and functions vanish (they have no JSON form), `Date` objects come back as strings, `NaN` becomes `null` — acceptable for data that just came *from* JSON, corrupting for anything richer. **`structuredClone`** (browsers, Node 17+, workers) duplicates every level, keeps `Date`, `Map`, `Set` and `undefined` true to type, and *refuses* functions and class instances loudly (`DataCloneError`) rather than guessing. The habit: `structuredClone` by default when you truly need independence, the JSON trick only when the data is provably JSON-shaped — and the deeper fix, whenever you can afford it, is not sharing mutable state at all. Reading objects safely is the last piece, and it is two operators from Lesson 6 worth a preview:"
+   190→    },
+   191→    {
+   192→      "t": "h",
+   193→      "text": "Reading objects without crashing"
+   194→    },
+   195→    {
+   196→      "t": "code",
+   197→      "lang": "js",
+   198→      "code": "const lesson = { title: 'Objects', minutes: 20, quiz: { questions: 5 } };\n\nconsole.log(Object.keys(lesson).join(', '));               // \"title, minutes, quiz\"\nconsole.log(Object.values(lesson).map((v) => typeof v).join(', ')); // \"string, number, object\"\nconsole.log(Object.entries(lesson).length);               // 3 — [key, value] pairs\n\nconsole.log(lesson.quiz?.questions ?? 0);         // 5 — read through, default on nullish\nconsole.log(lesson.author?.name ?? 'unknown');    // \"unknown\" — missing path → undefined\nconsole.log(lesson.quiz?.retry?.delay ?? 'none'); // \"none\" — the whole chain short-circuits",
+   199→      "caption": "Object.keys/values/entries to inspect; ?. reads through nullish links, ?? defaults only on null/undefined — Lesson 6 owns the full story",
+   200→      "highlight": [
+   201→        6,
+   202→        7,
+   203→        8
+   204→      ]
+   205→    },
+   206→    {
+   207→      "t": "practice",
+   208→      "sim": "js-playground",
+   209→      "title": "The reference trap, live",
+   210→      "query": "const original = {\n  title: \"SQL Fundamentals\",\n  meta: { hours: 12, level: \"beginner\" },\n};\n\n// 1) Reference sharing: assignment copies the REFERENCE, not the object\nconst alias = original;\nalias.meta.hours = 99;\nconsole.log(\"after alias mutation, original.meta.hours:\", original.meta.hours);\n\n// 2) Shallow copy: top-level properties become independent...\nconst copy = { ...original };\ncopy.title = \"SQL Advanced\";\nconsole.log(\"original.title:\", original.title);\nconsole.log(\"copy.title:\", copy.title);\n\n// 3) ...but NESTED objects are still shared\ncopy.meta.level = \"advanced\";\nconsole.log(\"original.meta.level:\", original.meta.level);\nconsole.log(\"copy.meta.level:\", copy.meta.level);\n\nconsole.log(\"takeaway: spread copies ONE level - nested objects stay shared; structuredClone() makes a true deep copy\");",
+   211→      "note": "Predict all six output lines before running. Line 1: `alias` and `original` are two names for one object, so the nested write through `alias` is visible everywhere (99). Lines 2–3: spread copies the TOP level, so `title` writes on the copy stay private. Lines 4–5: the trap — `meta` is one shared nested object, so a write through the copy's `meta` leaks back into the original (`advanced` in both). Line 6 is the rule. The two behaviors prove it: assignment copies references, spread copies exactly one level, and true independence needs structuredClone."
+   212→    },
+   213→    {
+   214→      "t": "keytakeaways",
+   215→      "title": "Lesson 3 in six lines",
+   216→      "items": [
+   217→        "Objects are reference values: `const alias = obj` copies the reference, never the object — mutations through any name are visible through every name",
+   218→        "const freezes the binding, not the contents: `alias.level = 'mentor'` is legal under a const binding; re-pointing the binding is the TypeError",
+   219→        "Functions receive references, so any function that writes through its parameters edits the caller's data — the symptom appears far from the cause; return new values instead",
+   220→        "=== on objects compares identity, never contents — two same-shaped literals are never ===; JSON.stringify comparison is order-sensitive and lossy",
+   221→        "Spread and Object.assign copy ONE level: top-level properties become independent, nested objects stay shared — mutating a nested value through a shallow copy mutates the original",
+   222→        "Deep copies: structuredClone for real independence (every level, Dates intact, functions throw DataCloneError); the JSON round-trip only for JSON-shaped data — it drops undefined and functions, turns Dates into strings, and NaN into null"
+   223→      ]
+   224→    },
+   225→    {
+   226→      "t": "interview",
+   227→      "q": "Shallow copy versus deep copy — how do you make each in modern JavaScript, and when is the JSON round-trip acceptable?",
+   228→      "a": "Shallow: spread `{ ...obj }` or `Object.assign({}, obj)` — a fresh outer object whose property values are copied; when a value is itself an object, what gets copied is the reference, so nested objects are shared between original and copy. Deep: `structuredClone(obj)` walks the structure and duplicates every level — plain objects, arrays, Maps, Sets, Dates — while refusing functions and class instances outright with a DataCloneError rather than silently guessing. The JSON round-trip, `JSON.parse(JSON.stringify(obj))`, was the old idiom and remains acceptable only for data that is provably JSON-shaped: it drops `undefined` properties and functions entirely, converts Dates to strings, and maps NaN to null — fine for an API payload, quietly corrupting for anything richer. The senior-level point I always add: the cheapest correct strategy is often no copy at all — design functions to return new values instead of mutating shared ones, and you stop needing to defend with copies in the first place."
+   229→    }
+   230→  ],
+   231→  "exercise": {
+   232→    "prompt": "Defend `settings`. Part 1: rewrite `raiseRetries` so it is pure — the caller's object must come out untouched (`3`), the returned object must show `5`, and `updated === settings` must be `false`. Part 2: the scaffold's backup line uses one-level spread — predict what it protects and what it does not, then make the backup truly independent so the final line prints `3`. Target output for your version, in order: `3`, `5`, `false`, `3` (the scaffold prints the buggy evidence: `5`, `true`, `9`).",
+   233→    "hints": [
+   234→      "The mutation happens through the shared nested reference — `config.limits` IS the caller's object. Pure means: build and return a NEW object instead of writing through the one you were handed.",
+   235→      "One level of spread is not enough: `{ ...config, limits: { ...config.limits, retries: 5 } }` copies the outer object AND the nested one, then sets the new value — the caller's original is never touched.",
+   236→      "For the backup, one-level spread shares `limits` (that is why the 9 leaked). `structuredClone(settings)` duplicates every level — a true deep copy."
+   237→    ],
+   238→    "solution": "const settings = { theme: 'dark', limits: { retries: 3, timeout: 5000 } };\n\n// Pure: build a new object at every level we touch, return it, mutate nothing\nfunction raiseRetries(config) {\n  return { ...config, limits: { ...config.limits, retries: 5 } };\n}\n\nconst updated = raiseRetries(settings);\nconsole.log('settings.limits.retries:', settings.limits.retries); // 3 — untouched\nconsole.log('updated.limits.retries:', updated.limits.retries);   // 5\nconsole.log('updated === settings:', updated === settings);       // false — genuinely new\n\nconst backup = structuredClone(settings); // deep: every level independent\nbackup.limits.retries = 9;\nconsole.log('after backup mutation, settings.limits.retries:', settings.limits.retries); // 3",
+   239→    "why": "The fixed function performs the same logical change with different mechanics: instead of following the caller's reference inward and writing, it assembles a fresh object graph — spread at both levels — with the new value baked in. The input is structurally unreachable from the output, which is the definition of a pure transform, and `updated === settings` being false is the proof. The backup line answers the trap the practice block set up: spread would have shared `limits`, so `structuredClone` is the tool that actually buys independence, and the final `3` proves the original was defended.",
+   240→    "code": "const settings = { theme: 'dark', limits: { retries: 3, timeout: 5000 } };\n\nfunction raiseRetries(config) {\n  config.limits.retries = 5; // writes through the caller's nested object\n  return config;             // and hands back the SAME object\n}\n\nconst updated = raiseRetries(settings);\nconsole.log('settings.limits.retries:', settings.limits.retries); // ? — predict first\nconsole.log('updated === settings:', updated === settings);      // ?\n\nconst backup = { ...settings }; // a \"backup\"... is it?\nbackup.limits.retries = 9;\nconsole.log('after backup mutation, settings.limits.retries:', settings.limits.retries); // ?",
+   241→    "lang": "js"
+   242→  },
+   243→  "quiz": [
+   244→    {
+   245→      "q": "const box = { count: 1 }; const handle = box; handle.count = 5; — what is box.count afterwards?",
+   246→      "options": [
+   247→        "1 — handle got its own copy of the object",
+   248→        "5 — assignment copied the reference, so the write through handle hit the one shared object",
+   249→        "undefined — the property was moved to handle",
+   250→        "TypeError — you cannot mutate an object through a second variable"
+   251→      ],
+   252→      "answer": 1,
+   253→      "explain": "Objects are reference values: `const handle = box` copies the pointer, not the object, so both names address one shared thing — the write is visible from either name. Option 1 is primitive semantics (Lesson 1's copy-by-value); nothing moves (option 3) and nothing throws (option 4) — this aliasing is legal, everyday JavaScript, which is precisely what makes it a trap rather than an error.",
+   254→      "difficulty": "easy"
+   255→    },
+   256→    {
+   257→      "q": "const a = { id: 7 }; const b = { id: 7 }; — what does a === b evaluate to, and why?",
+   258→      "options": [
+   259→        "true — the objects have identical keys and values",
+   260→        "true — JavaScript compares the structure of small objects",
+   261→        "false — === on objects compares identity: two literals are always two distinct objects",
+   262→        "false — objects cannot be compared with === at all; it throws"
+   263→      ],
+   264→      "answer": 2,
+   265→      "explain": "For objects, === asks 'are these the same object?' — one memory address — not 'do these look alike?'. Two separately created literals are never identical, no matter how matching; the only way to get true is two names for the same object (const c = a; a === c is true). Option 4 invents a throw: === never throws, it just answers the identity question. Contents comparison is a separate, deliberate operation — and even JSON.stringify comparison has the key-order caveat.",
+   266→      "difficulty": "easy"
+   267→    },
+   268→    {
+   269→      "q": "const config = { retries: 3, limits: { timeout: 5000 } }; const copy = { ...config }; copy.retries = 9; copy.limits.timeout = 100; — what does config look like now?",
+   270→      "options": [
+   271→        "{ retries: 9, limits: { timeout: 100 } } — spread is a deep copy, so everything leaked",
+   272→        "{ retries: 3, limits: { timeout: 100 } } — the top-level write was isolated, but limits is shared, so the nested write leaked",
+   273→        "{ retries: 3, limits: { timeout: 5000 } } — spread isolated both writes",
+   274→        "{ retries: 9, limits: { timeout: 5000 } } — only the top-level write leaked"
+   275→      ],
+   276→      "answer": 1,
+   277→      "explain": "One spread, two behaviors, decided by depth: the outer object is fresh, so `copy.retries = 9` is private — but the value copied into `copy.limits` is a reference to the same nested object, so `copy.limits.timeout = 100` edits the original's limits too. Option 1 and option 4 each get exactly one depth wrong, which is the point of the question: spread copies one level, no more. Full independence is structuredClone's job.",
+   278→      "difficulty": "medium"
+   279→    },
+   280→    {
+   281→      "q": "const copy = JSON.parse(JSON.stringify({ id: 1, nick: undefined, run: () => 'x', when: new Date(0), score: NaN })); — which statement about copy is TRUE?",
+   282→      "options": [
+   283→        "copy keeps every key: nick is undefined, run is a function, when is a Date, score is NaN",
+   284→        "copy.nick and copy.run are gone entirely, copy.when is a string, copy.score is null",
+   285→        "JSON.stringify throws when it meets a function, so the line errors out",
+   286→        "copy.nick becomes null and copy.when stays a Date"
+   287→      ],
+   288→      "answer": 1,
+   289→      "explain": "JSON has no representation for undefined, functions, Dates or NaN, and stringify's policy is silent omission or conversion: undefined-valued properties and functions are dropped (so the keys vanish), a Date serializes to its ISO string, and NaN becomes null. It never throws on plain data (option 3) — it quietly loses, which is worse for debugging; and undefined is dropped, not converted to null (option 4; null values, however, survive as null). This is why the round-trip is only acceptable for data that is JSON-shaped to begin with.",
+   290→      "difficulty": "medium"
+   291→    },
+   292→    {
+   293→      "q": "structuredClone({ save: () => 'saved' }) — what happens?",
+   294→      "options": [
+   295→        "It returns { save: undefined } — functions are silently dropped, like JSON.stringify",
+   296→        "It returns a working copy whose save still runs",
+   297→        "It throws a DataCloneError — functions are not cloneable data, and structuredClone refuses loudly instead of guessing",
+   298→        "It returns the SAME object — structuredClone is a no-op on objects containing functions"
+   299→      ],
+   300→      "answer": 2,
+   301→      "explain": "structuredClone duplicates every level of cloneable data (objects, arrays, Dates, Maps, Sets, and it preserves undefined) — but functions and class instances are code, not data, and its contract is to throw DataCloneError rather than silently produce a broken copy. That loudness is the design contrast with the JSON round-trip (option 1 is exactly the JSON policy — quiet loss); option 2 would mean cloning executable code, which no JavaScript deep copier does; and a no-op (option 4) would be the worst of all — an alias pretending to be a copy.",
+   302→      "difficulty": "hard"
+   303→    }
+   304→  ],
+   305→  "summary": "Objects are reference values: assignment copies the reference, so `alias.level = 'mentor'` is visible through every name for the same object — and `const` freezes the binding, never the contents. Functions receive references, so any function that writes through its parameters edits the caller's data; the symptom appears far from the cause, and the discipline is to return new values instead. `===` on objects compares identity — two same-shaped literals are never equal, and JSON.stringify comparison is order-sensitive and lossy. Spread and Object.assign build a fresh outer object: top-level writes become private, nested objects stay shared, one level deep, no more. True independence is a deep copy: `structuredClone` duplicates every level (Dates and Maps intact, functions refused with DataCloneError), while the JSON round-trip quietly drops undefined and functions, turns Dates into strings and NaN into null — fine for API-shaped data, corrupting for anything richer. Reading is defended with Object.keys/values/entries plus `?.` and `??` until Lesson 6 takes those deeper.",
+   306→  "next": "You can now predict where every mutation lands — so the professional move is to stop mutating. The next lesson is the construction kit: destructuring to unpack objects and arrays at the boundary (rename, defaults, nested patterns, skip, rest), spread to copy and merge with known one-level semantics and later-keys-wins order, and template literals to assemble strings without concatenation chains. Together they make the immutable-update style — build a new object, touch nothing — a single line of code."
+   307→}
+   308→

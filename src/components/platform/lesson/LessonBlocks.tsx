@@ -7,8 +7,9 @@
 // Content never lives inside JSX: this renderer maps data → components.
 import * as React from "react";
 import Link from "next/link";
-import { Braces, Check, ChevronDown, Copy, Database, HelpCircle, Info, Lightbulb, Play, TriangleAlert } from "lucide-react";
+import { Braces, Check, ChevronDown, Copy, Database, GitBranch, HelpCircle, Info, Lightbulb, Play, TriangleAlert } from "lucide-react";
 import type { ContentBlock } from "@/lib/course-types";
+import { simulatorKind } from "@/lib/simulators";
 
 // ---------------------------------------------------------------------------
 // Inline markdown-lite: **bold**, `code`, *italic*
@@ -352,17 +353,22 @@ export function InterviewQuestion({ q, a }: { q: string; a: string }) {
 
 // ---------------------------------------------------------------------------
 // PracticeCard — a runnable snippet handed to a live sandbox. The deep-link
-// pre-fills the target sandbox editor with the snippet (SQL Query Sandbox or
-// JavaScript Playground, chosen by the block's `sim`).
+// pre-fills the target sandbox editor with the snippet, routed by the
+// block's `sim` slug through the simulator registry (SQL sandbox, JS
+// playground, Git history playground, …).
 
 export function practiceHref(query: string, sim?: string): string {
-  const target = sim === "js-playground" ? "js-playground" : "sql-query-sandbox";
+  const kind = simulatorKind(sim ?? "");
+  const target = kind === "js" || kind === "git" ? sim! : "sql-query-sandbox";
   return `/?view=simulator&sim=${target}&q=${encodeURIComponent(query)}`;
 }
 
 export function PracticeCard({ query, note, title, sim }: { query: string; note?: string; title?: string; sim?: string }) {
-  const isJs = sim === "js-playground";
-  const lang = isJs ? "js" : "sql";
+  const kind = simulatorKind(sim ?? "");
+  const isJs = kind === "js";
+  const isGit = kind === "git";
+  const lang = isJs ? "js" : isGit ? "bash" : "sql";
+  const sandboxName = isJs ? "the JavaScript Playground" : isGit ? "the Git History Playground" : "the SQL Query Sandbox";
   const [copied, setCopied] = React.useState(false);
   const copy = async () => {
     try {
@@ -374,7 +380,9 @@ export function PracticeCard({ query, note, title, sim }: { query: string; note?
   return (
     <aside className="my-6 overflow-hidden rounded-xl border border-teal-500/35 bg-gradient-to-br from-teal-500/[0.08] via-transparent to-transparent">
       <div className="flex items-center gap-2.5 border-b border-teal-500/20 bg-teal-500/[0.06] px-4 py-2.5">
-        {isJs ? (
+        {isGit ? (
+          <GitBranch className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+        ) : isJs ? (
           <Braces className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
         ) : (
           <Database className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
@@ -383,7 +391,7 @@ export function PracticeCard({ query, note, title, sim }: { query: string; note?
           {title ?? "Practice"}
         </span>
         <span className="hidden text-xs text-muted-foreground sm:inline">
-          {isJs ? "run it live in the JavaScript Playground" : "run it live in the SQL Query Sandbox"}
+          run it live in {sandboxName}
         </span>
       </div>
       <div className="overflow-x-auto bg-zinc-950 px-4 py-3 dark:bg-black/50">
@@ -409,16 +417,16 @@ export function PracticeCard({ query, note, title, sim }: { query: string; note?
           className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-teal-500 hover:shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 active:scale-[0.98]"
         >
           <Play className="h-3.5 w-3.5" aria-hidden="true" />
-          {isJs ? "Open in playground" : "Open in sandbox"}
+          {isJs || isGit ? "Open in playground" : "Open in sandbox"}
         </Link>
         <button
           type="button"
           onClick={copy}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500"
-          aria-label={isJs ? "Copy snippet to clipboard" : "Copy query to clipboard"}
+          aria-label={isJs || isGit ? "Copy snippet to clipboard" : "Copy query to clipboard"}
         >
           {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
-          {copied ? "Copied ✓" : isJs ? "Copy snippet" : "Copy query"}
+          {copied ? "Copied ✓" : isJs || isGit ? "Copy snippet" : "Copy query"}
         </button>
       </div>
     </aside>

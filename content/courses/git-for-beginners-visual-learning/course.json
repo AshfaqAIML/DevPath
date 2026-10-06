@@ -1,0 +1,236 @@
+{
+  "courseSlug": "git-for-beginners-visual-learning",
+  "subtitle": "Git finally makes sense: commits, branches, merges and remotes taught visually — you see what each command does to your history before you ever worry about the command line.",
+  "audience": "You are new to Git (or you have been copying commands without a mental model). You want to understand what the tool actually does — snapshots, pointers, the staging area — not just memorize incantations. Perfect first Git course; no command-line mastery required.",
+  "outcomes": [
+    "Explain what Git stores: snapshots chained by parent links, not a pile of diffs",
+    "Move files confidently through the lifecycle: untracked → staged → committed → modified",
+    "Use the staging area deliberately — git add stages the file's content at that exact moment",
+    "Write small, well-described commits and read them back with git log and git log --oneline",
+    "Treat branches as movable pointers and prove it: branching copies nothing",
+    "Predict merge outcomes: fast-forward pointer slides vs true two-parent merge commits",
+    "Recognize what a conflict is — both sides changed the same region — and what Git expects from you",
+    "Explain remotes, push, pull and tracking branches with two-repo diagrams",
+    "Read git log --graph --oneline --all output character by character, including HEAD~ notation",
+    "Choose the right undo: restore (working tree), restore --staged (index), reset (branch pointer), revert (safe, shared history)"
+  ],
+  "prereqSlugs": [],
+  "technologies": ["Git", "Command line basics", "GitHub (concepts)"],
+  "skills": ["Version control", "Mental models", "Branch management", "Merging", "Reading history", "Safe undo workflows", "Collaboration basics"],
+  "assessment": [
+    {
+      "q": "A commit in Git fundamentally stores…",
+      "options": [
+        "A diff of exactly what changed since the previous commit",
+        "A full snapshot of the tracked project, linked to its parent(s)",
+        "A backup of your entire folder including untracked files",
+        "A list of commands you ran since the last commit"
+      ],
+      "answer": 1,
+      "explain": "Every commit is a complete snapshot of the tracked files plus a pointer to its parent commit(s). Deltas exist only as a storage optimization under the hood — the mental model is snapshots, which is why git checkout of an old commit just works.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "You run git add journal.md, then edit the file again, then git commit -m \"note\". What gets committed?",
+      "options": [
+        "The version you staged — the edits made after git add are NOT in the commit",
+        "The latest version on disk — git commit always grabs the newest content",
+        "Both versions, stored as two separate files",
+        "Nothing — editing after staging cancels the commit"
+      ],
+      "answer": 0,
+      "explain": "git add stages the file's content at that moment. Later edits live only in the working tree until you stage again. This is the single most common beginner surprise — git status shows the file as both staged (old content) and modified (new edits).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "What does creating a branch actually copy?",
+      "options": [
+        "The whole repository's history into a parallel folder",
+        "The files in your working directory",
+        "Nothing — a branch is just a movable pointer to one commit",
+        "The staging area into a private buffer"
+      ],
+      "answer": 2,
+      "explain": "A branch is a 41-byte file containing a commit hash. That is why branching is instant and free: no files, no history, just a sticky note on a commit. HEAD points to the branch; the branch points to the commit.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "main is at C2. You branch feature, commit C3 on it, then switch to main and run git merge feature. main never moved. What happens?",
+      "options": [
+        "Git creates a merge commit with two parents on main",
+        "Git refuses — the branches have not diverged",
+        "Git slides the main pointer forward to C3 — a fast-forward, no new commit",
+        "Git copies C3's changes into a patch file for review"
+      ],
+      "answer": 2,
+      "explain": "Because main is a direct ancestor of feature's tip, there is nothing to combine — main simply catches up by moving its pointer. No merge commit exists afterwards, which is why the graph shows one straight line.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "When does git merge create a merge commit with two parents?",
+      "options": [
+        "Every single time you merge",
+        "When both branches have new commits since their common ancestor (and no conflict blocks the merge)",
+        "Only when merging into main specifically",
+        "When the two branches touch the same file"
+      ],
+      "answer": 1,
+      "explain": "If only one side advanced, Git fast-forwards. If both sides advanced, Git must combine two lines of history: it auto-merges the trees (when they don't overlap) and records the combination in a brand-new commit whose two parents are the tips that were merged.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A merge conflict means…",
+      "options": [
+        "Git crashed and your repo is corrupted",
+        "Both branches changed the same region of the same file, so a human must decide the final content",
+        "One branch is missing a file the other has",
+        "You tried to merge a branch that does not exist"
+      ],
+      "answer": 1,
+      "explain": "Conflicts are line-level collisions, not errors: both sides edited overlapping lines since the split point. Git stops, marks the region with <<<<<<< ======= >>>>>>>, and waits for you to edit the file into the intended result and commit it.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "In git log --oneline output, what does (HEAD -> main, feature) on a commit row tell you?",
+      "options": [
+        "That commit is the root of the repository",
+        "HEAD is on main, main points to this commit, and the branch feature also points to it",
+        "The commit has two parents",
+        "main and feature have diverged after this commit"
+      ],
+      "answer": 1,
+      "explain": "The decoration lists every ref pointing at that commit, with HEAD -> naming the branch you currently have checked out. It is the fastest way to locate your position in the graph while reading history.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "HEAD~1 refers to…",
+      "options": [
+        "The first commit ever made in the repository",
+        "The commit one step before HEAD, following first-parent links",
+        "A temporary backup branch Git creates automatically",
+        "The commit hash beginning with ~1"
+      ],
+      "answer": 1,
+      "explain": "HEAD~n walks n steps back along the first-parent chain — which is also exactly how HEAD~2, HEAD~3 work. For a merge commit, HEAD~1 follows the first parent (the branch you were on when you merged).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "git restore journal.md (no flags) does what?",
+      "options": [
+        "Unstages the file but keeps your edits",
+        "Creates a new commit that undoes the file's last change",
+        "Discards uncommitted edits in the working tree — the file returns to the staged content",
+        "Renames the file to journal.md.bak"
+      ],
+      "answer": 2,
+      "explain": "Plain restore overwrites the working copy from the staging area — uncommitted edits are gone for good (the danger flag). --staged is the gentle sibling: it unstages but never touches your edits.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You committed to a SHARED branch and need to undo the change. Which tool is the safe choice?",
+      "options": [
+        "git reset --hard HEAD~1 — wipe it from the branch",
+        "git revert HEAD — create a new commit that inverses the change",
+        "git restore --staged HEAD — unstage the commit",
+        "Delete the branch and recreate it"
+      ],
+      "answer": 1,
+      "explain": "reset moves the branch pointer — history rewrite, fine for local-only branches but poison for branches others already pulled. revert adds a NEW commit with the inverse change: everyone just pulls forward, nothing is rewritten.",
+      "difficulty": "hard"
+    },
+    {
+      "q": "What is the difference between git fetch and git pull?",
+      "options": [
+        "Nothing, they are aliases",
+        "fetch downloads new commits from the remote; pull = fetch + merge them into your branch",
+        "pull downloads; fetch uploads",
+        "fetch works only on main; pull works on all branches"
+      ],
+      "answer": 1,
+      "explain": "fetch updates the remote-tracking refs (origin/main and friends) without touching your branches. pull runs fetch and then merges the fetched history into your current branch — that second step is where surprises (conflicts!) can happen.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "In the live commit graph, what does a commit node with TWO incoming lines mean?",
+      "options": [
+        "The commit was amended twice",
+        "It is a merge commit — a snapshot with two parents, combining two lines of history",
+        "It is a conflicted commit",
+        "Two people authored it"
+      ],
+      "answer": 1,
+      "explain": "Two parent edges are the visual signature of a merge commit: one parent per merged line. Spotting the two-incoming-lines node is how you find merges while reading a graph — exactly what you practiced in the playground.",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "DevPath Git Journal — the visual edition",
+    "summary": "Build a single-file journal repository that demonstrates every core Git concept visually: staged snapshots, pointer branches, both merge strategies, a resolved conflict attempt, and a readable graph you can explain line by line.",
+    "requirements": [
+      "Initialize a fresh repository and create journal.md",
+      "Make at least five small commits on main, each with a clear imperative message",
+      "Create a feature branch, commit at least twice on it while main stays behind",
+      "Merge the branch back with BOTH strategies: one fast-forward scenario and one true merge commit",
+      "Produce one deliberate conflict attempt (same file changed on both sides) and explain the error output",
+      "Run git log --graph --oneline --all and annotate every line: tips, lanes, merge node, root",
+      "Finish by using reset --soft to rewind one commit and re-commit it with a better message"
+    ],
+    "technical": [
+      "Commands: git init, add, commit, branch, switch -c, merge, log --graph --oneline --all, reset --soft, restore --staged",
+      "Every command available in the Git History Playground sandbox",
+      "No remotes required — the project is fully local"
+    ],
+    "architecture": "A linear main lane with two side lanes (one merged by fast-forward, one by merge commit) converging into a readable DAG — a miniature of any real project's history.",
+    "steps": [
+      "git init and create journal.md; stage and commit it",
+      "Add one line per day for three commits — small, imperative messages",
+      "Branch 'rhythm': two commits on it, main untouched",
+      "Switch to main and merge rhythm — observe the fast-forward",
+      "Branch 'ideas': one commit on it; add a DIFFERENT new file on main; merge ideas — a true merge commit appears with two parents",
+      "Attempt a conflict: change journal.md's last line on both branches and try to merge — read the CONFLICT output, then fix it by re-aligning one side and merge again",
+      "Run git graph and screenshot/explain the final shape",
+      "reset --soft HEAD~1, then re-commit with a polished message"
+    ],
+    "evaluation": [
+      "The final graph shows ≥ 7 commits, two branch labels, one two-parent merge node, zero stray empty commits",
+      "Every commit message is imperative and under ~50 characters",
+      "The learner can point at the merge node and say which parents it combined and why the fast-forward created no node",
+      "The conflict attempt produced the CONFLICT output and a clean recovery",
+      "git status ends clean: nothing staged, nothing modified"
+    ],
+    "stretch": [
+      "Add a third lane and produce a merge whose second parent is two commits behind the tip",
+      "Revert your last commit and read the Revert \"…\" message in the log",
+      "Explain out loud what git reset --hard would have destroyed at step 8"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Explain the difference between git revert and git reset.",
+      "a": "reset moves the branch pointer to an older commit, rewriting which commits the branch contains — great for local branches nobody shares, dangerous on pushed history. revert creates a NEW commit whose changes inverse a given commit, so history only moves forward — the safe undo for shared branches. Rule of thumb: local-only history → reset; already-shared history → revert."
+    },
+    {
+      "q": "What is the staging area (index) actually for? Why not commit the working tree directly?",
+      "a": "The index is the draft of your next commit: a snapshot you compose deliberately. It decouples 'what changed' from 'what ships' — you can stage one file out of five modified, review the pending snapshot with git diff --staged, and commit a coherent unit. Committing the raw working tree would bundle half-finished experiments and untracked files into every checkpoint."
+    },
+    {
+      "q": "A teammate says branches 'copy the code'. What is actually created when you run git branch feature?",
+      "a": "One 41-byte file: refs/heads/feature containing a commit hash. No files, no history, no working-directory changes. This is why branching is instant, why a hundred branches cost nothing, and why switching branches just swaps file contents from snapshots — the pointers themselves are featherweight sticky notes on commits."
+    },
+    {
+      "q": "When exactly does git merge fast-forward, and why does no merge commit appear?",
+      "a": "When the current branch is a direct ancestor of the merged branch's tip — i.e. the current branch has no commits the other side lacks. There is nothing to combine, so Git only slides the current branch's pointer forward to the target tip. No snapshot is created because no new tree exists; the history remains a single straight line, which is why the log shows no merge node."
+    },
+    {
+      "q": "You run git pull and get a conflict. Walk me through what just happened and how you resolve it.",
+      "a": "pull = fetch + merge. The fetch downloaded your remote's new commits; the merge tried to combine them with your local commits, but both sides changed overlapping lines in the same file since their common ancestor. Git stops safely — nothing is corrupted — marks the file with <<<<<<< ours / ======= / >>>>>>> theirs, and waits. I would open the file, edit the marked region into the content that should truly exist, git add it, and git commit the resolution (Git pre-fills the merge message). Then push."
+    },
+    {
+      "q": "What does HEAD refer to, and what does 'detached HEAD' mean?",
+      "a": "HEAD is a pointer that normally names a BRANCH: HEAD → main → commit, so new commits advance the branch automatically. In detached HEAD state, HEAD points directly at a commit instead of a branch — commits you make there are on no branch and become hard to find once you switch away (the reflog keeps them reachable for a while). Everyday work wants HEAD attached to a branch; detached HEAD is for inspection and experiments."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,192 @@
+{
+  "title": "Your First Repo: init, status, and the File Lifecycle",
+  "slug": "02-repo-init-and-file-lifecycle",
+  "objective": "After this lesson you will be able to turn any folder into a Git repository with git init, read all three sections of git status output fluently, and place any file in its current state of the untracked → staged → committed → modified lifecycle.",
+  "why": "git status is the command you will run more than any other in your career — before every add, every commit, every branch switch. Reading it fluently means always knowing which of your changes Git has seen, staged, or safely stored; misreading it is how files get forgotten and work gets lost.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "A repository is a folder with a memory" },
+    { "t": "p", "text": "Forget any mental image involving servers, daemons, or an install wizard: a **repository** is an ordinary folder plus one hidden directory named `.git`. That directory holds everything Git remembers — the object database from Lesson 1, the branch labels, the configuration. Your files stay exactly where they are, unaware that anything changed. One command creates the memory:" },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "mkdir devpath-journal\ncd devpath-journal\ngit init\n# Initialized empty Git repository in ~/devpath-journal/.git/\nls -a\n# .  ..  .git",
+      "caption": "Real-world shell — in the Git History Playground you start inside a fresh, empty folder already, so you can begin straight at git init",
+      "highlight": [3, 5]
+    },
+    {
+      "t": "diagram",
+      "caption": "Anatomy of a repository",
+      "nodes": [
+        "your folder: notes.md, journal.md, … — the files you actually edit",
+        ".git/ (hidden) — Git's entire memory: the object database, branch labels, config",
+        "git init touches nothing else — no file is moved, copied, or tracked",
+        "delete .git and you have a plain folder again — your files never noticed"
+      ]
+    },
+    { "t": "p", "text": "Everything Git will ever know about this project lives inside `.git`: the snapshots in `.git/objects`, the branch labels in `.git/refs` (Lesson 5), the staging bookkeeping in a single index file (Lesson 3). The folder you see and edit is called the **working directory** or working tree — it is the same folder it was five minutes ago, just one hidden neighbor richer. This is also why a repository is perfectly portable: copy the folder including `.git`, and you have copied the entire history." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "git init is safe — and safe to repeat",
+      "text": "Creating a repository changes nothing about your files, and running git init again just re-initializes the administrative bits. It will never delete, move, or modify working files. The only one-way door in this anatomy is deleting .git itself — that erases the memory, not the files."
+    },
+    { "t": "h", "text": "git status: ask before you act" },
+    { "t": "p", "text": "`git status` is read-only, costs nothing, and answers the only question that matters moment to moment: *where does everything stand right now?* It reports in three buckets — staged changes, unstaged changes to tracked files, and untracked files — and it is worth learning to read the output like a report rather than noise:" },
+    {
+      "t": "list",
+      "ordered": true,
+      "items": [
+        "**On branch main** — the lane you are currently on (the pointer chain from Lesson 5, previewed)",
+        "**No commits yet** — history is empty; snapshots will start with your first commit",
+        "**Section headers** — Changes to be committed / Changes not staged for commit / Untracked files",
+        "**The (use \"git …\") hints** — the exact command Git suggests for each situation",
+        "**The bottom line** — the state of the whole repository summarized in one sentence"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git init\ntouch notes.md\ngit status\n# On branch main\n#\n# No commits yet\n#\n# Untracked files:\n#   (use \"git add <file>...\" to include in what will be committed)\n#   notes.md\n#\n# nothing added to commit but untracked files present (use \"git add\" to track)",
+      "caption": "The exact commands from this lesson's practice — a fresh repository, one untracked file",
+      "highlight": [8, 10, 12]
+    },
+    {
+      "t": "table",
+      "headers": ["Section header", "Means", "Files land here when"],
+      "rows": [
+        ["Changes to be committed", "in the draft of the next snapshot", "git add has been run on them"],
+        ["Changes not staged for commit", "tracked, but edited since they were last staged", "a tracked file changed after its last git add"],
+        ["Untracked files", "Git has never staged them — it stores nothing about them", "they are brand-new files"]
+      ]
+    },
+    { "t": "p", "text": "**Untracked** does not mean invisible. Git lists untracked files precisely so you can decide what to do about them — and it will never add, commit, or otherwise touch them without an explicit command from you. Notice what the output is doing in the `(use \"git add <file>…\")` lines: it is printing the exact next command for each situation. `git status` is not just a report; it is a suggestion box." },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Read the hints and you never memorize anything",
+      "text": "Every section of git status output ships with the command that moves a file out of that section: git add to stage, git restore --staged to unstage, git restore to discard. If you read status carefully before every action — the habit this course drills — the commands tell you themselves."
+    },
+    { "t": "h", "text": "The file lifecycle: a loop you drive" },
+    { "t": "p", "text": "Every file in a repository lives in a state machine, and *you* are the one who moves it between states — Git never does it on your behalf. The states are untracked, staged, committed (tracked and clean), and modified. Here is the full machine, and then a transcript of one lap around it:" },
+    {
+      "t": "diagram",
+      "caption": "The lifecycle of a file in Git",
+      "nodes": [
+        "untracked — Git has never staged this file",
+        "git add  →  staged — its current content joins the next snapshot's draft",
+        "git commit  →  tracked & clean — safely inside history",
+        "edit it  →  modified — content no longer matches the last snapshot",
+        "git add  →  staged — the loop runs again"
+      ]
+    },
+    { "t": "p", "text": "Two details make the loop click. First, **clean** is the goal state between tasks: `git status` reports nothing to do, and your working directory agrees with history. Second, editing a tracked file makes it *modified*, never untracked — once Git has tracked a file, it remembers it forever; only brand-new files are untracked. (The staging step gets its own full lesson next; the commit step the one after.)" },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git init\ntouch notes.md\ngit status                     # → Untracked files: notes.md\ngit add notes.md               # → staged\ngit commit -m \"Add the notes file\"   # tracked & clean (commit's full story: Lesson 4)\necho \"buy oat milk\" >> notes.md      # modified again\ngit status\n# On branch main\n# Changes not staged for commit:\n#   (use \"git add <file>...\" to update what will be committed)\n#   (use \"git restore <file>...\" to discard changes in working directory)\n#   modified:   notes.md\n#\n# no changes added to commit (use \"git add\" and/or \"git commit -a\")",
+      "caption": "One full lap: untracked → staged → committed (clean) → modified — the loop you will run for the rest of your career",
+      "highlight": [3, 4, 5, 6, 12]
+    },
+    { "t": "h", "text": "main, master, and the name of your first branch" },
+    { "t": "p", "text": "That first status report says `On branch main` — or, on older installs, `On branch master`. The initial branch's name depends on your Git version and configuration; modern Git and the playground default to **main**, older installations say **master**, and it is only a label: Lesson 5 shows that branch names are pointers, and nothing about the name changes any behavior. To keep your own machine consistent with this course and with current convention, there is a one-time real-world setting:" },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "# Real-world, one-time setup so your own machine matches this course\ngit config --global init.defaultBranch main\ngit config --global user.name \"Your Name\"\ngit config --global user.email \"you@example.com\"",
+      "caption": "Real-world Git — the playground already has an identity and uses main, so you can dive straight in",
+      "highlight": [2]
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "The branch is unborn until the first commit",
+      "text": "On a brand-new repository, status says No commits yet, and the branch label doesn't actually point anywhere — there is no commit for it to name. That is why the playground's live graph stays completely empty after git init: the graph draws commits, and there are none. The label becomes real the moment your first commit gives it something to point at."
+    },
+    { "t": "p", "text": "Time to see it live. Open the Git History Playground and run the three commands below — the exact sequence from earlier in this lesson. Watch two things: **notes.md appears under Untracked files** the moment it exists, and **the live graph stays empty**, because `git init` gives you a repository but not history. No snapshot exists until you stage and commit one." },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Your first status report",
+      "query": "git init\ntouch notes.md\ngit status",
+      "note": "watch the file appear under Untracked files — the graph is still empty because there are no commits yet"
+    },
+    { "t": "keytakeaways", "title": "Lesson 2 in five lines", "items": [
+      "A repository is just a folder plus a hidden .git directory — git init creates it and touches nothing else",
+      "git status is read-only and reports three sections: staged changes, unstaged edits to tracked files, and untracked files",
+      "Untracked means Git has never staged the file — it lists them but stores nothing until you act, and it prints the suggested next command for every state",
+      "The lifecycle loop: untracked → git add → staged → git commit → tracked & clean → edit → modified → git add → …",
+      "A fresh repo has no commits yet — the initial branch label is 'unborn' until the first commit gives it a target (main on modern Git and in the playground)"
+    ] },
+    {
+      "t": "interview",
+      "q": "What does git init actually do?",
+      "a": "It creates the .git directory and its scaffolding: an empty object database (where blobs, trees, and commits will live), the refs directory for branch labels, a HEAD file pointing at the not-yet-born default branch, a config file, and hook templates. Nothing in the working folder is touched — no file is tracked, staged, or copied — and running it again is harmless. Two facts interviewers are usually probing for: a repository is entirely self-contained (copy the folder including .git and you have copied the whole history — no server involved), and the precise term for a fresh repo's state is an 'unborn branch': the default branch label won't point at anything until the first commit gives it a target."
+    }
+  ],
+  "exercise": {
+    "prompt": "Read status like a pro, one file at a time. In the playground: create a fresh repository, then create TWO files — todo.md and notes.md. Check status (predict the output before running it: which section?). Then stage only todo.md and check status again. Before the second status runs, you should be able to say exactly which file appears under 'Changes to be committed', which stays under 'Untracked files' — and why.",
+    "hints": [
+      "touch todo.md creates an empty file; run it once per filename — new files are untracked until Git is explicitly told otherwise.",
+      "git add takes one filename at a time: git add todo.md stages that file alone; notes.md was never mentioned, so Git keeps ignoring it.",
+      "The second status shows both sections populated: 'new file: todo.md' under Changes to be committed, and notes.md still under Untracked files — staging is a per-file decision, never all-or-nothing (that all-at-once form is git add .)."
+    ],
+    "solution": "git init\ntouch todo.md\ntouch notes.md\ngit status\ngit add todo.md\ngit status",
+    "why": "The two status reports are the lesson in miniature: after the first, both files are untracked; after git add todo.md, the sections split — one staged, one untracked. Staging is a deliberate per-file decision, which is what makes the next snapshot a curated set rather than 'whatever happens to be in the folder'. If you predicted both outputs correctly, you are already reading status fluently.",
+    "code": "# Run me in the Git History Playground\n# TODO 1: make this folder a repository\n# TODO 2: create todo.md and notes.md (one touch per file)\n# TODO 3: check status — predict the output before running\n# TODO 4: stage ONLY todo.md\n# TODO 5: check status again — which section holds which file, and why?",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "You run git init inside a folder that already contains 20 files of your work. What happens to them?",
+      "options": [
+        "All 20 files are immediately tracked and safely committed",
+        "Nothing happens to them — init only creates the hidden .git directory; every file stays exactly as it was, untracked",
+        "They are moved into .git for safekeeping",
+        "init refuses to run in a non-empty folder"
+      ],
+      "answer": 1,
+      "explain": "git init creates the hidden .git directory — object database, refs, config — and touches nothing else. Your 20 files stay exactly where they are, all untracked, until you deliberately git add them. Option A confuses a repository with a backup that grabs everything; option C confuses .git with a vault for your files — it stores snapshots *of* them when you commit, but never moves them; option D is simply wrong: init works in any folder, empty or not, and is safe to re-run.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "In git status output, a file listed under 'Changes not staged for commit' is…",
+      "options": [
+        "a file Git has never seen before",
+        "a file staged and waiting for the next commit",
+        "a tracked file edited since it was last staged — the edit lives only in the working directory",
+        "a file Git deleted from history"
+      ],
+      "answer": 2,
+      "explain": "That section is for tracked files whose content has drifted from the staged or committed version — the edit exists only in the working directory until you git add it again. Option A describes the Untracked files section (files Git has never staged); option B describes 'Changes to be committed'; option D describes something git status never reports that way, because history is append-only and files aren't removed from it by listing. The three sections are three different questions Git answers at once — misfile a file in your head and you will misfile it in your commit.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Which sequence describes one full lap of the file lifecycle?",
+      "options": [
+        "untracked → git add → staged → git commit → clean → edit → modified",
+        "modified → git add → untracked → git commit",
+        "staged → git commit → untracked → edit → clean",
+        "untracked → git commit → staged → edit → modified"
+      ],
+      "answer": 0,
+      "explain": "That is the loop: a new file is untracked; git add stages its current content; git commit freezes the draft and the file becomes tracked and clean; editing it makes it modified; git add re-stages. Option B imagines a file becoming untracked by staging — exactly backwards. Option C has a commit producing an untracked file, but committing is what makes a file tracked, permanently. Option D puts commit before staging — impossible, because a commit can only freeze what is already in the draft. Recite the loop cold and git status becomes boring, which is the goal.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A junior deletes the .git folder to 'reset the repo'. What is the actual state of the project afterwards?",
+      "options": [
+        "All files are restored to their last committed state",
+        "Git re-creates .git automatically from the working files",
+        "The working files are corrupted — their hashes are gone",
+        "Every working file stays exactly as it currently is, but all history, branches, and staging are gone — it's a plain folder again"
+      ],
+      "answer": 3,
+      "explain": ".git IS the repository: the entire object database, every branch label, the staging index. Delete it and the folder keeps its working files exactly as they are, but nothing else — no history, no branches, no staged changes. Option A describes what a hard reset of the working tree would do (a later lesson's tool), not amnesia; option B invents a recovery Git doesn't have — the snapshots lived *inside* .git and are gone with it; option C mistakes hash-verification for file storage — your files on disk never depended on the hashes. The working tree and the repository are neighbors, not the same thing.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "A repository is nothing more than your folder plus the hidden .git directory that git init creates — no files move, nothing is tracked yet, and the command is safe to repeat. git status is your read-only cockpit, reporting three buckets — staged changes, unstaged edits to tracked files, and untracked files Git has never been told about — each printed with the exact command that changes it. Files ride a lifecycle loop: untracked, staged by git add, committed to clean, modified by editing, staged again. On a fresh repository the default branch is unborn until the first commit gives it something to point at, and deleting .git erases Git's memory while leaving every working file untouched.",
+  "next": "Files can now enter Git's view — next lesson you'll take control of exactly what the next snapshot contains: the staging area, the one-command subtlety behind half of all beginner Git bugs, and git diff's honest report of what's still outside."
+}

@@ -121,9 +121,10 @@ broader 10–14). Counts are planned — final counts match actual authored cont
 
 ## Content coverage priorities (next-phase order)
 
-1. **Git & GitHub Foundations** — #1 featured course in the category, universal need.
-2. **Docker Foundations** — second featured course; pairs with Docker Compose.
-3. **React Hooks / Interactive React Workshop** — frontend track depth.
+1. **Docker Foundations** — featured course; pairs with Docker Compose.
+2. **React Hooks / Interactive React Workshop** — frontend track depth.
+3. **Interactive React Workshop / React Fundamentals / Tailwind CSS Fundamentals** —
+   the user-specified Frontend cluster.
 4. Then breadth: Node.js Fundamentals → CSS Flexbox (pairs with the Flexbox
    simulator) → REST API Design (pairs with the HTTP Lab simulator) → Modern
    JavaScript ES2024 (now has a completed upstream course in JS Basics).
@@ -133,4 +134,8 @@ pairs with the SQL Query Sandbox; its lessons deep-link practice queries into th
 with `?q=` pre-fill), JavaScript Basics Refresher (✅ course 3 — pairs with the NEW
 JavaScript Playground simulator; its 6 practice blocks deep-link snippets into the
 playground with `?q=` pre-fill; the practice-block `sim` field routes blocks to any
-registered simulator).
+registered simulator), **Git for Beginners: Visual Learning (✅ course 4 — 10 lessons,
+250 content blocks, 30 diagrams, 40 quiz questions, 179 min, 705 XP, 12-question
+assessment (70%), DevPath Git Journal capstone, 6 interview Q&As, 8 practice blocks
+deep-linking command scripts into the NEW Git History Playground simulator with `?q=`
+pre-fill; the playground renders a live commit DAG + classic ASCII `log --graph`)**.

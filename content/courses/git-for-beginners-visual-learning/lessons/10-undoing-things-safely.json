@@ -1,0 +1,201 @@
+{
+  "title": "Undoing Things Safely: restore, reset, revert",
+  "slug": "10-undoing-things-safely",
+  "objective": "After this lesson you will be able to choose between git restore, git restore --staged, git reset (in its three modes), and git revert based on where the mistake lives and whether anyone else already has the commit.",
+  "why": "Everybody breaks things — the professionals are just the ones who reach for the right undo. Picking the wrong one is how work actually gets destroyed: git restore shreds uncommitted edits with no recovery, and git reset on a pushed commit forks your teammate's reality off yours. The decision table — uncommitted, staged, committed-local, committed-shared — is the single most safety-critical skill in this entire course.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Undo is a decision, not a command" },
+    { "t": "p", "text": "There is no generic 'undo' in git — there are four precise tools, and the mistake's **location** picks the one you need. An edit you haven't staged, a change you staged too eagerly, a commit nobody has seen, a commit the whole team already pulled: each of those lives in a different place, and each has exactly one correct tool. Get the location right and every undo becomes boring and safe. Get it wrong and you meet the two ways git can genuinely hurt you: **shredding uncommitted work** and **rewriting shared history**." },
+    {
+      "t": "diagram",
+      "caption": "The decision map — where the mistake lives decides the tool",
+      "nodes": [
+        "edited a file, dislike the edit     → git restore <file>   (discard it — unrecoverable!)",
+        "staged too eagerly          → git restore --staged <file>   (unstage; content kept)",
+        "committed, but nobody pulled → git reset --soft HEAD~1   (uncommit, keep changes)",
+        "committed AND teammates have it → git revert HEAD   (new commit that cancels it)"
+      ]
+    },
+    { "t": "h", "text": "restore: one command, two directions" },
+    { "t": "p", "text": "The two `restore` flavors differ only in **where they copy content from**. Plain `git restore <file>` copies the staged version over your working file — it discards your uncommitted edits, permanently. `git restore --staged <file>` copies HEAD's version into the staging area — it unstages the file while your working copy stays exactly as you left it. One pulls *from the index to the working directory*, the other *from history to the index*. Same verb, opposite shelves." },
+    {
+      "t": "diagram",
+      "caption": "Content flows between the three areas — restore is just two of these arrows",
+      "nodes": [
+        "git add <file>            working directory ──copy──▶ staging area",
+        "git restore --staged <file>  HEAD ──copy──▶ staging area   (file itself untouched)",
+        "git restore <file>        staging area ──copy──▶ working directory   (edits LOST)",
+        "git commit                staging area ──snapshot──▶ history"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "echo \"experiment\" >> notes.md    # working directory changed\ngit add notes.md                 # staged\ngit restore --staged notes.md    # unstaged: HEAD → staging; file still says \"experiment\"\ngit status                       # changes not staged for commit\ngit restore notes.md             # discard: staging → working; \"experiment\" is GONE",
+      "caption": "The two restores in sequence — watch git status flip from 'to be committed' to 'not staged' without the file's content changing, then watch the content itself vanish",
+      "highlight": [3, 5]
+    },
+    {
+      "t": "callout",
+      "variant": "danger",
+      "title": "git restore <file> is a paper shredder",
+      "text": "Uncommitted edits live in exactly one place — your working directory — with no commit, no reflog entry, no safety copy anywhere. Plain restore overwrites that one place. Unlike reset (which only moves pointers and leaves commits recoverable in the reflog for ~90 days), plain restore destroys content outright. Read the file before you shred it — cat it, diff it, sleep on it. --staged is always safe; plain restore never is."
+    },
+    { "t": "h", "text": "reset: moving the branch pointer itself" },
+    { "t": "p", "text": "`git reset HEAD~1` does something subtler than 'delete the last commit': it **moves the current branch's pointer** back to `HEAD~1` — the address you learned last lesson. The commit itself is not erased; it becomes **unreachable** — invisible to `git log`, but still sitting in the object store, and the reflog (git's private diary of where every pointer has been) remembers it for roughly 90 days. That is the honest meaning of 'history rewriting' in git: re-pointing the labels, not burning the objects." },
+    {
+      "t": "diagram",
+      "caption": "reset --soft HEAD~1: the pointer travels back, the work stays with you",
+      "nodes": [
+        "before: C1 ← C2 ← C3,  main → C3, HEAD → main   (C3 was a mistake)",
+        "you run: git reset --soft HEAD~1",
+        "after:  main → C2, HEAD → C2 — C3 floats, unreachable, reflog remembers it",
+        "C3's changes? STILL PRESENT — sitting in the staging area, waiting",
+        "fix them and recommit, or reset again further back — nothing is lost"
+      ]
+    },
+    { "t": "p", "text": "Reset comes in three modes, and the difference is simply **how much of your work-in-progress area survives the pointer move**. `--soft` moves only the pointer — staging and working directory keep everything, so the undone commit's changes reappear staged. `--mixed` (the default) also resets the staging area — the changes are still in your working directory, just unstaged. `--hard` resets staging AND overwrites the working directory to match the target commit — the only mode that destroys content." },
+    {
+      "t": "table",
+      "headers": ["Mode", "Branch pointer", "Staging area", "Working directory"],
+      "rows": [
+        ["--soft", "moves to the target commit", "untouched (undo the commit, keep changes staged)", "untouched"],
+        ["--mixed (the default)", "moves to the target commit", "reset to match target (changes become unstaged)", "untouched"],
+        ["--hard", "moves to the target commit", "reset to match target", "WIPED to match target — uncommitted work destroyed"]
+      ]
+    },
+    { "t": "p", "text": "A memory hook that survives panic: **`--soft` = 'uncommit'** (the changes wait in staging while you fix and recommit), **`--mixed` = 'uncommit + unstage'** (changes wait in the working directory), **`--hard` = 'uncommit + shred'** (there is nothing left to fix). Two of the three modes are gentle — `--soft` and `--mixed` never touch a single file, so they are always recoverable — while `--hard` overwrites your working directory to match the target commit, shredding any uncommitted edits it meets. If you remember one ranking under pressure: plain `git restore` and `git reset --hard` are the shredders; everything else in this lesson is bookkeeping." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git reset --soft HEAD~1   # uncommit: pointer back, changes STAGED — edit and recommit\ngit reset HEAD~1          # default (--mixed): changes UNSTAGED but present in the working directory\ngit reset --hard HEAD~1   # pointer back AND working directory forced to match — uncommitted edits destroyed",
+      "caption": "All three in the playground's own dialect — run each in a fresh experiment and diff the results; HEAD~N is the address you learned in Lesson 9, and the undone commits stay reflog-recoverable (~90 days) in every mode",
+      "highlight": [3]
+    },
+    { "t": "h", "text": "revert: the undo that APPENDS" },
+    { "t": "p", "text": "Here is the rule that makes revert necessary: **once a commit is pushed, rewriting history is off the table.** Your teammates' clones contain that commit; if you move your branch pointer backwards and push, the histories disagree — the push is rejected, or worse, someone force-pushes and someone else's work evaporates. `git revert HEAD` takes the safe road: it computes the exact **inverse** of the bad commit's changes and commits that inverse as a brand-new commit. Nothing is rewritten. History only grows." },
+    {
+      "t": "diagram",
+      "caption": "reset rewinds history; revert appends the opposite — compare the two shapes",
+      "nodes": [
+        "history: C1 ← C2 ← C3 (C3 was bad — and it is already pushed)",
+        "you run: git revert HEAD",
+        "git computes the exact inverse of C3's changes",
+        "new commit R: 'Revert \"C3\"' — R's parent is C3",
+        "history: C1 ← C2 ← C3 ← R — nothing rewritten, every teammate's clone still fits"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git revert HEAD\n# [main 7a8b9c] Revert \"oops: leaked a secret\"\n#  1 file changed, 1 deletion(-)",
+      "caption": "Revert speaks in commits: the undo is itself a commit, with its own hash, message and parent — which is why it is the only undo that is polite to a shared branch",
+      "highlight": [1]
+    },
+    {
+      "t": "table",
+      "headers": ["", "reset", "revert"],
+      "rows": [
+        ["What it does", "Moves the branch pointer back to an older commit", "Adds a NEW commit holding the inverse of a bad commit"],
+        ["Effect on history", "Rewritten — the undone commits become unreachable (reflog keeps them ~90 days)", "Extended — the bad commit stays forever, countered by its inverse"],
+        ["Safe on pushed branches?", "No — clones that have the old commits diverge from yours", "Yes — append-only, everyone's history still matches"],
+        ["Best for", "Local-only branches nobody has pulled", "Any shared history — the default team policy"],
+        ["Working directory risk", "--hard can shred uncommitted edits", "None — it creates a commit, it does not touch pointers"]
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "The rule of thumb that settles 95% of decisions",
+      "text": "reset for local-only branches; revert for pushed or shared branches. If even one other machine (or one deploy server) might have the commit, you are in revert territory. And within local work: --soft when you intend to redo the commit immediately, --mixed when you want to re-stage selectively, --hard only when you are certain nothing uncommitted matters."
+    },
+    { "t": "h", "text": "The full undo obstacle course" },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Unstage, discard, then revert — the whole toolbox in one run",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"keep this one\"\necho \"this line will be unstaged soon\" >> journal.md\ngit add journal.md\ngit restore --staged journal.md\ngit status\ngit restore journal.md\necho \"safe to commit\" >> journal.md\ngit add .\ngit commit -m \"a keeper\"\ngit revert HEAD\ngit log --oneline",
+      "note": "restore pulls a file back from two different places: --staged unstages it (content kept), plain restore discards uncommitted edits — then revert adds a NEW commit that undoes the last one"
+    },
+    { "t": "p", "text": "Debrief, in three beats. First `git status` between the two restores: it flipped from 'changes to be committed' to 'changes not staged for commit' **without the file's content changing once** — --staged is bookkeeping, not editing. Second, the plain `git restore journal.md` made the line disappear — that was the shredder, and no reflog entry exists for it. Third, the log at the end: three commits, 'keep this one', 'a keeper', and on top the Revert commit — `a keeper` is still right there in history, present but countered. Only revert and commit ever added history here; the restores never touched it." },
+    {
+      "t": "interview",
+      "q": "A teammate pushed a commit that broke the build. Why is git revert HEAD safer here than git reset --hard HEAD~1?",
+      "a": "Because the commit has already crossed the sharing boundary. reset moves your branch pointer backwards — history rewriting — so your repository now claims a past that every other clone (and the remote) disagrees with: your next push is rejected as non-fast-forward, and the 'fix' becomes either a merge mess or a force-push that can erase whatever landed in between. revert instead appends a new commit containing the exact inverse of the bad commit's diff: the broken commit remains visible and auditable, every clone still matches, and a plain push succeeds. The build break is neutralized with the same politeness any other commit would have. The general law: reset for local-only history, revert for shared history — and when in doubt, assume it is shared."
+    },
+    { "t": "keytakeaways", "title": "Lesson 10 in six lines", "items": [
+      "The mistake's location picks the tool: uncommitted edit → restore; wrongly staged → restore --staged; local commit → reset; shared commit → revert",
+      "git restore --staged <file> unstages (HEAD → staging) and never touches content; plain git restore <file> discards uncommitted edits permanently — the one true shredder",
+      "git reset MOVES the branch pointer: --soft keeps changes staged, --mixed (default) unstages but keeps them, --hard also wipes the working directory",
+      "Reset commits become unreachable, not destroyed — the reflog remembers them for ~90 days and git reset is recoverable; shredded working-directory edits are not",
+      "git revert HEAD creates a NEW commit with the inverse changes — history only grows, so it is the only undo that is safe on pushed, shared branches",
+      "Rule of thumb: reset for local-only branches, revert for anything pushed — if one other machine has the commit, you are in revert territory"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Two mistakes, two different tools. Mistake one: you commit a sloppy typo ('sloppy typo commit') that nobody has seen — surgically remove it from history AND clear its text from both the staging area and the working directory, then write the clean version and commit it. Mistake two: you commit a leaked secret ('leak the secret') and — pretend — it is already pushed, so it must be countered, not erased. End with a log where the leak is visibly cancelled by a Revert commit, and count how many of your commands actually created history.",
+    "hints": [
+      "Removing the local commit is reset --soft HEAD~1 — but that leaves the sloppy text staged: follow with git restore --staged diary.md (unstage) and then git restore diary.md (shred the working copy) before writing the clean version.",
+      "The git status you run between the two restores is your evidence: 'to be committed' flipping to 'not staged' while the file's content has not changed a single character.",
+      "The pushed mistake cannot be reset away without diverging from every other clone — the safe undo APPENDS a new commit; the command takes HEAD as its argument."
+    ],
+    "solution": "git init\ntouch diary.md\ngit add .\ngit commit -m \"root\"\necho \"tpyo everwhere\" >> diary.md\ngit add .\ngit commit -m \"sloppy typo commit\"\ngit reset --soft HEAD~1\ngit status\ngit restore --staged diary.md\ngit restore diary.md\necho \"clean rewrite\" >> diary.md\ngit add .\ngit commit -m \"clean redo\"\necho \"password=hunter2\" >> diary.md\ngit add .\ngit commit -m \"leak the secret (pretend it's pushed)\"\ngit revert HEAD\ngit log --oneline",
+    "why": "The two halves of the exercise demand opposite philosophies, and that contrast IS the lesson. The typo is local, so history surgery is legal: reset --soft rewinds the pointer while the changes stay staged (watch git status report them), then restore --staged and restore clear the text from both work areas — gentle bookkeeping, then a deliberate shred. The leak is 'already shared', so it must be countered by append: revert adds a commit whose diff cancels the secret while the bad commit itself stays visible for the audit trail. The final log reads root, clean redo, leak, Revert — and only three commands in the whole run created history: the two commits and the revert. Every other tool moved content or pointers, never history.",
+    "code": "# Mistake 1 (local): remove 'sloppy typo commit' AND its text, then recommit clean\n#   pointer back → unstage → shred → rewrite → commit\n# Mistake 2 (pretend pushed): counter 'leak the secret' without rewriting history\n#\n# Predictions BEFORE running:\n#   after git reset --soft HEAD~1, git status will say: ______\n#   final git log --oneline, top to bottom: ______\n\n# TODO: mistake one — commit, surgically undo, clean up, recommit\n# TODO: mistake two — commit the leak, then counter it the shared-safe way",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "git restore --staged notes.md — what happens to the file?",
+      "options": [
+        "It is unstaged: git copies HEAD's version into the staging area, and your working file is untouched",
+        "Its content is discarded from the working directory, permanently",
+        "It is committed immediately with the staged content",
+        "Nothing — --staged is an alias for plain restore"
+      ],
+      "answer": 0,
+      "explain": "The --staged flavor copies from history into the staging area: the file drops out of 'changes to be committed' while its content in your working directory stays byte-for-byte identical. Discarding content is the OTHER flavor's job — plain git restore overwrites the working file from the staging area, which is why the two must never be confused at 5pm on a Friday. Neither flavor commits anything; restore never creates history.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "You run git reset --soft HEAD~1 right after a commit you regret. Where are that commit's changes now?",
+      "options": [
+        "Gone — the commit and its changes were deleted",
+        "In your working directory only, unstaged",
+        "Still in the staging area, ready to be fixed and recommitted",
+        "In the reflog, which you must restore from manually"
+      ],
+      "answer": 2,
+      "explain": "--soft moves ONLY the branch pointer: the commit becomes unreachable in history, but its snapshot diff is replayed into the staging area — git status will show the changes as 'to be committed'. That is exactly what makes --soft the standard 'oops, let me redo that commit' move: fix the text, re-add, commit again, done. The unstaged variant describes --mixed, and nothing is deleted — the old commit waits in the reflog for ~90 days regardless of mode.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Compared to git reset --soft HEAD~1, what EXTRA damage does git reset --hard HEAD~1 do?",
+      "options": [
+        "It deletes the reset commits permanently, beyond reflog recovery",
+        "It also resets the staging area — which --soft leaves untouched",
+        "It additionally overwrites the working directory to match the target commit, destroying any uncommitted edits",
+        "Nothing — the two flags are synonyms"
+      ],
+      "answer": 2,
+      "explain": "Both modes move the pointer and both leave the old commit recoverable in the reflog — 'permanent deletion' is not what any reset mode does. --hard's signature damage is the working directory: it is forcibly rewritten to match the target commit, so any edits you had not committed are destroyed outright. It also resets the staging area (as --mixed does), but that part alone is harmless bookkeeping — the shredding of uncommitted work is what earns --hard its name and its danger.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A bad commit is already on the shared remote, and three teammates have pulled it. Which undo is correct, and why?",
+      "options": [
+        "git reset --hard HEAD~1 then force-push — it is the fastest way to make the commit vanish everywhere",
+        "git restore --staged — it removes the commit from the staging area before the next push",
+        "git reset --soft HEAD~1 and a normal push — the push will cleanly fast-forward the remote backwards",
+        "git revert HEAD — it appends a new inverse commit, so no clone's history is rewritten and everyone's next pull still fits"
+      ],
+      "answer": 3,
+      "explain": "Once others have the commit, the only polite undo is append-only: revert adds a commit whose diff cancels the bad one, every existing clone still matches the remote, and the next pull merges cleanly. All the reset paths rewrite your branch's past, so the remote (which 'remembers' the bad commit) will reject your push as non-fast-forward — and force-pushing over that rejection is precisely how teammates' local commits get orphaned. restore --staged does not touch commits at all, and remotes never move backwards on a normal push: 'fast-forward' only ever means forward.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Undo in git is four tools chosen by location: `git restore` shreds uncommitted edits (the one unrecoverable operation in this entire course), `git restore --staged` unstages with zero content risk, `git reset` moves the branch pointer — with `--soft` keeping changes staged, `--mixed` unstaging them, and `--hard` also wiping the working directory — while the undone commits stay reflog-recoverable for ~90 days. `git revert` appends a new commit holding the inverse of a bad one, which rewrites nothing and is therefore the only undo safe on pushed, shared history. The standing rule: reset for local-only branches, revert for anything anyone else might already have.",
+  "next": "That is the full core toolkit — snapshots, branches, merges, remotes, graph reading, and safe undos — and it is exactly what the course's final assessment will test: ten scenario questions with no simulator hand-holding, then a wider world (rebase, stash, reflog dives) that your new mental model already supports."
+}

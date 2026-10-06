@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, BookOpen, Braces, Check, ChevronRight, Clock, Compass,
-  Database, Flag, FlaskConical, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
+  Database, Flag, FlaskConical, GitBranch, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
 } from "lucide-react";
 
 import type { CourseView as Course, LessonView } from "@/lib/course-types";
@@ -47,6 +47,14 @@ const PRACTICE_PAIRINGS: Record<
     teaser:
       "// Welcome to the JavaScript Playground\nconst course = { title: \"JavaScript Basics Refresher\", lessons: 8 };\nconsole.log(`Starting ${course.title} — ${course.lessons} lessons`);\n\n[\"values\", \"functions\", \"objects\", \"closures\"].map((t) => t.toUpperCase())",
     icon: <Braces className="h-4 w-4 text-teal-500" aria-hidden="true" />,
+  },
+  "git-history-playground": {
+    heading: "Live graph practice",
+    text: "This course pairs with the Git History Playground: lessons hand you command scripts that run against a faithful in-memory Git model — and every run redraws the live commit graph. Watch pointers move, fast-forwards slide, and merge commits grow two parents before your eyes.",
+    cta: "Open the playground",
+    teaser:
+      "git init\ntouch journal.md\ngit add .\ngit commit -m \"the shared starting point\"\ngit switch -c feature\necho \"a lane of my own\" >> journal.md\ngit add .\ngit commit -m \"one commit ahead\"\ngit switch main\ngit merge feature",
+    icon: <GitBranch className="h-4 w-4 text-teal-500" aria-hidden="true" />,
   },
 };
 

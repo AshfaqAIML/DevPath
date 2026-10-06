@@ -1,0 +1,184 @@
+{
+  "title": "Merge Commits and What a Conflict Really Is",
+  "slug": "07-merge-commits-and-conflicts",
+  "objective": "After this lesson you will be able to explain how git builds a merge commit with two parents from a three-way comparison, predict which merges finish automatically and which stop with a conflict, and resolve a conflicted file by hand.",
+  "why": "On a real team, both lanes moving at once is not the exception — it is Tuesday. The merge commit is the price and the receipt of that parallelism, and it is the thing your teammates will read when they archaeology a bug six months from now. Conflicts, meanwhile, are the moment git is at its most honest: it refuses to guess which change should win, and the engineers who understand that a conflict is line-level — not branch-level — resolve them in minutes while everyone else resolves them in fear.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The merge git cannot shortcut" },
+    { "t": "p", "text": "Last lesson's shortcut had one precondition: one lane must contain the other entirely. The moment your teammate commits to `main` while you commit to `feature`, that precondition dies — each side now owns commits the other lacks. Git can no longer 'catch up' a pointer, because there is no single direction to catch up in. It has to genuinely **combine two diverged lines of history**, and the tool for that is the merge commit." },
+    {
+      "t": "diagram",
+      "caption": "Two lanes, one shared past — the shape that forces a real merge",
+      "nodes": [
+        "main lane:    C1 ← C2 ← C4      (main → C4)",
+        "feature lane: C1 ← C2 ← C3      (feature → C3)",
+        "both lanes share C1 and C2 — that split point is the MERGE BASE",
+        "neither tip contains the other → no fast-forward possible"
+      ]
+    },
+    { "t": "p", "text": "Note the term **merge base** — the most recent commit both branches share, the point where the lanes forked. Git finds it automatically, and it matters because the merge base is git's definition of 'what we both started from.' Every decision the merge makes is really three versions of the file compared *against that starting point*." },
+    { "t": "h", "text": "Three snapshots decide everything" },
+    { "t": "p", "text": "Git's combine machinery is a **three-way merge**, and you can predict its verdict without running anything. For every file, git compares three versions: the **base** (the file at the merge base), **ours** (the file at your tip, C4), and **theirs** (the file at the other tip, C3). If the two sides changed different files — or different regions of the same file — the changes don't overlap, and git takes both without bothering you. If both sides changed the *same region of the same file*, the edits collide, and git stops rather than guess a winner." },
+    {
+      "t": "table",
+      "headers": ["What happened since the split", "Git's verdict"],
+      "rows": [
+        ["main edited report.md, feature edited styles.css", "Auto-merge — different files never collide"],
+        ["both edited the same file, but different regions", "Auto-merge — non-overlapping hunks combine cleanly"],
+        ["one side didn't touch the file at all", "The changed side's version wins silently"],
+        ["both edited the SAME lines of the SAME file", "CONFLICT — git stops and asks a human to decide"]
+      ]
+    },
+    { "t": "h", "text": "The merge commit: a commit with two parents" },
+    { "t": "p", "text": "When the merge is clean, git takes the combined result, wraps it as a brand-new commit, and gives that commit something no ordinary commit has: **two parents**. Parent #1 is the tip of the branch you were standing on (C4, main's side). Parent #2 is the tip of the branch you merged (C3, feature's side). The commit itself is otherwise boring — a message, an author, a snapshot — the two parents are its only superpower, and they are what records 'two lanes of work were reunited here.'" },
+    {
+      "t": "diagram",
+      "caption": "A merge commit is a reunion, not a copy: two parents, one snapshot",
+      "nodes": [
+        "M = new merge commit, created by git during the merge",
+        "M's parent #1 → C4   (the main side — where you stood)",
+        "M's parent #2 → C3   (the feature side — what you merged)",
+        "after the merge: main → M    (feature still → C3)",
+        "git log --graph shows M with two incoming lines:  |\\."
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "$ git merge feature\nMerge made by the 'ort' strategy.\n feature.md | 1 +\n 1 file changed, 1 insertion(+)\n create mode 100644 feature.md",
+      "caption": "The line that separates the two worlds: 'Merge made by …' means a new commit was born — compare Lesson 6's 'Fast-forward', which built nothing",
+      "highlight": [2]
+    },
+    { "t": "p", "text": "'ort' is just the current name of git's merge machinery — an implementation detail you can safely ignore. The meaningful words are **`Merge made by`**: a new commit exists, and the file stats below describe the combined snapshot. This is also the moment to upgrade your mental model of history: it is not a list, it is a **DAG** — a directed acyclic graph, a family tree where any commit can have one parent, two (a merge), or in exotic cases more. A linear repo is just a DAG that happens to be shaped like a line." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "The message is editable; the parents are forever",
+      "text": "The default merge message is 'Merge branch \"feature\"' and you can override it with -m or your editor. The two-parent link, however, is recorded inside the commit object itself — it is not a label you can peel off. Merges are history, not bookmarks."
+    },
+    { "t": "h", "text": "What a conflict really is" },
+    { "t": "p", "text": "Here is the sentence worth repeating: **a conflict is not two branches being incompatible — it is two edits competing for the same lines.** Git does not conflict at the branch level or the file level; it conflicts at the *line-region level inside one file*, and only when both sides changed that region since the merge base. If git could pick a winner, it would — it only stops when picking would mean silently deleting something a human wrote. A stopped merge is git trusting you, not git failing you — and real git keeps a panic button for the fear: `git merge --abort` returns you to the exact pre-merge state, while `git diff` during a conflict shows the contested regions." },
+    {
+      "t": "code",
+      "lang": "text",
+      "code": "<<<<<<< HEAD\ntitle: \"My Journal\"\n=======\ntitle: \"Our Journal\"\n>>>>>>> feature",
+      "caption": "The fences git writes into the contested file: HEAD's version on top, feature's version below — everything outside the fences is already merged",
+      "highlight": [1, 3, 5]
+    },
+    { "t": "p", "text": "Read the fences like a form you fill in. `<<<<<<< HEAD` opens **your side** (the branch you were standing on). `=======` is the divider. `>>>>>>> feature` closes **their side** (the branch being merged). Your job is to replace the whole three-fence block — both versions included — with the version that should actually exist: theirs, yours, or a blend your product manager would approve. Then delete every marker, because whatever you leave in the file is what gets committed." },
+    {
+      "t": "diagram",
+      "caption": "Resolving a conflict is a four-step loop you will run thousands of times",
+      "nodes": [
+        "git merge feature  →  CONFLICT (content): Merge conflict in journal.md",
+        "git stops mid-merge: no commit created, nothing broken, it waits",
+        "open journal.md: pick / blend the two versions, delete every <<< >>> marker",
+        "git add journal.md   →  'resolved, thanks' (this file is settled)",
+        "git commit           →  the merge commit is born, two parents and all",
+        "panic button: git commit has not run yet, so history is still untouched"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Never commit the fences",
+      "text": "The classic shippable bug: a teammate merges, picks a winner, but leaves '<<<<<<< HEAD' in the file, commits, and pushes. The code compiles anyway — those markers are just text — and ships to production wearing its own bandages. Before committing a conflict resolution, search the file for '<<<<<<<' (or trust your editor, which highlights the fences). If the search finds anything, you are not done."
+    },
+    { "t": "h", "text": "Auto-merge is the default; conflict is the exception" },
+    { "t": "p", "text": "Beginners fear conflicts because tutorials dramatize them. In a healthy repo, the overwhelming majority of merges complete on their own: people work in different files, or at least in different regions of the same file, and git's three-way comparison sails through. The playground follows the same physics — two lanes editing *different* files auto-merges; two lanes editing *the same file differently* stops with a conflict. Now build the happy case yourself and meet your first merge commit:" },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Build your first two-parent commit",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"base\"\ngit switch -c feature\necho \"feature notes\" >> feature.md\ngit add .\ngit commit -m \"work on the side lane\"\ngit switch main\necho \"main keeps moving\" >> main.md\ngit add .\ngit commit -m \"main is not idle\"\ngit merge feature\ngit log --graph --oneline --all",
+      "note": "both lanes advanced since the split, so git builds a brand-new merge commit with TWO parents — spot the commit with two incoming lines in the graph"
+    },
+    { "t": "p", "text": "What you should see in the graph: the top commit is the merge — it wears `(HEAD -> main)` and its line starts with `*` followed by `|\\`, meaning **two lines leave it downward**, one to each parent. `feature`'s tip (`work on the side lane`) sits on its own column to the right; `main is not idle` sits on the left column; and both columns trace down to the same `base` commit, closing the loop. That closed loop is the merge base re-surfacing — the reunion of two lanes that split at `base` and met again at the top." },
+    {
+      "t": "code",
+      "lang": "text",
+      "code": "*   9c8b7a (HEAD -> main) Merge branch 'feature'\n|\\\n| * 4d3e2f (feature) work on the side lane\n* | 2b1a0c main is not idle\n|/\n* 0f9e8d base",
+      "caption": "The exact shape you just built (hashes will differ): the merge line '*   …' with '|\\' leaving it is the two-parent signature — and '|/' near the bottom is where both lanes rejoin at the merge base",
+      "highlight": [1, 2]
+    },
+    {
+      "t": "interview",
+      "q": "What is a merge conflict, exactly — and why can't git resolve it automatically?",
+      "a": "A merge conflict means both branches changed the same lines of the same file since their common ancestor, so the three-way merge has two competing truths and no tiebreaker: base said X, ours changed X to Y, theirs changed X to Z. Git could pick either side, but both picks silently destroy a human's intentional edit — and git has no access to intent, only to text. Choosing requires knowing which change the team meant to keep, which is a business decision, not a mechanical one. That's why git stops, marks the contested region with <<<<<<< / ======= / >>>>>>>, and hands the decision to a person. Everything else — different files, different regions, one-sided edits — git merges without you, because there the answer is mechanical."
+    },
+    { "t": "keytakeaways", "title": "Lesson 7 in six lines", "items": [
+      "When both branches advanced since the split, git cannot fast-forward — it builds a brand-new merge commit with TWO parents: your branch's tip (parent #1) and the merged branch's tip (parent #2)",
+      "The merge base — the most recent commit both branches share — is the reference point every three-way comparison is made against",
+      "Three-way merge verdict: different files or different regions → auto-merge; the SAME region of the same file changed on both sides → conflict",
+      "A conflict is line-level, not branch-level — git stops because choosing a winner would silently delete someone's intentional edit",
+      "Resolving = edit the fenced region to the truth, delete every marker, git add the file, git commit to finish the merge",
+      "A merge commit is an ordinary commit whose only superpower is its second parent — history is a DAG, and merges are where the graph loops"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Run a two-act experiment. Act one: force git to build a merge commit — both lanes must advance since the split, but keep the merge clean by having each lane create its own file — and prove the merge commit has two parents using the graph. Act two: manufacture the one situation git refuses — branch again from the merged state, and have both the new branch and main append *different* text to the SAME file (journal.md), then try to merge. Predict both outcomes in writing before running: what the merge prints in each act, and what the final log shows.",
+    "hints": [
+      "Act one needs BOTH lanes to own commits the other lacks — commit to feature first, then switch to main and commit there too before merging (different files keep the merge clean).",
+      "Act two's refusal requires the same file changed differently on both sides since the split: append text to journal.md on the new branch, switch to main, append different text to journal.md, commit, then merge.",
+      "After the refused merge, run git log --oneline — the proof that nothing happened: git stops BEFORE creating any commit, so history is exactly what it was before the merge attempt."
+    ],
+    "solution": "git init\ntouch journal.md\ngit add .\ngit commit -m \"base\"\ngit switch -c feature\necho \"feature work\" >> feature.md\ngit add .\ngit commit -m \"feature lane moves\"\ngit switch main\necho \"main work\" >> main.md\ngit add .\ngit commit -m \"main lane moves too\"\ngit merge feature\ngit log --graph --oneline --all\ngit switch -c rival\necho \"rival edit\" >> journal.md\ngit add .\ngit commit -m \"rival edits journal\"\ngit switch main\necho \"main edit\" >> journal.md\ngit add .\ngit commit -m \"main edits journal differently\"\ngit merge rival\ngit log --oneline",
+    "why": "Act one proves you can manufacture a two-parent commit on demand: the graph's '*   …' line with '|\\' under it is the merge commit, and its two downward lines each end at a lane tip. Act two proves the refusal is surgical: journal.md was edited differently on both sides since the split, so the three-way comparison finds competing edits and git reports a conflict instead of building anything — and the final log shows history unchanged, because a refused merge creates no commit. Together they are the whole lesson in one run: divergence forces a merge commit, colliding edits stop the machine, and in both cases git's behavior is exactly predictable from the shape of history.",
+    "code": "# Act one: divergence → merge commit with two parents\n#   commit on feature (its own file), commit on main (its own file), merge\n# Act two: same file, different edits on both lanes → conflict refusal\n#   branch 'rival', edit journal.md on BOTH lanes differently, merge\n#\n# Predictions BEFORE running:\n#   act one merge prints: ______\n#   act two merge prints: ______\n#   final git log --oneline shows (how many commits? whose?): ______\n\n# TODO: act one — build the divergence and the clean merge\n# TODO: act two — build the collision and trigger the refusal",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "A merge commit differs from an ordinary commit in exactly one structural way. What is it?",
+      "options": [
+        "It has TWO parents: the tip of the branch you stood on, and the tip of the branch you merged",
+        "It has no author — git signs it as a system commit",
+        "It stores a diff instead of a snapshot",
+        "It has no parent — it starts a new line of history"
+      ],
+      "answer": 0,
+      "explain": "A merge commit is a completely ordinary commit — message, author, snapshot — except it records two parent links instead of one: parent #1 is where you were standing (your branch's tip when the merge started), parent #2 is the branch you merged in. It does store a full snapshot like every commit (not a diff), and it has a parent — two, in fact. That second parent is what makes history a graph rather than a list.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Since the split, main edited README.md and feature edited styles.css. You merge feature into main. What happens?",
+      "options": [
+        "Fast-forward — one file per side means no divergence",
+        "A conflict, because two files changed and git can only merge one",
+        "A merge commit is created automatically — different files never collide in a three-way merge",
+        "The merge is rejected until you combine the files into one"
+      ],
+      "answer": 2,
+      "explain": "Divergence is about COMMITS, not files — both lanes advanced, so a fast-forward is impossible and a merge commit must be built. But the three-way comparison finds the edits in different files, so nothing overlaps and git combines them automatically. 'Two files changed' is the easiest possible merge, not a conflict: conflicts require both sides to have edited the same region of the same file.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "What is the merge base of two branches?",
+      "options": [
+        "The commit git creates to join the branches — the merge commit itself",
+        "The oldest commit in the repository, always the root",
+        "The file both branches last modified",
+        "The most recent commit both branches share — where the lanes forked"
+      ],
+      "answer": 3,
+      "explain": "The merge base is the common ancestor: the most recent commit reachable from BOTH tips by walking parents — the fork point where the lanes split. Git uses it as the reference version in the three-way comparison (base vs ours vs theirs), which is why 'both sides changed since the split' is what triggers conflicts. The merge commit is the thing being built, not the reference; and the fork point is usually far from the root — it is wherever you cut your branch.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You run git merge feature and git reports a conflict, then stops. At this exact moment, what is the state of your repository?",
+      "options": [
+        "Broken — the merge half-applied and history is corrupted",
+        "The merge commit exists but is marked as unresolved",
+        "Nothing was committed: no merge commit exists yet, nothing is broken, and git is waiting for you to resolve the contested region and commit",
+        "The feature branch has been merged and your changes were backed up to a stash"
+      ],
+      "answer": 2,
+      "explain": "A conflicted merge is a pause, not a crash — git writes the fenced file into your working directory, updates nothing in history, and waits. Because no commit has been created, you can always back out with git merge --abort and land exactly where you started. Corruption is impossible by construction: the merge machinery refuses to write a commit while any contested region is undecided, and nothing ever goes to a stash automatically.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "When both branches have advanced since the split, git stops fast-forwarding and builds a merge commit — an ordinary commit whose two parents are the two lane tips, with the merge base (their most recent shared commit) serving as the reference for a three-way comparison. Different files and non-overlapping regions merge automatically; the same region of the same file changed on both sides is the only thing that stops git, which marks the contested lines with fences and waits for a human decision. Resolving means editing to the true version, deleting every marker, adding the file, and committing — and until that commit, a conflicted merge has changed nothing. History is a DAG, and the merge commit is the loop that closes it.",
+  "next": "So far every commit you have ever made lives on exactly one machine — yours. Next lesson: the remote, the nickname 'origin', and what push and pull actually move between two repositories (spoiler: commits travel, and the remote's branch pointer gets fast-forwarded)."
+}

@@ -1,0 +1,204 @@
+{
+  "title": "Branches Are Pointers, Not Copies",
+  "slug": "05-branches-are-pointers",
+  "objective": "After this lesson you will be able to explain a branch as a movable pointer to one commit, create and switch branches with git switch -c, trace the HEAD → branch → commit pointer chain, and read a diverged history with git log --graph --oneline --all.",
+  "why": "Cheap branching is Git's defining superpower, and it is only cheap because a branch is not a copy of anything — it is a 41-byte file naming one commit. Teams that grasp this branch fearlessly: one lane per feature, experiment, or hotfix, created instantly and deleted without ceremony. Teams that don't hoard everything on one main lane and pay for it in merge pain.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The 41-byte secret" },
+    { "t": "p", "text": "Newcomers imagine branching as the folder-copy era: project-final, project-final-v2, project-final-v2-REAL. Git's answer is almost insultingly small: **a branch is a file containing the hash of one commit** — forty characters plus a newline, about 41 bytes, living in `.git/refs/heads/`. Creating a branch means writing that one file. No files are copied, no snapshots are duplicated, nothing about your working directory changes. Moving a branch means rewriting those bytes to name a different commit. That is the entire cost of a branch, at any project size — which is why teams spin up a branch per feature and throw them away like sticky notes." },
+    {
+      "t": "diagram",
+      "caption": "A branch is a label, not a copy",
+      "nodes": [
+        ".git/refs/heads/main — a text file containing one commit hash",
+        "git branch experiment — writes one more such file, pointing at the SAME commit",
+        "nothing is copied — the snapshots already exist in the shared object database",
+        "moving a branch — rewriting that one line — is the whole operation"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "# Real-world Git — peek behind the curtain (the playground keeps this internal)\ncat .git/refs/heads/main\n# 3c2e1f7d0a9b8c7e6f5a4d3c2b1a0f9e8d7c6b5a\n\ncat .git/refs/heads/experiment\n# 3c2e1f7d0a9b8c7e6f5a4d3c2b1a0f9e8d7c6b5a",
+      "caption": "A branch is literally this: a filename (the branch's name) holding one hash (the commit it points at) — two labels, one commit, zero copies",
+      "highlight": [3, 6]
+    },
+    { "t": "h", "text": "HEAD: the pointer that points at the pointer" },
+    { "t": "p", "text": "One more pointer completes the picture: **HEAD**, which answers *where am I, and where does my next commit attach?* Normally HEAD points **at a branch**, the branch points **at a commit**, and that commit points at its parent — a chain of pointers with you standing at the end of it. When `git status` opens with `On branch experiment`, it is reading exactly this chain. And when you commit, the new commit's parent is whatever your current branch points at — then that branch's file is rewritten to hold the new commit's hash. The label slides forward; nothing else moves." },
+    {
+      "t": "diagram",
+      "caption": "The chain of pointers",
+      "nodes": [
+        "C1 ← C2 ← C3 — commits, each holding a parent pointer",
+        "main → C3 — the branch label sits at the tip commit",
+        "HEAD → main — you are on main; your next commit extends main",
+        "git commit → C4 (parent: C3) is written, and main slides to C4",
+        "HEAD never pointed at C4 — it still points at main, which now points at C4"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git log --oneline\n# 3c2e1f7 capture the rhythm      ← main (and HEAD -> main) are here\n\necho \"one more page\" >> journal.md\ngit add .\ngit commit -m \"Extend the journal\"\n# [main 5d4c3b2] Extend the journal\n\ngit log --oneline\n# 5d4c3b2 extend the journal      ← the new tip; main moved here\n# 3c2e1f7 capture the rhythm",
+      "caption": "A commit never moves — the label does. main named 3c2e1f7, and now it names 5d4c3b2",
+      "highlight": [6, 7, 10]
+    },
+    { "t": "h", "text": "Creating and switching: git switch -c" },
+    { "t": "p", "text": "Four commands run the show. `git branch <name>` writes a new label at the current commit and leaves you exactly where you are. `git switch <name>` moves HEAD onto a branch — and rebuilds your working files from that branch's tip snapshot. `git switch -c <name>` does both in one step — **c**reate and switch — and it is the modern spelling; `git checkout -b <name>` is the older form you will meet in every tutorial written before 2019." },
+    {
+      "t": "table",
+      "headers": ["Command", "What it does", "Watch out"],
+      "rows": [
+        ["git branch", "lists labels — * marks the one HEAD is on", "creates nothing"],
+        ["git branch experiment", "writes the label at the current commit; you stay put", "nothing visible changes — same files, same status"],
+        ["git switch experiment", "HEAD moves onto experiment; working files become its tip's snapshot", "switch with a clean tree; uncommitted changes must come along or Git refuses"],
+        ["git switch -c experiment", "create + switch in one step (modern form)", "the one you will actually type"],
+        ["git checkout -b experiment", "the older spelling of the same two moves", "checkout also restores files — the ambiguity that split it in two"]
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git switch -c experiment\n# Switched to a new branch 'experiment'\n\ngit branch\n# * experiment\n#   main\n\ngit status\n# On branch experiment\n# nothing to commit, working tree clean",
+      "caption": "Create and move in one command — the * in git branch's output marks where HEAD is",
+      "highlight": [1, 5, 9]
+    },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Why two spellings: switch vs checkout",
+      "text": "Legacy git checkout was overloaded — it switched branches AND restored files, and beginners paid for the ambiguity. Git 2.23 (2019) split the jobs: git switch moves you between branches, git restore fixes files. Older docs, Stack Overflow answers, and muscle memory still say checkout -b; it is the same create-and-switch move with older spelling. This course uses the modern pair."
+    },
+    { "t": "h", "text": "Divergence: two lanes, one shared past" },
+    { "t": "p", "text": "From here, divergence is a non-event. You are on experiment, so your next commit's parent is the commit both labels currently name — and **only experiment slides to the new commit**. main still points at the old tip; it has no opinion about what happens on lanes it isn't on. In real Git's ASCII `--graph` output the history still prints as one straight column right now, because the new commit's parent *is* main's tip — the labels merely sit at different commits on the same line. The playground's live graph gives each branch label its own lane the moment their tips differ, which makes the state easier to see — and either way, no file was copied. True fork lines appear in both views once each side has its own new commits." },
+    {
+      "t": "diagram",
+      "caption": "Two labels after one side commit",
+      "nodes": [
+        "C1 ← C2 — the shared history both labels pointed at",
+        "experiment → C3 — the new commit (parent: C2); the label moved",
+        "main → C2 — the label did not move; nothing happened to main",
+        "HEAD → experiment — your next commit extends experiment's lane",
+        "commit on main later, and both lanes grow from C2 independently"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "echo \"branching costs nothing\" >> journal.md\ngit add .\ngit commit -m \"a commit on the side lane\"\n# [experiment 7f8e9d0] a commit on the side lane\n\ngit log --oneline --all\n# 7f8e9d0 (HEAD -> experiment) a commit on the side lane\n# 5d4c3b2 (main) extend the journal\n# 3c2e1f7 capture the rhythm",
+      "caption": "One lane ahead: --all shows every branch's commits, each labeled with the branch sitting at its tip — experiment at 7f8e9d0, main still at 5d4c3b2",
+      "highlight": [6, 7, 8]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "# after one more commit on main, the lanes fork for real:\ngit log --graph --oneline --all\n# * 9a8b7c6 (HEAD -> main) advance the main lane\n# | * 7f8e9d0 (experiment) a commit on the side lane\n# |/\n# * 5d4c3b2 extend the journal\n# * 3c2e1f7 capture the rhythm",
+      "caption": "Two lanes, one shared past: each branch owns a column, and the |/ is where they rejoin at their common ancestor — read the graph bottom-up, the way the parent pointers point",
+      "highlight": [3, 4, 6]
+    },
+    { "t": "h", "text": "What switching actually does to your files" },
+    { "t": "p", "text": "Switching is two operations wearing one command: HEAD is re-pointed, and your working directory is **rebuilt from the new tip's snapshot** — the files on disk change to match the lane you joined. That is not copying the project; Git materializes a snapshot that already exists in the object database. With a clean tree it is always safe. With uncommitted changes, Git either carries them across or refuses the switch rather than risk losing them (real-world Git also has `git stash` for exactly this moment). The habit while learning: commit or clean before you switch." },
+    {
+      "t": "diagram",
+      "caption": "The switch, step by step",
+      "nodes": [
+        "HEAD: experiment → main — one pointer file rewritten",
+        "the working directory is rebuilt from main's tip snapshot — files change on disk",
+        "the commits themselves never move — snapshots sit in the shared database",
+        "switch back later and experiment's files reappear, exactly as committed"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Detached HEAD — the door you don't need yet",
+      "text": "Real-world Git lets you git switch to a raw commit hash: HEAD then points at a commit instead of a branch — 'detached HEAD'. You are browsing history, and any commits you make there belong to no branch, doomed to be orphaned once you switch away. It is a legitimate archaeology tool; as a beginner, stay on branches. The playground doesn't even open this door — HEAD stays attached to a branch, which is exactly the right training-wheel shape."
+    },
+    { "t": "p", "text": "Run the sequence below and watch the live graph closely: one lane at first, then a second lane the moment experiment gets its own commit. Watch what main does while that happens — which is nothing. The branch cost zero copies, and the graph is the proof." },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Two lanes, zero copies",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"main is just a pointer\"\ngit switch -c experiment\necho \"branching costs nothing\" >> journal.md\ngit add .\ngit commit -m \"a commit on the side lane\"\ngit log --oneline --all",
+      "note": "two lanes appear in the graph — experiment moved ahead while main still points at the first commit; no files were copied"
+    },
+    { "t": "keytakeaways", "title": "Lesson 5 in five lines", "items": [
+      "A branch is a movable pointer to one commit — a tiny file in .git/refs/heads holding a hash, not a copy of files",
+      "HEAD points at a branch (normally), the branch points at a commit — git status's 'On branch …' line is this chain being read",
+      "Committing creates a new snapshot and slides the current branch's label to it; every other label stays exactly where it was",
+      "git switch -c <name> creates and switches in one step — the modern form; git checkout -b is the older spelling of the same move",
+      "git log --graph --oneline --all shows every branch's lane — in the playground's live graph each label gets a lane the moment the tips differ"
+    ] },
+    {
+      "t": "interview",
+      "q": "What is a Git branch, physically — and why does that make branching cheap?",
+      "a": "A ref: a file under .git/refs/heads/ whose name is the branch and whose content is a 40-character commit hash (plus a newline). Creating a branch is writing that file — constant time, constant 41 bytes, regardless of project size, with zero impact on your working directory. Divergence is just two labels naming different commits that share ancestors; every snapshot they point at already exists once in the shared object database. That is why Git workflows can afford a branch per feature, per experiment, per hotfix — and delete them without ceremony, because deleting a branch deletes a pointer, not the commits (unreachable commits are eventually garbage-collected — a real-world detail worth name-dropping). Contrast that with the older VCS model of full directory copies, and you have explained why feature-branch workflows became the industry default."
+    }
+  ],
+  "exercise": {
+    "prompt": "Prove branches are pointers, not copies — by making main blind. In the playground: build a repository with one committed file, then create and switch to a branch called colors in a single command. Append a line to the file and commit it on colors. Confirm with git log --graph --oneline --all that both labels exist at different commits. Then switch back to main and run git log --oneline: from main's side of the fence, the colors commit is invisible, because log walks from main's tip only.",
+    "hints": [
+      "git switch -c colors does both jobs — creating the label and moving HEAD — in one command; the older spelling of the same move is git checkout -b colors.",
+      "On colors: echo a line, git add ., git commit -m — the new commit's parent is the commit both labels shared, and only colors slides to it.",
+      "git switch main moves HEAD back; git log --oneline then walks from main's tip through parents — colors' commit is not on that path, so it cannot appear, even though it still exists in the repository (the --graph --oneline --all view shows it)."
+    ],
+    "solution": "git init\ntouch palette.md\ngit add .\ngit commit -m \"Add the palette file\"\ngit switch -c colors\necho \"explore: warm palette\" >> palette.md\ngit add .\ngit commit -m \"Record the warm experiment\"\ngit log --graph --oneline --all\ngit switch main\ngit log --oneline",
+    "why": "The last two commands are the proof. From main, log shows one commit; add --all and the colors commit appears — it existed the whole time, just not on main's chain of parents. No file was ever copied: one extra ref file, one extra snapshot, two labels at different tips. When that stops feeling magical, you have the branch model that makes the next lesson's merges simple to reason about.",
+    "code": "# Run me in the Git History Playground\n# TODO 1: initialize the repository\n# TODO 2: create palette.md, stage, commit: Add the palette file\n# TODO 3: create AND switch to a branch called colors (one command)\n# TODO 4: append \"explore: warm palette\", stage everything, commit: Record the warm experiment\n# TODO 5: show every commit on every branch\n# TODO 6: switch back to main, then print main's log only — count the commits you see",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "Physically, what is a Git branch?",
+      "options": [
+        "A copy of the project's files stored under a new name",
+        "A pointer — a small file holding the hash of one commit",
+        "A folder inside .git containing a full backup of each commit",
+        "A separate database Git keeps for each line of work"
+      ],
+      "answer": 1,
+      "explain": "A branch is a ref — a small file under .git/refs/heads/ whose name is the branch name and whose content is the hash of one commit. Nothing about your files is duplicated. Option A is the folder-copy era that Git made obsolete; option C overbuilds it — .git/objects already holds every snapshot once, and refs/heads just holds labels into it; option D invents per-branch databases, when there is exactly one object database shared by all branches. That single-database-plus-labels design is why creating a branch is instant and deleting one removes a pointer, not your commits.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "What does git switch -c experiment do?",
+      "options": [
+        "Copies the working directory into a new branch folder",
+        "Renames the current branch to experiment",
+        "Creates the experiment label pointing at the current commit AND moves HEAD onto it — create plus switch in one step",
+        "Merges experiment into the current branch"
+      ],
+      "answer": 2,
+      "explain": "-c is create-and-switch: the label is written pointing at the current commit and HEAD moves onto it, in one command. Option A is the copy myth — no working directory duplication ever happens; option B is git branch -m's job (renaming, real-world); option D describes a merge (Lesson 6), which needs two labels with different tips — and at the moment of switching, 'experiment' has only just come into existence. The old spelling of this exact command is git checkout -b; switch -c is the modern form.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You are on experiment, which points at C3 (parent C2); main points at C2. You make a new commit. Which label moves?",
+      "options": [
+        "Both main and experiment move to the new commit",
+        "Only experiment moves to the new commit — main stays exactly where it was",
+        "Neither — labels never move when you commit",
+        "HEAD moves to the new commit but the commit attaches to main"
+      ],
+      "answer": 1,
+      "explain": "A new commit's parent is the commit your current branch points at, and only that branch's file is rewritten to hold the new hash — experiment slides forward, main's file still contains C2's hash, untouched. Option A double-moves a label that has no reason to move. Option B is half right about commits — they never move — but labels absolutely do; sliding forward is a label's whole job. Option D garbles the chain: HEAD stays on experiment, and the commit attaches where HEAD's branch points. Every merge surprise in your future traces back to getting this 'which label moved?' question wrong.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why is creating a branch effectively free, no matter how large the project is?",
+      "options": [
+        "Because Git compresses the project into a delta before creating the branch",
+        "Because Git defers copying the files until you switch to the branch",
+        "Because branches share a lock-free index",
+        "Because a branch is just a new ref file containing one existing hash — the snapshots it points at are already in the shared object database"
+      ],
+      "answer": 3,
+      "explain": "Creating a branch writes one file containing one hash that already exists — the object database holds every snapshot ever committed, shared by all branches. Nothing about the project's size enters the cost. Option A drags in delta compression, a storage concern with no connection to branch creation. Option B invents deferred copying — there is no copy, deferred or otherwise (switching materializes a snapshot into your working directory, but that is a different operation). Option C is engineering-sounding nonsense. The ref-file answer is the one that makes interviewers nod.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "A branch is a movable pointer — a tiny file under .git/refs/heads holding one commit hash — so creating one is instant and free no matter the project's size. HEAD points at a branch, the branch points at a commit, and each new commit attaches to wherever HEAD's branch points, sliding only that label forward while every other label stays put. git switch -c creates and moves onto a branch in one step (checkout -b being the older spelling), and switching rebuilds your working files from the target tip's snapshot without copying anything. git log --graph --oneline --all — and the playground's live graph — show the lanes that appear once labels sit at different commits.",
+  "next": "Two lanes are cheap; bringing them back together is the next skill — Lesson 6 covers merging, starting with the free case where one branch is simply ahead of the other: the fast-forward."
+}

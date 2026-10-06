@@ -1,0 +1,238 @@
+{
+  "title": "Reading History Like a Pro: log --graph and HEAD~",
+  "slug": "09-reading-history-log-and-graph",
+  "objective": "After this lesson you will be able to decode a git log --graph --oneline --all output character by character, and name any commit relative to HEAD using HEAD~N — the two skills every undo command in the next lesson depends on.",
+  "why": "Half of real debugging is answering 'what happened here?' before touching anything — and the terminal graph is git's ground truth, the picture the whole team argues from. The other half is pointing at commits without copy-pasting forty-character hashes: HEAD~1 is the dialect that git show, git diff, and every undo tool in Lesson 10 speaks natively. Engineers who can read the graph fluently find the bad commit in seconds; everyone else squints and guesses.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "log --oneline shows a list; --graph shows the truth"
+    },
+    {
+      "t": "p",
+      "text": "Plain `git log --oneline` walks ONE lane — the ancestry of wherever HEAD sits — and prints it as a flat list. That hides the structure: merges look like ordinary commits, side branches vanish entirely. Add `--graph` and git draws the parent links between commits; add `--all` and every branch tip joins the picture. The result is a small ASCII rendering of the DAG itself — history as a family tree, drawn in characters you are about to learn to read at full speed."
+    },
+    {
+      "t": "code",
+      "lang": "text",
+      "code": "git log --graph --oneline --all\n*   9c8b7a (HEAD -> main) Merge branch 'feature'\n|\\\n| * 4d3e2f (feature) work on the side lane\n* | 2b1a0c main is not idle\n|/\n* 0f9e8d base",
+      "caption": "The exact history you built in Lesson 7's practice — five commits, one merge, one branch tip, and a fork point; by the end of this lesson you will read every character of it",
+      "highlight": [
+        1
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The decoder ring, once and for all: **`*` marks a commit** (its short hash and message sit to the right). **`|` is a parent link** — follow it downward to find this commit's parent. **`\\` or `/` is a bent link**, meaning the parent lives on a different lane, one column over. **Text in parentheses is decoration** — the pointers that currently reference that commit, like `(HEAD -> main)` or `(feature)`. That's the whole alphabet; everything else is positioning."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Characters",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "* 9c8b7a message",
+          "One commit: short hash and subject to the right of the star"
+        ],
+        [
+          "|",
+          "A parent link — the commit below on this column is this one's parent"
+        ],
+        [
+          "\\  or  /",
+          "A bent parent link — this commit's parent lives one column over (a lane bend)"
+        ],
+        [
+          "|\\  (star followed by two links)",
+          "A MERGE COMMIT: two parents, one straight down, one bent to the other lane"
+        ],
+        [
+          "|/  (two links converging)",
+          "The lanes rejoin here — this commit is the merge base, the fork point"
+        ],
+        [
+          "(HEAD -> main)",
+          "Decoration: HEAD currently points to branch main, and main points at THIS commit"
+        ],
+        [
+          "(feature)",
+          "A branch tip: the branch feature's pointer sits on this commit"
+        ],
+        [
+          "(origin/main)",
+          "A remote-tracking pointer — your cached memory of the remote's branch (Lesson 8)"
+        ]
+      ]
+    },
+    {
+      "t": "h",
+      "text": "Read it top to bottom, like a family tree in reverse"
+    },
+    {
+      "t": "p",
+      "text": "Newest commits sit at the top, and every commit's parents sit **below** it — history grows downward in the drawing. So the sample graph reads as a story: the merge commit at the top has two links leaving it (`|\\`) — the straight `|` leads down to `main is not idle` (parent #1, the side you were standing on), and the bent `\\` leads down to `work on the side lane` (parent #2, the merged lane). Follow either lane further down and both arrive at the same `base` commit where the `|/` convergence marks the original fork. You have just read a merge, a divergence, and a reunion — six lines, entire saga."
+    },
+    {
+      "t": "diagram",
+      "caption": "The same graph, annotated line by line — the story of two lanes and their reunion",
+      "nodes": [
+        "* 9c8b7a (HEAD -> main)  — the merge commit, TWO parents",
+        "|\\   — two links leave it: '|' to parent #1, '\\' to parent #2",
+        "| * 4d3e2f (feature)    — parent #2: the feature lane's tip",
+        "* | 2b1a0c              — parent #1: main's own solo commit",
+        "|/   — both lanes converge: the same commit is reachable both ways",
+        "* 0f9e8d base           — the merge base, where the lanes originally forked"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "--all is what reveals the other tips",
+      "text": "Without --all, log walks only the current branch's ancestry — the feature lane's commits are invisible from main even though they still exist perfectly well in the repository. --all is not 'more history'; it is the same history seen from every tip at once. When a graph looks mysteriously simpler than the story you remember, the missing lanes are the first suspect."
+    },
+    {
+      "t": "h",
+      "text": "HEAD~: naming commits by walking backwards"
+    },
+    {
+      "t": "p",
+      "text": "Hashes are precise but untypeable — nobody pastes `9c8b7a3f2e1d…` by choice. Git's answer is **relative addressing**: `HEAD` is where you are, `HEAD~1` is the commit one parent-step before HEAD, `HEAD~2` is two steps back, and so on down the lane. It is an address computed by following parent links, which means it is always relative to where you stand — the same `HEAD~1` names a different commit after you move."
+    },
+    {
+      "t": "diagram",
+      "caption": "HEAD~ counts parent-steps backwards from where you stand",
+      "nodes": [
+        "HEAD → C4        (you are here)",
+        "C4's parent is C3  →  HEAD~1",
+        "C3's parent is C2  →  HEAD~2",
+        "C2's parent is C1 (the root)  →  HEAD~3",
+        "on a merge commit, HEAD~1 follows the FIRST parent — the lane you stood on when merging"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git show HEAD~1         # what did the previous commit actually change?\ngit diff HEAD~2         # working directory vs the state two commits back\ngit reset --soft HEAD~1 # Lesson 10 preview: 'uncommit' — pointer back, changes kept staged",
+      "caption": "Every command that accepts a hash accepts HEAD~N — it is just an address, and the undo tools you meet next lesson speak it natively",
+      "highlight": [
+        3
+      ]
+    },
+    {
+      "t": "p",
+      "text": "The first-parent rule at the bottom of the diagram is the one nuance worth flagging now: when HEAD sits on a **merge commit**, `HEAD~1` means the lane you were standing on when you ran the merge — your branch's own previous tip, parent #1. The other parent (the merged lane) is reachable in full git as `HEAD^2`, but in daily life you will use `HEAD~1` a hundred times for every `^2`: it is the standard way of saying 'the commit just before the merge, on my side.'"
+    },
+    {
+      "t": "h",
+      "text": "Build a graph, then read it cold"
+    },
+    {
+      "t": "p",
+      "text": "Time for a reading test with no merge at all — just three tips and one root, so every character you see belongs to a lane, not a reunion. Before running, write down your predictions: how many commits will the graph show, which tip will be at the TOP, which commit will HEAD be riding, and where will the left lane's parent link bend to rejoin the root? Then run it and grade yourself."
+    },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Three tips, one root — read the whole DAG",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"root\"\ngit switch -c left-lane\necho \"left\" >> left.md\ngit add .\ngit commit -m \"left work\"\ngit switch main\necho \"main\" >> main.md\ngit add .\ngit commit -m \"main work\"\ngit switch -c right-lane\necho \"right\" >> right.md\ngit add .\ngit commit -m \"right work\"\ngit log --graph --oneline --all",
+      "note": "read the ASCII graph top-to-bottom: three tips, one root, decoration in parentheses tells you where each pointer lives"
+    },
+    {
+      "t": "p",
+      "text": "Grade your predictions against the shape. The top line is `right work` — newest commit, and it decorates `(right-lane)`. The second line is `main work`, wearing `(HEAD -> main)` — HEAD rides the branch you last switched to. The third line is `left work` on its own column with `(left-lane)`, and its parent link is the bent `|` one column over. The bottom is `root`, where the `|/` convergence shows both lanes tracing back to the same starting commit. No merge commit exists — you never merged — so no line carries two outgoing links."
+    },
+    {
+      "t": "code",
+      "lang": "text",
+      "code": "* | 5f4e3d (right-lane) right work\n* | 2b1a0c (HEAD -> main) main work\n| * 4d3e2f (left-lane) left work\n|/\n* a1b2c3 root",
+      "caption": "The shape you should be looking at (hashes will differ): two columns, three tips, one shared root — and (HEAD -> main) pinning HEAD to main's tip",
+      "highlight": [
+        2
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "Explain every part of this log line: * 9c8b7a (HEAD -> main, feature) some message",
+      "a": "The star is the graph marker for one commit. 9c8b7a is that commit's abbreviated hash — the true identity, constant forever. The parenthesized decoration lists the POINTERS that currently reference this commit, and the arrow reads backwards: HEAD points to the branch main, and main points here; feature also points here directly. Three pointers, one commit — which is itself a story: feature merged into main by fast-forward (Lesson 6's signature), and HEAD is riding main while both labels name the same tip. The text after the parentheses is the commit's subject line. The one thing the line does NOT tell you is the parents — for that, follow the characters below the star, where '|' and '\\' would reveal a merge's two parents."
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 9 in five lines",
+      "items": [
+        "git log --graph --oneline --all draws the DAG: * marks a commit, | is a parent link, \\ and / are bent links to another lane, and |\\ under a star means a two-parent merge commit",
+        "Decoration in parentheses shows where pointers live: (HEAD -> main) means HEAD rides main; (feature) and (origin/main) are branch and remote-tracking tips",
+        "The graph reads top-to-bottom with parents BELOW their children — |/ converging near the bottom marks the merge base where lanes forked",
+        "HEAD~N is relative addressing: N parent-steps backwards from where you stand, with HEAD~1 on a merge commit following the FIRST parent",
+        "Without --all, log shows only the current branch's ancestry — side lanes exist but stay invisible until you ask for every tip"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "Build a repo where main owns two commits after the root, plus a branch holding exactly one commit that main's history cannot reach — then prove the reachability story with two readings. Run plain `git log --oneline` from main and count the commits (the lane's commit should be invisible); then run `git log --graph --oneline --all` and count again (everyone appears). Finish by answering, in writing, without looking at any hash: which commit is `HEAD~2` while you stand on main?",
+    "hints": [
+      "For the lane's commit to be invisible to plain log, the lane must never have been merged — and log without --all walks only HEAD's ancestry, so reachability is the whole story.",
+      "Branch from main AFTER main's first post-root commit if you want the fork in the middle — or from the root for a cleaner two-column shape; either way, never merge the lane back.",
+      "Count parent-steps down main's own column in the --all graph: HEAD~0 is main's tip, HEAD~1 is one below it, and HEAD~2 is the one below that — the root."
+    ],
+    "solution": "git init\ntouch log.md\ngit add .\ngit commit -m \"root\"\ngit switch -c lane\necho \"lane work\" >> lane.md\ngit add .\ngit commit -m \"lane work\"\ngit switch main\necho \"main first\" >> log.md\ngit add .\ngit commit -m \"main first\"\necho \"main second\" >> log.md\ngit add .\ngit commit -m \"main second\"\ngit log --oneline\ngit log --graph --oneline --all",
+    "why": "The two counts are the lesson in miniature: plain log shows THREE commits (main second, main first, root) because it walks only HEAD's ancestry — the lane's commit is unreachable from main and therefore invisible, though perfectly safe in the repository. Add --all and the fourth commit appears on its own column with (lane) decorating its tip. And HEAD~2 while standing on main names the root — two parent-steps down main's own column — which is exactly the address you will hand to git reset --soft HEAD~2 in the next lesson when you want to uncommit two commits at once.",
+    "code": "# Build: root, then a 1-commit lane, then 2 more commits on main. Never merge.\n# Predictions BEFORE running:\n#   plain git log --oneline (from main) will show ___ commits\n#   git log --graph --oneline --all will show ___ commits\n#   HEAD~2 (standing on main) is the commit: ______\n\n# TODO: create the repo, root commit, and the lane's single commit\n# TODO: add two commits on main\n# TODO: print both readings and verify your three predictions",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "In git log --graph --oneline output, what does each line beginning with * represent?",
+      "options": [
+        "One commit — its short hash and message appear to the right of the star",
+        "A branch pointer",
+        "A file changed in the previous commit",
+        "A merge operation, always"
+      ],
+      "answer": 0,
+      "explain": "Each star is one commit in the DAG; the characters UNDER the star (|, \\, /) draw that commit's parent links, and text in parentheses decorates it with pointer names. A commit is only a merge commit when two links leave its star — the |\\ shape. Branch pointers never get their own lines; they appear only as decoration on the commit they point at.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Standing on main whose tip is C5, with history C1 ← C2 ← C3 ← C4 ← C5 — what does HEAD~2 refer to?",
+      "options": [
+        "The commit two positions AFTER HEAD, i.e. C6 once it exists",
+        "C3 — the commit two parent-steps backwards from HEAD",
+        "The second parent of a merge commit",
+        "The second branch ever created in the repository"
+      ],
+      "answer": 1,
+      "explain": "HEAD~N walks parent links backwards from HEAD: HEAD~1 is C4, HEAD~2 is C3, HEAD~3 is C2. It never points forward (there is no 'after HEAD' — the tip is the newest thing on the lane), and it has nothing to do with branch creation order. The 'second parent' idea is a different notation — HEAD^2 — which only exists on merge commits; on a straight lane like this one, HEAD~2 is simply the grandparent.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You are on main. A commit exists on branch lane (never merged). Why does plain git log --oneline not show it?",
+      "options": [
+        "Because log only shows commits made in the current session",
+        "Because the lane commit was garbage-collected when you switched branches",
+        "Because log sorts by author, and the lane commit has a different author",
+        "Because log defaults to walking only HEAD's ancestry — the lane's commit is not reachable from main"
+      ],
+      "answer": 3,
+      "explain": "git log answers 'the history of where I am': it starts at HEAD and follows parent links, so any commit not on that path is invisible — still safely stored, just unreachable from this vantage point. Switching branches never deletes commits (they live in the object store, held by their branch's pointer), and log has no session or author-based filtering. Adding --all starts the walk from EVERY branch tip, which is how the lane's commit reappears on its own column.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "HEAD sits on a merge commit M that you created by running git merge feature while on main. What does HEAD~1 name?",
+      "options": [
+        "feature's tip — the commit you merged in",
+        "The merge base — the commit where the lanes originally forked",
+        "M's FIRST parent: the commit main pointed to when you started the merge",
+        "The commit just after M on main"
+      ],
+      "answer": 2,
+      "explain": "A merge commit has two parents, and HEAD~1 follows the FIRST one — the lane you were standing on when the merge ran, i.e. main's previous tip. feature's tip, the second parent, is reachable as HEAD^2 in full git syntax; the merge base is further down both lanes, typically HEAD~2 only when your own lane advanced exactly one commit before merging; and 'after M' cannot exist — M is the newest commit, parents only go backwards. This first-parent rule is why git reset --soft HEAD~1 after a merge peels the merge off while leaving your own lane's commits intact.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "The graph flags turn git log into a drawing of the DAG itself: each * is a commit, | and the bent \\ / links are parent arrows, a star followed by |\\ marks a two-parent merge, and |/ converging below marks the fork point where lanes split. Decoration in parentheses shows where the pointers live — (HEAD -> main) says exactly where you are standing. HEAD~N gives commits relative names by counting parent-steps backwards, following the first parent at merges, and plain log hides everything unreachable from HEAD until --all starts the walk from every tip. These two skills — reading the graph and addressing commits relatively — are the prerequisites for every undo in the next lesson.",
+  "next": "Now that you can read history and point at any commit without a hash, it is time to change history — carefully: git restore for uncommitted edits, git restore --staged for the staging area, git reset's three modes for unsharing a local commit, and git revert, the only undo that is safe on history your teammates already have."
+}

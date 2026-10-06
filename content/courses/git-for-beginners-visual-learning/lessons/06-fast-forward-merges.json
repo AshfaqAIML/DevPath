@@ -1,0 +1,175 @@
+{
+  "title": "Fast-Forward Merges: The Pointer Shortcut",
+  "slug": "06-fast-forward-merges",
+  "objective": "After this lesson you will be able to predict when git can merge without creating any commit, perform a fast-forward merge, and recognize its fingerprint in the log — two branch labels sitting on one commit and a graph that stays a straight line.",
+  "why": "The first time a merge surprises you at work, it will almost certainly be this one: a small branch, a review approved, and git answering 'Fast-forward' instead of building anything. Understanding that a merge can be a single pointer move — not a copy-fest, not a new commit — is what makes branching feel free in git, and it is the mental model you need before the messier case where both lanes have moved. It also explains half of what you will read in real histories: straight lines mean silent slides, bubbles mean merge receipts.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Merging begins with one quiet question" },
+    { "t": "p", "text": "You have two branches now: `main`, where history officially lives, and `feature`, where you have been committing on the side. Merging means making **main's history contain feature's work**. But before git builds anything, it asks itself one quiet question: *does feature's history already contain all of main's history?* If the answer is yes, the merge is not a construction project at all — it is a pointer move. That case is called a **fast-forward**, and it is the subject of this lesson." },
+    {
+      "t": "diagram",
+      "caption": "The setup where the shortcut applies: one straight line, two labels",
+      "nodes": [
+        "C1 ← C2 ← C3        (one straight line of history)",
+        "main    → C2",
+        "feature → C3",
+        "fact: C2 is C3's parent — feature's history contains ALL of main's"
+      ]
+    },
+    { "t": "p", "text": "Look at the shape above. `feature` was cut from `main` back at C2, and since then **main has not moved one inch** — it still points at C2. So feature's history is `C1 ← C2 ← C3`: it literally contains every commit main knows about, plus one more. The two branches are not rivals with different versions of the truth; one is a strict superset of the other. Git does not need to *combine* anything, because nothing diverged." },
+    { "t": "h", "text": "The pointer slide, frame by frame" },
+    {
+      "t": "diagram",
+      "caption": "A fast-forward merge is four facts and one arrow — no new commit is ever born",
+      "nodes": [
+        "you: git switch main    (HEAD rides the branch being moved)",
+        "you: git merge feature",
+        "git: is main's tip an ancestor of feature's tip?  YES",
+        "main slides forward: C2 → C3   (a pointer move, nothing else)",
+        "after: main → C3 and feature → C3 — two labels, one commit",
+        "commits created: 0"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "$ git switch main\n$ git merge feature\nUpdating a1b2c4..e5f6a9\nFast-forward\n journal.md | 1 +\n 1 file changed, 1 insertion(+)",
+      "caption": "The two-line fingerprint: 'Updating <old>..<new>' names the pointer's journey, and 'Fast-forward' names the mechanism — notice there is NO 'Merge made by' line, because no merge commit exists",
+      "highlight": [3, 4]
+    },
+    { "t": "p", "text": "Decode the output like a git veteran: **`Updating a1b2c4..e5f6a9`** says main's pointer traveled from the first hash to the second — those are C2 and C3. **`Fast-forward`** is the name of what happened. The file stats below are not new work being created; they are what your **working directory** gained by catching up to where feature already was. Compare this with the true merge in the next lesson, which prints `Merge made by the 'ort' strategy` — that line only appears when a new commit is actually built." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Fast-forward is a result, not a request",
+      "text": "You never type 'fast-forward' anywhere. The command is always git merge <branch>. Git inspects the shape of the two histories and picks: straight line → slide the pointer; diverged lanes → build a merge commit. Same command, two different outcomes — the history decides, not you."
+    },
+    { "t": "h", "text": "The precondition, stated precisely" },
+    { "t": "p", "text": "A fast-forward is possible **only when the current branch's tip is a direct ancestor of the target branch's tip** — that is, you can walk parent links from the target's tip down to your tip. In everyday translation: *the branch you are standing on hasn't gained any commits since you cut the other branch.* If that holds, the target's history is a strict superset of yours, and 'merging' means nothing more than catching your pointer up." },
+    {
+      "t": "diagram",
+      "caption": "The moment this shape appears, the shortcut is off the table",
+      "nodes": [
+        "main:    C1 ← C2 ← C4   (main moved on — a teammate shipped C4)",
+        "feature: C1 ← C2 ← C3   (your lane moved too)",
+        "C4 is not an ancestor of C3 — and C3 is not an ancestor of C4",
+        "neither history contains the other → no straight line exists",
+        "git must BUILD a bridge: a merge commit (next lesson)"
+      ]
+    },
+    { "t": "p", "text": "The instant both lanes have their own commits, the ancestor check fails and git escalates from 'slide a pointer' to 'construct a merge commit with two parents.' That escalation is not an error and not a worse outcome — it is git doing real combining work, and it is exactly what Lesson 7 is about. For now, hold the two shapes side by side:" },
+    {
+      "t": "table",
+      "headers": ["", "Fast-forward", "True merge (merge commit)"],
+      "rows": [
+        ["When it happens", "Target's history already contains the current branch's entirely", "Both branches advanced since the split"],
+        ["New commit created", "No — the current branch's pointer slides", "Yes — a commit with TWO parents"],
+        ["History shape afterwards", "One straight line", "Two lanes rejoining in a loop"],
+        ["Line you see in output", "Fast-forward", "Merge made by the 'ort' strategy"],
+        ["Cost", "Instant, zero new objects", "One new commit authored by you"]
+      ]
+    },
+    { "t": "h", "text": "Watch it happen in the playground" },
+    { "t": "p", "text": "Time to see the slide with your own eyes. Before running the commands, write down three predictions: (1) what the merge will print, (2) how many commits `git log --oneline` will show afterwards, and (3) which branch names will decorate the top commit. Then run it and grade yourself — predicting output *before* seeing it is how the mental model gets wired in." },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Watch a pointer slide instead of a merge",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"the shared starting point\"\ngit switch -c feature\necho \"a lane of my own\" >> journal.md\ngit add .\ngit commit -m \"one commit ahead\"\ngit switch main\ngit merge feature\ngit log --oneline",
+      "note": "watch the merge report a fast-forward: no new commit appears, the main pointer simply slides forward to the feature tip"
+    },
+    { "t": "p", "text": "Grade your predictions. The merge answered `Fast-forward`, the log shows **two commits** — the shared starting point plus 'one commit ahead' — and the top line wears both labels: `(HEAD -> main, feature)`. Nothing was authored by the merge: the commit count after the merge equals the commit count feature already had. That double decoration on a single line is the visual signature of a pointer slide." },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "After a fast-forward, deleting the branch is free",
+      "text": "Once main and feature point at the same commit, the branch label feature is just a spare name — git branch -d feature (a real-terminal command) succeeds instantly, because git can prove every feature commit is reachable from main. The -d flag is a guardrail: it refuses to delete branches whose work is NOT reachable, so you cannot lose unmerged work by accident."
+    },
+    { "t": "h", "text": "Why some teams refuse the shortcut" },
+    { "t": "p", "text": "There is a real-world flag that forbids the shortcut: `--no-ff`. It forces git to create a merge commit even when a pointer slide was possible. Why would anyone want that? Because a pointer slide **leaves no trace** — months later, the log cannot tell you 'these five commits landed together as one feature.' A `--no-ff` merge keeps that receipt: the graph shows a bubble, a pocket of commits enclosed by the merge commit that brought them in. GitHub's green merge button does exactly this, which is why most team histories look like a chain of bubbles rather than a ruler. The tradeoff is one extra commit per merge and a busier graph — teams argue about this the way people argue about tabs." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git merge --no-ff feature -m \"Merge journal lane\"",
+      "caption": "A real-terminal flag (the playground always takes the shortcut when it can) — the -m supplies the merge commit's message instead of opening your editor"
+    },
+    {
+      "t": "interview",
+      "q": "During a fast-forward merge, are any commits created, modified, or copied?",
+      "a": "None of the three. Git verifies that the current branch's tip is an ancestor of the target's tip — meaning the target's history is a strict superset — and then updates exactly one thing: the current branch's pointer, which now names the target's tip. Commits in git are immutable objects; a fast-forward touches no object at all, only a reference. That is why the operation is instant regardless of how big the branch is, why the log afterwards shows both branch names on one line, and why some teams force --no-ff: the silence of the pointer slide is precisely what they don't want — they want an audible record that a lane merged back."
+    },
+    { "t": "keytakeaways", "title": "Lesson 6 in five lines", "items": [
+      "A fast-forward merge creates ZERO commits: git just slides the current branch's pointer forward to the target branch's tip",
+      "The precondition is strict — the current branch's tip must be a direct ancestor of the target's tip, i.e. the target's history already contains all of yours",
+      "The fingerprint: 'Fast-forward' in the output, a straight-line graph, and both branch labels decorating the same commit afterwards",
+      "If both branches advanced since the split, the shortcut is impossible — git escalates to a merge commit with two parents (Lesson 7)",
+      "--no-ff forces a merge bubble for teams who want a receipt; the plain pointer slide leaves no trace in history"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Prove the shortcut with a count. Build a repository with one root commit on main, a branch called feature exactly two commits ahead, then merge it. Before running anything, write down three predictions: (1) what word the merge will print, (2) how many commits `git log --oneline` will list afterwards, (3) what decoration the top commit will wear. A true merge would leave four commits in the log — if yours shows three, the only explanation is that no commit was born.",
+    "hints": [
+      "Cut the branch from main BEFORE main gains any commits of its own — the ancestor precondition needs feature's history to contain main's entirely.",
+      "The merge happens while you stand on the receiving branch: git switch main first, then git merge feature — you always merge INTO the branch you are on.",
+      "The top line of the final log will carry two decorations, (HEAD -> main, feature) — two pointers naming one commit is the visual signature of a fast-forward."
+    ],
+    "solution": "git init\ntouch notes.md\ngit add .\ngit commit -m \"root\"\ngit switch -c feature\necho \"step one\" >> notes.md\ngit add .\ngit commit -m \"first lane commit\"\necho \"step two\" >> notes.md\ngit add .\ngit commit -m \"second lane commit\"\ngit switch main\ngit merge feature\ngit log --oneline",
+    "why": "The commit count is the proof: the log shows exactly three commits — root plus the two lane commits — which is precisely what existed before the merge. A true merge would have authored a fourth (the merge commit itself). And the top line wearing both (HEAD -> main, feature) shows that main did not gain a new commit; it gained feature's existing one by pointer travel. When you can predict the count before running the merge, you have stopped treating git merge as magic and started treating it as arithmetic.",
+    "code": "# Build: 1 root commit on main, 2 commits on a feature lane, then merge.\n# Predictions, written BEFORE running:\n#   1. the merge will print the word: ______\n#   2. commits the final log will list: ______\n#   3. decorations on the top commit: ______\n\n# TODO: create the repo and the root commit\n# TODO: add two commits on a branch called feature\n# TODO: return to main, merge, and print the log",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "You are on main and run git merge feature. Git prints 'Fast-forward'. How many new commits exist after this merge?",
+      "options": [
+        "Zero: no commit is created — main's pointer simply moves to feature's tip",
+        "Exactly one: the fast-forward merge commit",
+        "One per commit that feature had",
+        "Two: a merge commit plus a copy of feature's tip"
+      ],
+      "answer": 0,
+      "explain": "A fast-forward is pure pointer arithmetic: git checks that main's tip is an ancestor of feature's tip, realizes feature's history already contains everything main has, and slides main's label forward to the commit feature points at. Nothing is authored, nothing copied, nothing modified — which is why the graph stays a straight line. The other options describe a true merge (one new merge commit) or a patch-based VCS that physically copies commits between branches; git never re-authors commits during a merge.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "A fast-forward merge is possible ONLY when…",
+      "options": [
+        "the two branches point at the same commit",
+        "the current branch's tip is a direct ancestor of the target branch's tip",
+        "the target branch was created after the current branch",
+        "no files were changed on the current branch"
+      ],
+      "answer": 1,
+      "explain": "The shortcut needs one lane to fully contain the other — technically, you must be able to walk parent links from the target's tip down to your tip. 'Same commit' is only the trivial do-nothing case, and creation order of the branches is irrelevant; what matters is whether your branch has any commits the target lacks. If both lanes advanced, git must build a merge commit with two parents instead.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "main is at C2. You branch feature and add two commits (C3, C4). Meanwhile a teammate adds C5 to main. Back on main you run git merge feature. What happens?",
+      "options": [
+        "Fast-forward: main moves to C4",
+        "Fast-forward to whichever tip is newer",
+        "Git creates a merge commit whose two parents are C5 and C4 — fast-forward is impossible",
+        "Git refuses the merge and tells you to delete one branch"
+      ],
+      "answer": 2,
+      "explain": "main (now at C5) holds a commit that feature's history lacks, so neither lane contains the other — the ancestor precondition fails. Git's fallback is not an error but an escalation: a brand-new merge commit whose first parent is C5 (the branch you stood on) and second parent is C4 (the branch you merged). Git never picks 'whichever tip is newer' — newness has nothing to do with merge mechanics — and it never refuses just because histories diverged; divergence is the normal case it was built for.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A repo's git log --graph --oneline shows a perfectly straight line, yet you know a dozen branches were merged into main over the years. What is the most likely explanation?",
+      "options": [
+        "The merges were all reverted afterwards",
+        "log --graph hides merge commits by default",
+        "The team used git rebase, which deletes merge commits",
+        "Every merge was a fast-forward — pointer slides leave no trace in history"
+      ],
+      "answer": 3,
+      "explain": "A fast-forward writes nothing into history — no merge commit, no marker, just a pointer that used to sit lower. If each branch merged while main had not moved since the branch was cut (common with small, quickly-merged branches or a merge queue that serializes them), every merge is a silent slide, and the log is a ruler. log --graph absolutely shows merge commits when they exist (the |\\ shape), and reverted merges would ADD commits, not remove them. This invisibility is exactly why some teams run git merge --no-ff — they want the bubble as a receipt of what shipped together.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "A fast-forward merge is git's shortcut for the boring case: when the branch you are merging already contains every commit your current branch has, git builds nothing — it slides the current branch's pointer forward to the target's tip. Zero commits are created, the graph stays a straight line, and the only evidence is the word 'Fast-forward' plus both branch labels landing on one commit. The precondition is strict and fails the moment both branches have advanced since the split — and that failure is not an error but an escalation to a real merge commit, which is the entire subject of the next lesson.",
+  "next": "main refuses to stand still while you are off building a feature — and the moment both lanes own commits the other lacks, the pointer shortcut is off the table. Next up: the merge commit with two parents, the three-way comparison that decides when git can combine history on its own, and the one situation where git stops and asks a human to decide."
+}

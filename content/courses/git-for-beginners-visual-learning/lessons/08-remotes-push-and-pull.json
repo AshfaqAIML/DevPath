@@ -1,0 +1,192 @@
+{
+  "title": "Remotes: push, pull, and Sharing Your History",
+  "slug": "08-remotes-push-and-pull",
+  "objective": "After this lesson you will be able to explain what a remote is, what push and pull actually move between two repositories, and how a local branch tracks its counterpart on origin — without needing to run anything.",
+  "why": "Everything you have built so far lives in one folder on one machine, and the moment you join a team that ends: your repo starts talking to GitHub or GitLab a dozen times a day. The engineers who confuse fetch with pull, or think 'origin' is the server's name, are the ones who force-push by accident or wonder why push was rejected. Push and pull are just the merge mechanics you already know, pointed at a second copy of the same DAG — this lesson makes that mapping visual.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Everything so far happened inside one machine" },
+    { "t": "p", "text": "Every commit you have made lives inside the `.git` folder in your project directory — the DAG, the branches, HEAD, all of it is local data. That is git's superpower: you can commit on a plane. But collaboration needs a second copy of that same history living somewhere both of you can reach. Git's answer is deliberately unglamorous: a **remote** is just another repository — usually a bare one on a server — that your repo knows the address of and syncs commits with. It is a peer copy, not a master." },
+    {
+      "t": "diagram",
+      "caption": "Two copies of the same DAG — the entire remote model in one picture",
+      "nodes": [
+        "YOUR LAPTOP — full history: C1 ← C2 ← C3    (main → C3, HEAD → main)",
+        "                    ▼  you are one commit ahead",
+        "THE SERVER (GitHub) — same history, older: C1 ← C2    (its main → C2)",
+        "syncing = copying the missing commits UP, then fast-forwarding ITS pointer"
+      ]
+    },
+    { "t": "p", "text": "Notice what the picture implies: the server's copy is **not** ahead of yours in any structural sense. It holds the same kind of objects, and — the lovely part — moving its `main` pointer from C2 to C3 after an upload is *exactly a fast-forward*, the mechanism from Lesson 6. Sharing history is merge math wearing a network costume." },
+    { "t": "h", "text": "A remote is a nickname plus a URL" },
+    { "t": "p", "text": "In git terms, a remote is one entry in your repository's config: a name you chose, plus the URL of another repository. The conventional name for your main remote is **`origin`** — but that is a tradition, not a keyword. A repo can know several remotes (`origin` for yours, `upstream` for the project you forked from), and each is just a bookmark your commands can address by name." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git remote add origin git@github.com:you/project.git\ngit remote -v\n# origin  git@github.com:you/project.git (fetch)\n# origin  git@github.com:you/project.git (push)",
+      "caption": "Real-terminal commands (the playground is a single repo, so remotes live here in code only): register the remote under the nickname 'origin', then list what you registered",
+      "highlight": [1]
+    },
+    {
+      "t": "table",
+      "headers": ["Term", "What it actually is"],
+      "rows": [
+        ["remote", "A named address book entry in your repo's config: nickname + URL of another repository"],
+        ["origin", "The conventional nickname for your main remote — you chose it, git did not require it"],
+        ["clone", "Download a full copy of a remote: all commits, all branches, with origin pre-wired"],
+        ["origin/main", "A remote-tracking branch — YOUR repo's cached memory of where the remote's main is"],
+        ["upstream (tracking pair)", "The link between your local main and origin/main that lets bare git pull / git push work"]
+      ]
+    },
+    { "t": "h", "text": "push: upload exactly what the remote is missing" },
+    { "t": "p", "text": "`git push origin main` does something beautifully specific. Git walks your DAG, finds every commit reachable from your `main` that the remote's `main` cannot reach, uploads those objects — and nothing else. Your working directory does not travel. Untracked files do not travel. Staged-but-uncommitted changes do not travel. Commits travel, and then the remote's `main` pointer gets fast-forwarded to your tip." },
+    {
+      "t": "diagram",
+      "caption": "push in three frames — the remote's pointer takes the same ride main took in Lesson 6",
+      "nodes": [
+        "BEFORE  local: C1 ← C2 ← C3 (main → C3)      origin: C1 ← C2 (its main → C2)",
+        "you run: git push origin main",
+        "git uploads C3 — the only commit the remote cannot reach",
+        "AFTER   origin: C1 ← C2 ← C3 (its main → C3) — a fast-forward, on someone else's repo"
+      ]
+    },
+    { "t": "p", "text": "And here is the failure mode that confuses everyone their first month: if the remote has commits *you* lack — a teammate pushed while you slept — then your push is no longer a fast-forward of the remote's branch, and the remote **rejects** it with `! [rejected] main -> main (fetch first)`. Nothing was lost; you are simply being told the lanes diverged. The fix is the next two sections: bring their commits down, merge, then push again. Sound familiar? It is Lesson 7 with a network cable." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git push -u origin main\n# Enumerating objects: 3, done.\n# To github.com:you/project.git\n#  * [new branch]      main -> main\n#  branch 'main' set up to track 'origin/main'.",
+      "caption": "The first push of a branch, with the flag that matters: -u wires main to origin/main so every future push and pull needs no arguments",
+      "highlight": [1, 4]
+    },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "-u means 'remember the pairing'",
+      "text": "The -u flag (long form: --set-upstream) records that your local main corresponds to origin's main. That pairing is what lets you type just git pull or git push later — git already knows which remote branch your main talks to. Set it once on the first push and never think about it again."
+    },
+    { "t": "h", "text": "pull = fetch + merge" },
+    { "t": "p", "text": "The reverse direction is two verbs, and the difference between them is the most-asked git question in history. **`git fetch origin`** downloads every commit you are missing and updates your *remote-tracking branches* — your cached memory of where the remote's branches point. It touches none of your own branches: after a fetch, your `main` is exactly where it was, and you can inspect what arrived before deciding. **`git pull`** is fetch followed immediately by a merge of the fetched branch into your current branch. Pull is a convenience, not a different mechanism." },
+    {
+      "t": "diagram",
+      "caption": "pull, drawn as its two halves — fetch updates the memory pointer, merge reunites the lanes",
+      "nodes": [
+        "a teammate pushed C4 →  origin: C1 ← C2 ← C4 (origin/main → C4)",
+        "your laptop: C1 ← C2 ← C3 (main → C3) — BOTH sides advanced since the split",
+        "you run: git pull          (= git fetch + git merge origin/main)",
+        "fetch: C4 arrives, origin/main → C4 — your main has NOT moved",
+        "merge: git builds M, parents C3 + C4 — main → M   ← Lesson 7, verbatim"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git fetch origin        # download new commits, update origin/main — your branches untouched\ngit log main..origin/main   # what did they do? (real-world: inspect before merging)\ngit merge origin/main   # combine their work into your branch\ngit pull                # = fetch + merge, the one-word version",
+      "caption": "The careful routine (top) and the common shortcut (bottom) — pull is literally the two commands above collapsed into one",
+      "highlight": [4]
+    },
+    { "t": "p", "text": "Look back at the diagram and notice the punchline: because you and your teammate both advanced, the pull produced a **merge commit with two parents** — C3 on your side, C4 on theirs. If instead you had made no commits since the split, the pull would simply have fast-forwarded your main to C4. The remote does not change the merge math from Lessons 6 and 7 at all; it only changes where the other lane physically lives." },
+    { "t": "h", "text": "origin/main is a pointer inside YOUR repo" },
+    { "t": "p", "text": "The subtle bit almost everyone gets wrong: `origin/main` is not a live connection to the server — it is your repository's **local memory** of where the remote's main stood, refreshed only when you fetch, pull, or push. Between fetches it is a photograph, not a video feed. This is why `git status` can tell you 'Your branch is behind origin/main by 2 commits' without touching the network: it is comparing your main against its own cached copy, which was accurate as of your last sync." },
+    {
+      "t": "diagram",
+      "caption": "Two pointers live in your repo — one is local truth, one is memory",
+      "nodes": [
+        "your repo: main → C3            (local truth — where YOU are)",
+        "your repo: origin/main → C2     (memory — where the remote was, at your last sync)",
+        "you run: git fetch origin",
+        "origin/main → C4   (memory refreshed — new commits downloaded)",
+        "main still → C3    (untouched) — YOU decide when to merge"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "clone is fetch + wiring, done for you",
+      "text": "git clone <url> creates the folder, downloads the ENTIRE history (every commit, every branch), registers the remote as origin automatically, sets up all the tracking pairs, and points HEAD at the repository's default branch. That is why a fresh clone is ready to pull and push immediately — everything this lesson set up by hand came pre-assembled."
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git clone git@github.com:you/project.git\n# Cloning into 'project'...\n# remote: Enumerating objects: 12, done.\n# Receiving objects: 100% (12/12), done.\n# HEAD is now at e5f6a9 the tip commit",
+      "caption": "The first command you run on a new machine — one command, and every idea in this lesson is configured for you"
+    },
+    {
+      "t": "interview",
+      "q": "What is the difference between git fetch and git pull?",
+      "a": "git fetch downloads every commit your repository is missing from a remote and updates your remote-tracking branches (origin/main and friends) — it moves no branch of yours, changes no file in your working directory, and is always safe to run. git pull is fetch followed by a merge: it brings the current branch up to date with its tracked remote branch in one step, which is convenient but commits you to the merge before you have looked at what arrived. The professional habit is pull-when-you-trust (small, frequent syncs from a busy team repo) and fetch-plus-inspect-then-merge when you want to see the incoming work first — for example before a risky integration or when you suspect history diverged. Behind both words, the machinery is identical: commits travel, then pointer math — fast-forward or merge commit — happens locally in your repo."
+    },
+    { "t": "keytakeaways", "title": "Lesson 8 in six lines", "items": [
+      "A remote is a nickname plus a URL stored in your repo's config — origin is the conventional default name, not a magic keyword",
+      "push uploads ONLY the commits the remote cannot reach from your branch tip, then fast-forwards the remote's branch pointer",
+      "A rejected push means the remote advanced without you — bring its commits down and merge before pushing again; nothing was lost",
+      "pull = fetch + merge: fetch downloads and updates your cached origin/main without touching your branches; merge then combines them",
+      "origin/main is your repo's local MEMORY of the remote's pointer — accurate as of your last fetch, not a live connection",
+      "-u on the first push records the tracking pair main ↔ origin/main, so bare git pull and git push work from then on"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Your first day sharing a project, written as commands (this one runs in a real terminal — the playground is a single repo with no server). You created an empty repository on GitHub and your local project has one commit on main. Write the exact sequence that: (1) registers the GitHub repository under the nickname origin, (2) verifies the registration by listing it, (3) uploads main while recording the tracking pair, and (4) — an hour later, after a teammate pushed to the same branch — brings their commits down and merges them, using the shortest command that tracking makes possible.",
+    "hints": [
+      "Registration is one command with two arguments: a nickname and a URL — git remote add origin <url>. The nickname is your choice; origin is the convention.",
+      "The flag that records the pairing is -u, and it belongs on the FIRST push of the branch: it teaches git that your main corresponds to origin/main.",
+      "Once tracking exists, the one-word form of 'fetch + merge' needs no arguments at all — that is the entire payoff of -u."
+    ],
+    "solution": "git remote add origin git@github.com:you/project.git\ngit remote -v\ngit push -u origin main\ngit pull",
+    "why": "This is the literal first-day sequence, and every word in it earns its place: remote add writes one line of config (a nickname and a URL — nothing more mystical than a bookmark); remote -v is how you audit what you registered; push -u uploads your commits and records the main ↔ origin/main pairing; and the final bare git pull works ONLY because that pairing exists — without -u you would have to spell out git pull origin main forever. Two months from now you will type the last three characters of this sequence dozens of times a day without thinking, which is exactly the point of having thought about them once.",
+    "code": "# First-day sharing — runs in a real terminal, not the playground\n# TODO 1: register the remote under the nickname origin\n# TODO 2: verify the registration\n# TODO 3: upload main AND record the tracking pair\n# TODO 4: after a teammate pushes, bring their work down and merge — shortest form",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "What does git push actually send to the remote?",
+      "options": [
+        "Only the commits reachable from your branch that the remote's branch cannot reach, then its branch pointer moves",
+        "A zipped copy of your entire project folder, including untracked files",
+        "Your staged changes and working directory, converted to a patch",
+        "Nothing — the remote pulls from you when it wants updates"
+      ],
+      "answer": 0,
+      "explain": "Push is surgical: git computes which commits the remote is missing by reachability from your branch tip, uploads those objects, and fast-forwards the remote's branch pointer to your tip. Working directories, staged changes, and untracked files never travel — that is why pushing from a messy desk works fine, and also why 'I pushed but my changes aren't there' almost always means the changes were never committed. There is no remote-initiated pulling in git's model; uploads are always pushed by the owner of the new commits.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "git pull is best described as which of these?",
+      "options": [
+        "A special network command that overwrites your branch with the remote's version",
+        "git fetch followed by git merge of the fetched branch into your current branch",
+        "git clone, but only for one branch",
+        "The reverse of push — you upload your commits so the remote can fast-forward"
+      ],
+      "answer": 1,
+      "explain": "Pull is literally two commands collapsed: fetch (download the missing commits, update origin/main) then merge (combine the remote-tracking branch into your current branch). If both sides advanced, that merge creates a real merge commit with two parents — pull never overwrites anything. It is not the reverse of push (uploads happen only through push), and clone is a one-time full copy, not a sync of one branch.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "In the command git push -u origin main, what is 'origin'?",
+      "options": [
+        "The hostname of GitHub's main server",
+        "A built-in git keyword meaning 'the default remote'",
+        "The nickname you (or your clone) gave to a specific remote repository's URL, stored in your repo's config",
+        "A branch name on your local machine"
+      ],
+      "answer": 2,
+      "explain": "origin is a bookmark: a nickname mapped to a URL in .git/config. It is conventionally the name git clone assigns to the repository you cloned from, which is why it feels built-in — but you can rename it, delete it, or add other remotes with different nicknames (upstream is the common second one). GitHub's servers, 'main', and git's keywords are three unrelated things that happen to appear near each other in this command; only the middle one is a label you control.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You run git fetch origin, and it downloads new commits. Immediately afterwards, what has changed in your repository?",
+      "options": [
+        "Your local main has moved to include the downloaded commits",
+        "Your working directory files have been updated to the downloaded versions",
+        "Nothing local changed at all — the commits went to the remote's repository only",
+        "origin/main (your cached memory of the remote's branch) moved to the downloaded tip; your main and your files are untouched"
+      ],
+      "answer": 3,
+      "explain": "Fetch is deliberately read-only with respect to your own work: it downloads objects into .git and moves only the remote-tracking pointer origin/main — your branch pointers and working directory stay exactly as they were. That is fetch's entire value: you can inspect the incoming work (git log main..origin/main, git diff) and merge when you choose. The options claiming your main moved or files changed describe pull (or a checkout), and the commits most certainly landed in YOUR repo — they came from the remote, not the other way around.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "A remote is nothing more exotic than a nickname and a URL in your repo's config pointing at a second copy of the same DAG. Push uploads only the commits the remote cannot reach and fast-forwards its branch pointer; a rejection simply means the remote advanced without you. Pull is fetch plus merge — fetch refreshes origin/main, your local cached memory of the remote's pointer, without touching your branches, and merge then does exactly the Lesson 7 work of combining two advanced lanes. The -u flag records the tracking pair main ↔ origin/main so bare push and pull work forever after, and clone pre-assembles all of it.",
+  "next": "You can now build, merge, and share history — which means it is time to get fluent at READING it: the ASCII graph of git log --graph --oneline --all, pointer decorations like (HEAD -> main), and relative addresses like HEAD~1 that you will use in every undo command of the next lesson."
+}

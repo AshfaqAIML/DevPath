@@ -1,0 +1,175 @@
+{
+  "title": "What Git Actually Stores: Snapshots and Pointers",
+  "slug": "01-what-git-actually-stores",
+  "objective": "After this lesson you will be able to describe exactly what a Git commit contains — a full snapshot of the project, a pointer to its parent, and a hash computed from all of it — and explain why that model makes history cheap to store, fast to walk, and impossible to tamper with silently.",
+  "why": "Every Git command you will ever run manipulates one data structure: a database of full snapshots connected by pointers — and almost every beginner panic (lost work, mystery branches, commits that \"won't go away\") comes from carrying the wrong picture of it. Get the model right first and the commands in the rest of the course stop being incantations and become obvious consequences.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "The mental model that makes every command obvious" },
+    { "t": "p", "text": "Ask ten developers what Git stores and eight will say \"changes\" — a running list of edits applied one after another. The real answer is stranger and much better: **a commit stores a complete snapshot of your entire project at one moment in time**, plus a few pointers describing where that snapshot came from. Not the changes. Not just the files you touched. The whole project, frozen. Diffs are something Git can *compute* on demand by comparing two snapshots — which is exactly what `git diff` does — but a diff is never what history is made of. Carry the snapshot picture for one lesson and commands like `log`, `branch` and `merge` stop being vocabulary and start being geometry." },
+    {
+      "t": "diagram",
+      "caption": "What one commit actually contains",
+      "nodes": [
+        "a full snapshot of every file in the project — taken at the moment you committed",
+        "a pointer to the parent commit — the checkpoint this one grew from",
+        "metadata: author, date, and the message you wrote",
+        "an ID — the hash of all of the above; change anything and it is a different commit"
+      ]
+    },
+    { "t": "p", "text": "The parent pointer is what turns a pile of snapshots into history. Commit three points at commit two, which points at commit one — a chain, newest end first. When you run `git log`, Git is not replaying a recorded list of edits: it starts at your newest commit and **walks the parent pointers backwards**, printing each snapshot's metadata as it goes. And when someone says \"commit 3c2e1f7\", they are naming one link of that chain by its hash — which is the next piece of the model." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "But I read that Git stores deltas?",
+      "text": "Deep in the storage layer, Git does compress older objects using delta encoding in files called packfiles — a disk-space optimization that is invisible to you and to every command you run. The mental model is snapshots; the compression is plumbing. If a tutorial tells you to *think* in deltas, close the tab: deltas are what Git derives, not what it keeps."
+    },
+    { "t": "h", "text": "The hash is the content" },
+    { "t": "p", "text": "Git stores every object — file contents, directory listings, commits — in a database where **the name of each object is the hash of its own content** (SHA-1 by default, 40 hexadecimal characters; modern Git can also use SHA-256). The same content always produces the same hash, no matter when or where you commit it. Two consequences follow, and they are the good ones: **identical content is stored once** — commit a 500-file project twice with one file changed, and the second commit reuses the 499 stored file snapshots and writes only one new one — and **integrity is free** — the ID covers the content, so corruption or silent tampering changes the hash, and Git notices." },
+    {
+      "t": "diagram",
+      "caption": "One database, every object named by its own content",
+      "nodes": [
+        "file contents — \"DevPath journal\" — stored as blobs, named hash(content)",
+        "directory layouts — which filename points to which blob — stored as trees, named hash(layout)",
+        "snapshot + parent + message + author — stored as a commit, named hash(all of it)",
+        "identical content anywhere in history → identical hash → stored once, shared"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git cat-file -p HEAD\n# commit 9f8c2f2a1c6ff5d37d9d31e4b2296a749f5b8a17\n# tree 1b03a2d59ff0a98d7f3f9e2d0a2b5c3f1d0e4f5a\n# parent 4c2b1e9f6a8d1c0e5f4a3b2c1d0e9f8a7b6c5d4e\n# author Maya Chen <maya@devpath.dev> 1736167200 +0100\n#\n#     Add the journal page",
+      "caption": "Real-world Git plumbing: git cat-file -p HEAD prints the raw commit object — the tree line is the snapshot, the parent line is the history link (you never need this command day to day, and the playground keeps the internals behind the curtain)",
+      "highlight": [3, 4]
+    },
+    { "t": "p", "text": "Reading that object top to bottom: the **tree** line is the snapshot — a tree object lists every filename in the project and which stored content each name points at. The **parent** line is the hash of the previous commit — the chain link. Then the author, the date, a blank line, and the message. That is the entire commit. It is deliberately tiny: the heavy data lives in the blobs and trees, and wherever contents match between commits, the same objects are simply shared." },
+    { "t": "h", "text": "Where snapshots come from" },
+    { "t": "p", "text": "You never snapshot a project by hand — that would take forever and would include half-finished work. Instead Git gives you a two-step pipeline, and it is the spine of this course: you **edit files in the working directory**, you **choose what the next snapshot will contain** in the staging area, and `git commit` **freezes that choice into the repository**. The next two lessons zoom into each step; the map is worth memorizing first." },
+    {
+      "t": "diagram",
+      "caption": "The map for this entire course",
+      "nodes": [
+        "working directory — the files you actually edit, in your folder",
+        "git add  →  staging area — the next snapshot, under construction",
+        "git commit  →  repository — the permanent chain of snapshots",
+        "branches and HEAD — movable labels pointing into the chain (Lesson 5)"
+      ]
+    },
+    { "t": "p", "text": "That middle step is the one that surprises people coming from other tools, and it is Git's superpower: the next snapshot is a **draft you curate**, not a photo of whatever happens to be in the folder. Lesson 3 lives inside that draft. For now, hold the loop — edit, add, commit, repeat — because it is the rhythm of every working day for the rest of your career." },
+    {
+      "t": "table",
+      "headers": ["If you believe…", "The model actually says…"],
+      "rows": [
+        ["Git stores a sequence of diffs", "Every commit references a full snapshot; diffs are computed on demand when you ask"],
+        ["A branch is a copy of my files", "A branch is a 41-character file containing one commit hash (Lesson 5)"],
+        ["History is a timeline of changes", "History is a chain of immutable snapshots, each pointing at its parent"],
+        ["Editing a commit fixes it in place", "Any change produces a new object with a new hash — the old one stays where it was"]
+      ]
+    },
+    { "t": "h", "text": "What the model buys you" },
+    {
+      "t": "list",
+      "ordered": false,
+      "items": [
+        "**Instant history walks** — `git log` follows pointers backwards; there is no replaying of edits to reconstruct old states",
+        "**Cheap branches** — a branch is a label pointing at one commit, so creating one writes a few bytes (Lesson 5)",
+        "**Deduplicated storage** — unchanged files hash identically and are stored once, shared by every commit that contains them",
+        "**Tamper evidence** — every object's name is derived from its content, so corruption anywhere breaks the chain of hashes",
+        "**On-demand diffs** — `git diff` compares two snapshots when you ask; nobody had to record changes as they happened"
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "40 characters of hex — and you will only ever type 7",
+      "text": "Full hashes are 40 hex characters; humans and Git both work with unambiguous short prefixes, which is why git log --oneline prints things like 3c2e1f7. You can paste that prefix into any command that accepts a commit. And two different commits essentially never share a leading prefix — the hash covers everything about them, so nothing about them matches."
+    },
+    { "t": "h", "text": "Your first taste (yes, already)" },
+    { "t": "p", "text": "The exercise below asks you to run a real two-commit repository in the Git History Playground before we have formally met `git init`, `git add` or `git commit` — deliberately. You cannot break anything, and watching two snapshots appear with two different hashes makes every sentence above concrete. The mechanics get their full lessons next." },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git init\necho \"hello snapshots\" > hello.txt\ngit add hello.txt\ngit commit -m \"say hello\"\ngit log --oneline",
+      "caption": "Runnable in the Git History Playground right now — the three commands the whole course stands on",
+      "highlight": [3, 4]
+    },
+    { "t": "keytakeaways", "title": "Lesson 1 in five lines", "items": [
+      "A commit stores a full snapshot of the whole project plus a pointer to its parent — not a diff",
+      "Diffs (git diff) are computed on demand by comparing neighboring snapshots; packfile delta compression is invisible plumbing, never the model",
+      "Every object is named by its content's hash (SHA-1, 40 hex characters, by default): same content → same hash → stored once, shared",
+      "Commits are immutable: change the content, message, or parent and you get a new hash — a new commit; the old object stays put",
+      "The daily loop this course teaches: edit (working directory) → git add (staging area) → git commit (repository) → repeat"
+    ] },
+    {
+      "t": "interview",
+      "q": "Does Git store deltas or snapshots — and why does the answer matter?",
+      "a": "Conceptually, snapshots: every commit references a tree that maps every filename to a stored content object, and commits link to parents — history is a chain of complete states, not a patch series. Physically, the storage layer may delta-compress objects inside packfiles to save disk, but that optimization is invisible to every command and never changes what git log, git status or git diff report. The distinction matters because the snapshot model is what explains the rest of Git: branching is cheap because branches are just labels into one shared object database, log is fast because it walks pointers instead of replaying edits, and integrity is free because each object's name is derived from its content — tampering or corruption breaks the hash chain. Interviews probe exactly this: candidates who answer 'deltas' usually can't explain why branching is instant or why a commit's ID changes when only its message is edited."
+    }
+  ],
+  "exercise": {
+    "prompt": "Two commits, two hashes — prove the model to yourself before the course even really starts. In the Git History Playground: create a repository, make a file containing one line, stage and commit it, append a second line, stage and commit again, then print the history. You should see two checkpoints with two different hash prefixes — and you will find you can already explain why they differ: different snapshot, different parent, different hash.",
+    "hints": [
+      "echo \"hello snapshots\" > hello.txt creates the file with one line; after the first commit, the double-angle form echo \"hello pointers\" >> hello.txt appends a second line instead of overwriting.",
+      "git add hello.txt must run before each git commit — a commit freezes whatever is staged, and an empty staging area means there is nothing to freeze.",
+      "git log --oneline prints one line per commit, newest first: a 7-character hash prefix, then the message. The two hashes differ because every input to the hash — snapshot content, parent, message, timestamp — differs."
+    ],
+    "solution": "git init\necho \"hello snapshots\" > hello.txt\ngit add hello.txt\ngit commit -m \"say hello\"\necho \"hello pointers\" >> hello.txt\ngit add hello.txt\ngit commit -m \"add a second line\"\ngit log --oneline",
+    "why": "This is the whole course in eight lines. The second commit stores a new full snapshot (the file now has two lines), points at the first commit as its parent, and — because the hash covers all of that — gets a completely different ID. If the two lines in git log --oneline had the same hash, the model would be wrong. When you can narrate that sentence without looking, Lesson 1 is done.",
+    "code": "# Run me in the Git History Playground\n# TODO 1: make this folder a repository\n# TODO 2: create hello.txt containing the line: hello snapshots\n# TODO 3: stage it, then commit with the message: say hello\n# TODO 4: append the line: hello pointers\n# TODO 5: stage, then commit again (message: add a second line)\n# TODO 6: print the history, one line per commit",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "In one sentence: what does a Git commit store?",
+      "options": [
+        "A diff — just the changes made since the previous commit",
+        "A compressed archive of the folder at commit time",
+        "A full snapshot of the entire project, plus a pointer to the parent commit",
+        "A message log with timestamps and a list of changed filenames"
+      ],
+      "answer": 2,
+      "explain": "A commit freezes the whole project — every file, not just the ones you touched — together with a parent pointer, author, date, and message. Option A describes diffs, which Git *computes* by comparing snapshots (that is git diff's job) but never stores as history. Option C sounds like a backup archive, but Git stores a navigable structure of objects, not one opaque compressed blob; and option D describes the metadata, which is real but is the smallest part of the object. This is the most load-bearing fact in the course — cheap branches, instant log walks, and tamper evidence all fall out of it.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Your project has 500 tracked files. You change exactly one file and commit. Roughly how many new file-content objects (blobs) does Git store for the second commit?",
+      "options": [
+        "500 — every commit stores a fresh copy of every file",
+        "0 — commits store references only, never content",
+        "2 — the old version and the new version of the changed file",
+        "1 — the changed file; the other 499 hash identically to blobs already stored and are shared"
+      ],
+      "answer": 3,
+      "explain": "Blobs are named by the hash of their content, so the 499 unchanged files hash to exactly the values already in the object database, and the second commit's tree simply points at those existing blobs. Only the changed file's new content produces a new hash. Option A is the copy-the-world model Git exists to avoid; option B is half right — commits do reference content, but the blobs are very much stored; option D double-counts, because the old version is already in the database and is reused, not rewritten. (A few bookkeeping objects — new trees and the commit itself — are written too, but no file content is duplicated.)",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why does rewording a commit's message produce a different commit ID, even though no file content changed?",
+      "options": [
+        "Because the commit's ID is the hash of everything in it — snapshot, parent, author, date and message — so any edit anywhere yields a new ID",
+        "Because Git stores messages in a separate database and regenerates IDs when one changes",
+        "It doesn't — only file content changes the ID",
+        "Because Git renumbers commits sequentially, and the message pushed the number up"
+      ],
+      "answer": 0,
+      "explain": "The hash is computed over the entire commit object: which snapshot it references, which parent, who wrote it, when, and the message. Rewording the message changes that input, so the ID changes — and because IDs are content-derived, 'editing' a commit really means writing a new one while the old object stays in the database. Option B invents a message database that doesn't exist; option C is the classic half-model that forgets metadata is hashed too; option D describes sequence numbers, which Git doesn't use — a hash isn't a position, it's a fingerprint.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A teammate insists Git is 'delta-based' because they read about packfiles. What is the accurate response?",
+      "options": [
+        "They're right — history is a chain of diffs, and packfiles prove it",
+        "Packfiles only exist in repositories hosted on GitHub, not locally",
+        "Packfiles are a storage-layer compression trick — conceptually each commit references a full snapshot, and the compression never changes what commands report or how you should reason",
+        "Deltas and snapshots are two names for the same thing"
+      ],
+      "answer": 2,
+      "explain": "Packfiles delta-compress objects on disk to save space — storage plumbing that never changes what any command reports or how history behaves. Option A inverts the relationship: the compression exists *because* snapshots can be expensive to store, not because history is made of diffs. Option B is false — packing happens locally, inside .git, during normal maintenance. Option D papers over the distinction: deltas are derived differences between stored states; snapshots are the stored states themselves. The phrasing that lands in interviews: 'Conceptually snapshots, physically compressed — and the compression is invisible.'",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "Git's history is a chain of commits, and each commit is a complete frozen snapshot of the project plus a pointer to its parent, its author, and its message — nothing diff-shaped anywhere. Every object is named by the hash of its own content, so identical content is stored once and any change to content, parent, or message produces a brand-new ID: commits are immutable by construction. Diffs are computed on demand, and packfile delta compression is invisible plumbing, never the model. With that picture in place, the rest of the course is just the loop that builds snapshots: edit in the working directory, curate in the staging area, freeze into the repository.",
+  "next": "Now that you know what Git stores, it's time to build your first one: next lesson you'll run git init and git status, meet the .git folder, and learn the lifecycle every tracked file follows for the rest of your career."
+}

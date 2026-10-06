@@ -20,6 +20,7 @@ import { FlexboxSimulator } from "./FlexboxSimulator";
 import { HttpLab } from "./HttpLab";
 import { SqlLab } from "./SqlLab";
 import { JsPlayground } from "./JsPlayground";
+import { GitPlayground } from "./GitPlayground";
 import { CourseView } from "./CourseView";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { SiteHeader } from "./SiteHeader";
@@ -170,6 +171,8 @@ export function PlatformShell({
               <SqlLab item={simulatorItem} category={simulatorCategory} />
             ) : PLAYABLE_SIMULATORS[simulatorItem.slug] === "js" ? (
               <JsPlayground item={simulatorItem} category={simulatorCategory} />
+            ) : PLAYABLE_SIMULATORS[simulatorItem.slug] === "git" ? (
+              <GitPlayground item={simulatorItem} category={simulatorCategory} />
             ) : (
               <FlexboxSimulator item={simulatorItem} category={simulatorCategory} />
             )

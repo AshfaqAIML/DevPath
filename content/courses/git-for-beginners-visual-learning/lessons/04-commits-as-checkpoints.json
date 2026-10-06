@@ -1,0 +1,263 @@
+{
+  "title": "Commits as Checkpoints: Messages and Reading log",
+  "slug": "04-commits-as-checkpoints",
+  "objective": "After this lesson you will be able to freeze staged content into permanent commits with git commit -m, write imperative-mood subject lines that survive git log --oneline, and walk the checkpoint chain with git log to find any moment in your project's history.",
+  "why": "A commit is the unit of safety, review, revert, and blame — and its message is the only part humans read. Six months from now, 'what happened here' will be answered by your subject lines, not your memory: git log and code review surface them exactly as you wrote them. Checkpoints you can name are checkpoints you can return to, and that confidence is what lets you experiment fearlessly.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "The moment of freezing"
+    },
+    {
+      "t": "p",
+      "text": "When you run `git commit`, four things happen at once, all locally: the staged draft is frozen as the snapshot, a commit object is written that points at it, the commit's hash is computed from everything in it, and your branch label slides forward to point at the new commit. Afterwards `git status` reports a clean tree — the draft and history agree again. The new checkpoint is permanent: named by its hash, reachable from your branch, and impossible to silently edit. Lesson 1's model, now in motion."
+    },
+    {
+      "t": "diagram",
+      "caption": "The four things that happen at commit time",
+      "nodes": [
+        "the staged draft is frozen into a tree — the snapshot of every staged file",
+        "a commit object is written: the tree, the parent's hash, author, date, message",
+        "the commit's hash is computed from all of it — the checkpoint now exists",
+        "the branch label slides forward to the new commit (Lesson 5 zooms in on this)",
+        "git status goes clean — the draft and history now agree"
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git add journal.md\ngit commit -m \"Start the journal\"\n# [main (root-commit) a1f0e2d] Start the journal\n#  1 file changed, 1 insertion(+)\n#  create mode 100644 journal.md",
+      "caption": "The receipt from Git's very first checkpoint: root-commit means 'no parent — the first link in the chain'",
+      "highlight": [
+        2,
+        3
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Read the receipt like a store read-out: **which branch** the commit landed on (`main`), a **short hash** (`a1f0e2d`), the **message** echoed back, and what changed — *1 file changed, 1 insertion(+)*, plus `create mode` when the file is new to history. That insertion count is a **computed** diff: Git compared the new snapshot to the parent's and counted lines. It stored the full snapshot (Lesson 1); the receipt is arithmetic printed for your benefit. Every later receipt reads the same way, with `deletion(-)` lines joining when you remove content."
+    },
+    {
+      "t": "h",
+      "text": "Commit messages: notes to your future team"
+    },
+    {
+      "t": "p",
+      "text": "The message is the part of the commit humans will actually read — in `git log`, in code review, in `git blame` (real-world) months from now, standing at the exact line you are writing today and asking *why is this like this?*. The conventions that survive that interrogation: the **subject line** is a single line in the **imperative mood**, roughly 50 characters, no trailing period — *Start the journal*, not *started the journal* or *I started the journal*. Details belong in the **body**, after a blank line: the why, the constraints, the ticket link."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Message",
+        "Verdict",
+        "Why"
+      ],
+      "rows": [
+        [
+          "update",
+          "useless",
+          "names no change — 'update' applies to every commit ever made"
+        ],
+        [
+          "Added the login form",
+          "close",
+          "right content, wrong mood — the log reads as a diary of past events, not a list of actions"
+        ],
+        [
+          "Add the login form",
+          "strong",
+          "imperative, short, names the change — completes 'this commit will…'"
+        ],
+        [
+          "Fix bug 482 where users with empty carts saw a payment button and clicking it crashed checkout",
+          "too long",
+          "real information on the wrong line — first ~50 characters are all most tools show; the details belong in the body"
+        ]
+      ]
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "The 'this commit will' trick",
+      "text": "Write the subject so it completes the sentence: 'If applied, this commit will ___'. 'Reject negative quantities' → 'this commit will reject negative quantities.' If your subject doesn't complete it naturally, rewrite it until it does — the trick forces the imperative mood without memorizing any grammar rule."
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "# Weak: names nothing — applies to every commit ever made\ngit commit -m \"changes\"\n\n# Strong: subject in imperative mood, body explains the why\ngit commit -m \"Reject negative quantities in the cart\" -m \"The checkout API accepts them and creates negative-priced orders. Guard at the UI boundary until the API validates too.\"",
+      "caption": "Real-world Git takes multiple -m flags — subject first, body second. The playground takes one -m: the subject line, which is the part every tool displays",
+      "highlight": [
+        2,
+        5
+      ]
+    },
+    {
+      "t": "h",
+      "text": "git log: walking the chain"
+    },
+    {
+      "t": "p",
+      "text": "`git log` starts at the commit your branch points at and walks parent pointers until it runs out — the exact traversal from Lesson 1's chain. The full format shows the hash, author, date, and the complete message; `git log --oneline` compresses each commit to a short hash and the subject line, newest first. That one-line-per-checkpoint view is the reading mode you will use ninety-five percent of the time."
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git log\n# commit 3c2e1f7d0a9b8c7e6f5a4d3c2b1a0f9e8d7c6b5a (HEAD -> main)\n# Author: Maya Chen <maya@devpath.dev>\n# Date:   Mon Jan 6 10:12:00 2025 +0100\n#\n#     Capture the rhythm\n#\n# commit 8b9d2c1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c\n# Author: Maya Chen <maya@devpath.dev>\n# Date:   Mon Jan 6 09:58:00 2025 +0100\n#\n#     Add the first lesson",
+      "caption": "Two stops on a walk backwards: (HEAD -> main) marks the commit your branch points at — the walk starts there",
+      "highlight": [
+        2,
+        6,
+        12
+      ]
+    },
+    {
+      "t": "diagram",
+      "caption": "How git log walks your history",
+      "nodes": [
+        "C3 ← newest: the walk starts here, where your branch points",
+        "C2 ← the parent hash recorded inside C3",
+        "C1 ← the parent hash recorded inside C2 — the first commit records none",
+        "git log --oneline prints one line per stop: hash prefix + subject",
+        "newest first — the chain reads backwards because the pointers point backwards"
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Two more views of the same chain: `git log --graph --oneline` draws the parent links as ASCII lanes — on a single branch it is a straight column, and it becomes genuinely interesting the moment branches exist (Lesson 5). The playground adds a friendlier form, `git graph`, which draws the chain visually beside the terminal. Every view walks the same pointers; pick the one your brain likes."
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "git log --oneline\n# 3c2e1f7 capture the rhythm\n# 8b9d2c1 add the first lesson\n# a1f0e2d start the journal",
+      "caption": "The exact end state of this lesson's practice: one line per checkpoint, newest first — short hash, then the subject you wrote (a real terminal also shows a (HEAD -> main) marker on the top line: the pointer chain from Lesson 5, drawn as text)",
+      "highlight": [
+        1
+      ]
+    },
+    {
+      "t": "h",
+      "text": "Checkpoint cadence: small beats perfect"
+    },
+    {
+      "t": "p",
+      "text": "A checkpoint is a place you can return to, so 'how often should I commit?' answers itself: whenever you reach a state you might want back. Small, single-purpose commits keep messages honest ('this commit will…' only works when the commit does one thing), make review possible, and keep rollbacks cheap — reverting one bad idea beats reverting a whole Friday afternoon. A good checkpoint leaves the project coherent: tests passing, app running, one idea complete."
+    },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Conventional Commits (a real-world convention)",
+      "text": "Many teams prefix subjects — feat:, fix:, docs:, refactor: — so tooling can generate changelogs and enforce release rules. It is a convention layered on top of the same rules, not a replacement for them: imperative, short, specific. The playground doesn't require prefixes; your future team's README will tell you if they do."
+    },
+    {
+      "t": "h",
+      "text": "What a commit never contains"
+    },
+    {
+      "t": "p",
+      "text": "A commit photographs the draft — the staging area — and nothing else. Modified-but-unstaged edits stay in your working directory; untracked files stay invisible to history entirely. Real-world Git offers `git commit -a` as a shortcut (stage every *tracked* modification, then commit), but it skips untracked files and bypasses your chance to review the draft — the explicit two-step rhythm this course teaches is the habit that scales."
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "echo \"an unstaged afterthought\" >> journal.md\ngit commit -m \"Add the day-two entry\"\n# (the staged draft is committed; the afterthought line is NOT in it)\ngit status\n# Changes not staged for commit:\n#   modified:   journal.md",
+      "caption": "Nothing lost, nothing smuggled in: the afterthought survives in the working directory as an unstaged modification (files and staging from earlier in the session)",
+      "highlight": [
+        1,
+        5
+      ]
+    },
+    {
+      "t": "p",
+      "text": "Time to build a real chain. Run the sequence below in the Git History Playground — three rounds of edit, stage, commit, then the log that reads them all back. Watch the live graph as you go: each commit adds a node on top of the last, and no node ever moves."
+    },
+    {
+      "t": "practice",
+      "sim": "git-history-playground",
+      "title": "Grow the chain, checkpoint by checkpoint",
+      "query": "git init\ntouch journal.md\ngit add .\ngit commit -m \"start the journal\"\necho \"checkpoints beat perfection\" >> journal.md\ngit add journal.md\ngit commit -m \"add the first lesson\"\necho \"small commits, clear messages\" >> journal.md\ngit add .\ngit commit -m \"capture the rhythm\"\ngit log --oneline",
+      "note": "three checkpoints, each reachable from the previous — watch the chain grow in the live graph"
+    },
+    {
+      "t": "keytakeaways",
+      "title": "Lesson 4 in five lines",
+      "items": [
+        "git commit freezes the staged draft into permanent history — tree, parent, metadata, message — and a hash computed from all of it",
+        "Only staged content enters the commit: unstaged edits and untracked files stay in the working directory, untouched and unlost",
+        "Subject lines: imperative mood, ~50 characters, no trailing period — they must complete 'this commit will…', because that is all git log --oneline and code review will show",
+        "git log walks from your branch tip backwards through parent pointers — newest first; --oneline is your default reading mode",
+        "The receipt's files/insertions counts are diffs Git computed from snapshots — small, single-purpose commits make history you can revert, review, and search"
+      ]
+    },
+    {
+      "t": "interview",
+      "q": "What makes a good commit message, and why the imperative mood?",
+      "a": "Subject: one line, imperative mood, roughly 50 characters, no trailing period. Body, separated by a blank line: the why — context, constraints, links — wrapped near 72 characters. The imperative matters because the subject completes the sentence 'if applied, this commit will ___': it describes what the commit does, as an instruction, so git log --oneline reads as a list of actions rather than a diary of events ('Add login validation' vs 'added login validation'). The audience argument seals it: git log, git blame, pull requests, and code review all surface the subject with zero surrounding context — it is the only documentation guaranteed to travel with the change. A strong bonus point: the message is part of the commit's hash, so 'editing' a message really means writing a replacement commit (real-world: git commit --amend) — immutable history, again."
+    }
+  ],
+  "exercise": {
+    "prompt": "Build a three-checkpoint chain with messages you'd be proud to see in a code review. In the playground: start a repository, create roadmap.md, and commit it with an imperative subject. Append a line about week 1's scope, stage it, commit. Append a line about week 2, stage everything, commit. Finish with git log --oneline and check three things: newest first, three distinct hashes, and subjects that each complete 'this commit will…'.",
+    "hints": [
+      "touch roadmap.md, then git add . — an empty file still needs staging before the first commit can freeze it.",
+      "Each append (echo \"…\" >> roadmap.md) must be followed by staging — a commit only freezes the draft, and a stale draft commits the old content.",
+      "Make each subject imperative and specific — 'Add the roadmap file', 'Record week 1 scope', 'Record week 2 scope' — then git log --oneline lists them newest-first, each with its own hash prefix."
+    ],
+    "solution": "git init\ntouch roadmap.md\ngit add .\ngit commit -m \"Add the roadmap file\"\necho \"week 1: snapshots and staging\" >> roadmap.md\ngit add roadmap.md\ngit commit -m \"Record week 1 scope\"\necho \"week 2: commits and branches\" >> roadmap.md\ngit add .\ngit commit -m \"Record week 2 scope\"\ngit log --oneline",
+    "why": "Three commits, three honest messages, one walkable chain. The rhythm — edit, add, commit, repeat — is the muscle memory this course exists to build, and the log output is the receipt: distinct hashes (each snapshot differs and each parent differs), newest at the top, and subject lines that read as actions. If any subject wouldn't complete 'this commit will…', rewrite it before the habit sets.",
+    "code": "# Run me in the Git History Playground\n# TODO 1: initialize the repository\n# TODO 2: create roadmap.md (empty is fine), stage it, commit: Add the roadmap file\n# TODO 3: append \"week 1: snapshots and staging\", stage, commit: Record week 1 scope\n# TODO 4: append \"week 2: commits and branches\", stage everything, commit: Record week 2 scope\n# TODO 5: print the chain, one line per commit — newest first",
+    "lang": "bash"
+  },
+  "quiz": [
+    {
+      "q": "git commit -m \"Fix the cart total\" does what?",
+      "options": [
+        "Sends your changes to GitHub",
+        "Freezes the staged draft into a new, permanent checkpoint with that message",
+        "Stages every modified file, then commits them",
+        "Saves the working directory as a draft snapshot"
+      ],
+      "answer": 1,
+      "explain": "git commit freezes whatever is staged into a new, permanent, hash-named checkpoint carrying that message — entirely locally. Option A describes git push (real-world, a later lesson): committing is offline by design. Option C describes the real-world shortcut git commit -a, which stages tracked modifications first — and even that skips untracked files, so 'every modified file' is wrong. Option D swaps the direction of the pipeline: the staging area is the draft; a commit is the frozen result. Commit early, commit often — nothing leaves your machine until you push.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Which subject line follows the conventions taught in this lesson?",
+      "options": [
+        "Fixed the bug finally",
+        "fix bug",
+        "Reject negative quantities in the cart",
+        "I added validation for the cart"
+      ],
+      "answer": 2,
+      "explain": "'Reject negative quantities in the cart' is imperative (starts with the verb), specific (names the actual change), and short enough to survive every tool that displays only the subject. Option A is past tense plus editorializing ('finally'); option B names nothing — every bug fix in history is 'fix bug'; option D is first-person past tense, which turns your log into a diary instead of a list of actions. The test: the subject should complete 'if applied, this commit will ___' — only option C does it naturally.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "What does git log --oneline print?",
+      "options": [
+        "Every commit ever made on this machine",
+        "Only the most recent commit, in full detail",
+        "The differences between each pair of commits",
+        "One line per commit reachable from your branch — short hash and subject, newest first"
+      ],
+      "answer": 3,
+      "explain": "git log walks parent pointers from your branch's tip, printing each commit as short hash + subject, newest first — the commits *reachable* from where you are. Option A overstates the scope: log sees this repository's history, not your machine's other projects. Option B is plain git log's full format, and even that shows every commit, not just one. Option D is git diff's job — log reports metadata and messages, never file contents. 'Reachable from your branch' becomes the key phrase in the next lesson, where a branch turns out to be exactly a choice of starting point.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You stage a two-line file, then append a third line WITHOUT re-adding, then run git commit -m \"snapshot now\". Which statement is true afterwards?",
+      "options": [
+        "The commit contains all three lines, and the working directory is clean",
+        "The commit fails — Git refuses to commit while the working copy is dirty",
+        "The commit contains the two staged lines; the third line is still in your working directory, reported as modified and not staged",
+        "The commit contains all three lines, but the third is marked as untracked"
+      ],
+      "answer": 2,
+      "explain": "The commit photographs the staging area: two lines in the draft, two lines in history. The unstaged third line never touched the draft, so it is still sitting in your working directory — git status will immediately report the file as modified, not staged. Option A is the 'commit takes the working tree' myth. Option B invents a dirty-tree block that doesn't exist — Git commits the draft and lets the working tree stay dirty. Option D mixes categories: 'untracked' describes files Git has never staged, not lines. If you got this right, Lesson 3 stuck.",
+      "difficulty": "hard"
+    }
+  ],
+  "summary": "git commit freezes the staged draft into a permanent, hash-named checkpoint — snapshot, parent, metadata, message — and slides your branch label onto it; anything unstaged or untracked stays in the working directory, untouched. The subject line is the part humans actually read: imperative mood, about fifty characters, written to complete 'if applied, this commit will…', with the why relegated to the body. git log walks the parent chain from your branch tip, newest first, and --oneline reduces each checkpoint to short hash plus subject — the view you will live in. Small, single-purpose, honestly-messaged commits are what make history worth walking later.",
+  "next": "You've been committing to a single lane all along — next lesson you'll see that 'main' was only ever a 41-byte pointer, open your own side lane with git switch -c, and watch two branches share history without copying a single file."
+}

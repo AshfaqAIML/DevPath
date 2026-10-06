@@ -273,6 +273,15 @@ const simulatorItems: SeedItem[] = [
     description:
       "A sandboxed JavaScript REPL in your browser: strict-mode ES2020 snippets run in a Web Worker with a captured console, REPL-style last-expression echo, friendly error hints and a 4-second watchdog. Six guided missions, plus deep-links from every JavaScript course practice block.",
   },
+  {
+    title: "Git History Playground",
+    level: "Beginner",
+    tags: "git,version-control,interactive",
+    featured: true,
+    published: true,
+    description:
+      "A faithful in-memory Git model with a live commit graph: run git init, add, commit, branch, switch, merge, reset and revert — and watch the DAG redraw itself. Classic ASCII log --graph output, six guided missions, and deep-links from every Git course practice block.",
+  },
   { title: "Kubernetes Cluster Simulator", level: "Advanced", tags: "kubernetes,devops,interactive", published: false },
 ];
 
