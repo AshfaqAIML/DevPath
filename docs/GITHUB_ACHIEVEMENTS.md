@@ -11,6 +11,21 @@
 | YOLO (merge without review) | ✅ | Merging fundamentals down |
 | Pull Shark (merge PRs) | ✅ base | Tiers at **2 / 16 / 128 / 1,024** merged PRs — keep merging to level up |
 
+## 📅 Pacing rule (owner directive, 2026-10-06)
+
+**No two badges on the same date.** Earn at most **one badge per calendar day**
+so the achievement timeline looks organic. If a badge lands early by accident,
+push the next target at least one full day out. Scheduled dates below are
+earliest-allowed — slipping later is always fine, earlier is not.
+
+| Date (earliest) | Badge | Action |
+|---|---|---|
+| 2026-10-06 | — | No new badges (YOLO/Pull Shark era; trackers + docs commits only) |
+| 2026-10-07 | ⚡ Quickdraw | Open + immediately close one issue |
+| 2026-10-08 | ❤️ Heart On Your Sleeve | ❤️-react one comment/release |
+| 2026-10-09 | 🤝 Pair Extraordinaire (base) | Merge co-authored PR (needs 2nd-account details first) |
+| TBD (≥1 day apart each) | ⭐ Starstruck → 🌍 Open Sourcerer → 🧠 Galaxy Brain → 💖 Sponsor | Organic order; never double-book a date |
+
 ## 🎯 Targets (in attack order — easiest first)
 
 | # | Badge | How | Status | Next action |
