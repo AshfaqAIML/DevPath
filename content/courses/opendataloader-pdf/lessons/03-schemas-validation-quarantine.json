@@ -1,0 +1,55 @@
+{
+  "title": "Schemas, Validation & Quarantine",
+  "slug": "03-schemas-validation-quarantine",
+  "objective": "After this lesson you will be able to design a target schema for extracted data, write validators returning per-row error lists, quarantine rejects with reasons instead of dropping them, and report reject rates as a process metric.",
+  "why": "Extraction produces strings; systems need records — typed fields, required keys, bounded formats. Without a schema, garbage enters quietly and explodes downstream ('why is revenue NaN?'). Validation-first means every reject carries a reason, rejects never vanish silently, and the reject rate becomes the pipeline's health metric instead of a shameful secret.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Schema first: interpretation before repair" },
+    { "t": "p", "text": "A **schema** declares what each record must hold: field names, types, required flags, format rules (email shape, date range, enum membership). Write it before cleaning a single value — schemas turn arguments ('is this row usable?') into checks. Keep schemas small and explicit: five strict fields beat twenty aspirational ones nobody enforces." },
+    { "t": "code", "lang": "js", "code": "// Target schema for extracted contact rows (plain JS, no dependencies)\nconst ContactSchema = {\n  name: { type: \"string\", required: true, minLen: 2 },\n  email: { type: \"string\", required: true, pattern: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/ },\n  country: { type: \"string\", required: false },\n  hours: { type: \"number\", required: false, min: 0 },\n};\n// Schema = the contract; validator below enforces it row by row.", "caption": "Five fields, typed, with presence and format rules — the whole contract" },
+    { "t": "h", "text": "Validators return errors, not booleans" },
+    { "t": "p", "text": "A validator returning `true/false` destroys information. Return **error lists**: every violated rule as a message naming field + expectation + actual value. Error lists power quarantine reports, rule tuning ('80% of rejects are one bad date format → fix the parser'), and stakeholder conversations ('here is exactly what failed and why')." },
+    { "t": "code", "lang": "js", "code": "// Validator: per-row error lists (runs anywhere, including the playground)\nfunction validateRow(schema, row) {\n  const errors = [];\n  for (const [field, rule] of Object.entries(schema)) {\n    const v = row[field];\n    if (v === undefined || v === null || v === \"\") {\n      if (rule.required) errors.push(`${field}: required but missing`);\n      continue;\n    }\n    if (rule.type === \"number\" && typeof v !== \"number\") {\n      const n = Number(v);\n      if (Number.isNaN(n)) { errors.push(`${field}: expected number, got ${JSON.stringify(v)}`); continue; }\n      row[field] = n; // coerce once, centrally, visibly\n    }\n    if (rule.minLen && String(v).length < rule.minLen) errors.push(`${field}: too short`);\n    if (rule.pattern && !rule.pattern.test(String(v))) errors.push(`${field}: format mismatch`);\n    if (rule.min !== undefined && v < rule.min) errors.push(`${field}: below minimum ${rule.min}`);\n  }\n  return errors;\n}", "caption": "Coercion happens once, centrally, visibly — never scattered across callers" },
+    { "t": "h", "text": "Quarantine: rejects with reasons, never silent drops" },
+    { "t": "p", "text": "Invalid rows go to **quarantine**: stored with their errors, counted, reported — never deleted, never silently fixed. Quarantine serves three masters: auditability (prove what entered and what didn't), tuning (reject patterns reveal parser bugs vs source rot), and recovery (fixed rules re-process quarantined rows). A pipeline without quarantine is a pipeline that lies about its input." },
+    { "t": "code", "lang": "js", "code": "// Load with quarantine: clean stream + reasoned rejects (plain JS)\nfunction loadRows(schema, rawRows) {\n  const clean = [], quarantined = [];\n  for (const raw of rawRows) {\n    const row = { ...raw };\n    const errors = validateRow(schema, row);\n    if (errors.length === 0) clean.push(row);\n    else quarantined.push({ row: raw, errors });\n  }\n  return { clean, quarantined, rejectRate: quarantined.length / rawRows.length };\n}\n// Report: rejectRate + top error messages = pipeline health at a glance.", "caption": "Two streams out, reject rate as the headline metric" },
+    { "t": "callout", "variant": "tip", "title": "Reading the reject rate", "text": "Low-but-nonzero with categorized reasons = healthy pipeline. 0% = validators asleep (or no validation at all). 40% = schema fights reality — loosen rules or fix extraction, don't hand-edit rows. Sudden jumps between runs = source format changed; the quarantine diff tells you exactly how." },
+    { "t": "practice", "sim": "js-playground", "title": "Quarantine the batch", "query": "function validateRow(schema, row) {\n  const errors = [];\n  for (const [field, rule] of Object.entries(schema)) {\n    const v = row[field];\n    if (v === undefined || v === null || v === '') {\n      if (rule.required) errors.push(field + ': required but missing');\n      continue;\n    }\n    if (rule.pattern && !rule.pattern.test(String(v))) errors.push(field + ': format mismatch');\n    if (rule.min !== undefined && v < rule.min) errors.push(field + ': below minimum ' + rule.min);\n  }\n  return errors;\n}\nconst schema = {\n  email: { type: 'string', required: true, pattern: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/ },\n  hours: { type: 'number', required: false, min: 0 },\n};\nconst batch = [\n  { email: 'maya@dev.io', hours: 912 },\n  { email: 'not-an-email', hours: 100 },\n  { hours: -5 },\n  { email: 'jonas@dev.io', hours: 534 },\n];\nlet bad = 0;\nfor (const row of batch) {\n  const errs = validateRow(schema, { ...row });\n  if (errs.length) { bad++; console.log('REJECT ' + JSON.stringify(row) + ' -> ' + errs.join('; ')); }\n}\nconsole.log('clean: ' + (batch.length - bad) + ', quarantined: ' + bad);", "note": "Run it: expect 2 clean, 2 quarantined — one format mismatch, one missing-email (required) + below-minimum. Every reject names its reasons; that list is the quarantine report." },
+    { "t": "keytakeaways", "items": ["Schema first: types, presence, formats — interpretation before repair", "Validators return error lists (field + expectation + actual), never bare booleans", "Quarantine stores rejects with reasons: auditability, tuning signal, recovery path", "Reject rate is the health metric: low-nonzero healthy, 0% asleep, floods mean schema-vs-reality mismatch"]} ],
+  "exercise": {
+    "prompt": "Extend the practice schema with a required name (minLen 2) and an optional country. (a) Run five rows through it in the playground: two clean, one missing name, one bad email, one negative hours. (b) Write the quarantine summary: counts + distinct error messages. (c) State which single validator change would halve the rejects, and whether that change is a fix or a surrender.",
+    "hints": [
+      "Copy the practice validator, add name rule { type: 'string', required: true, minLen: 2 } (needs the minLen check from the lesson's full version) and country { required: false }.",
+      "Five rows: clean ×2, missing-name ×1, bad-email ×1, negative-hours ×1 → expect 2 clean / 3 quarantined with 3 distinct messages.",
+      "Halving rejects usually means relaxing one rule (e.g. making email optional) — a surrender unless evidence shows the rule misfires on good data. Fixes change parsers; surrenders change standards: name which yours is."
+    ],
+    "solution": "// (a) extended schema + batch (see hints) → 2 clean / 3 quarantined.\n// (b) summary: clean 2; quarantined 3 (name-required ×1, email-format ×1, hours-minimum ×1).\n// (c) Making email optional halves rejects — surrender, not fix: it admits\n// uncontactable rows downstream. A fix would repair the email parser instead.",
+    "why": "The fix-vs-surrender distinction is the senior judgment this lesson exists to teach: every relaxed rule is a standard lowered, and standards lower only on evidence of misfiring — never to beautify a metric.",
+    "code": "// Extended validator checklist (adapt the practice code):\n// + name: { required: true, minLen: 2 }  (add minLen check)\n// + country: { required: false }",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Validator returns true/false instead of error lists. What is lost?",
+      "options": ["Nothing — booleans are cleaner", "Quarantine reasons, tuning signal, and stakeholder evidence: why each row failed, which rules misfire, proof of diligence", "Speed", "Type safety"],
+      "answer": 1,
+      "explain": "Booleans discard the diagnosis. Error lists turn rejects into actionable reports — the difference between '3 rows failed' and '3 rows failed, all on email format, parser suspected'."
+    },
+    {
+      "q": "Reject rate jumps from 2% to 40% overnight. First move?",
+      "options": ["Hand-edit the rejects", "Diff the quarantine: new error messages reveal what changed upstream (usually source format drift) — fix parser or rules, never rows", "Disable validation", "Delete the rejects"],
+      "answer": 1,
+      "explain": "Sudden jumps mean the world changed, not the code. The quarantine diff names the change; hand-editing rows treats symptoms while corrupting auditability."
+    },
+    {
+      "q": "0% reject rate across 10,000 messy PDF rows means?",
+      "options": ["Perfect pipeline", "Validators asleep or absent — messy sources always produce rejects; zero means nothing is being checked", "Lucky data", "Sufficient cleaning"],
+      "answer": 1,
+      "explain": "Real extraction is lossy; zero rejects on messy input proves non-enforcement. Healthy pipelines show low-but-nonzero with categorized reasons."
+    }
+  ],
+  "summary": "Schema declares, validators explain (error lists), quarantine preserves (reasons + counts), reject rate reports health. Validate first, clean second, drop nothing silently.",
+  "next": "Valid rows in hand — now make values consistent: unicode, mojibake, dates, numbers, duplicates. Next: the cleanup cookbook."
+}

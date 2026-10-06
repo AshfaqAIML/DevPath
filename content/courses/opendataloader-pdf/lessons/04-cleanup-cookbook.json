@@ -1,0 +1,56 @@
+{
+  "title": "Cleanup Cookbook: Normalize & Repair",
+  "slug": "04-cleanup-cookbook",
+  "objective": "After this lesson you will be able to normalize unicode and whitespace, detect mojibake without destroying evidence, standardize dates and numbers to canonical forms, and dedupe on keys with provenance instead of silent merging.",
+  "why": "Validated rows still carry dirt: 'Müller' vs 'Muller', dates as '06/10/2026' vs 'Oct 6', prices with commas vs dots, the same person twice. Cleanup makes equal things equal — the precondition for dedup, grouping, and retrieval. Done in fixed order with stated rules, it is engineering; done ad hoc, it is data vandalism.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Fixed order: normalize, repair, standardize, dedupe" },
+    { "t": "p", "text": "Cleanup stages compose — and order matters. **Normalize** representation first (unicode, whitespace): 'Müller' in two encodings becomes one string. **Repair** damage second (mojibake needs normalized input to detect reliably). **Standardize** formats third (dates/numbers to canonical forms on clean strings). **Dedupe** last (only equal things can be recognized as equal). Reordered stages fight each other; ordered stages compound." },
+    { "t": "code", "lang": "js", "code": "// Stage 1 — normalize: one unicode form, one whitespace rule\nfunction normalizeText(s) {\n  return s\n    .normalize('NFKC')                    // compatibility forms → canonical\n    .replace(/[\\u00A0\\u2000-\\u200B\\u202F\\u205F\\u3000]/g, ' ') // exotic spaces\n    .replace(/\\s+/g, ' ')                 // collapse runs (incl. newlines)\n    .trim();\n}\n// 'Müller' (2 encodings) → 1 string; 'a  b' → 'a b'. NFKC also folds ﬁ→fi.", "caption": "NFKC + single-space rule: representation first, always" },
+    { "t": "h", "text": "Mojibake: detect, return to bytes, never patch" },
+    { "t": "p", "text": "**Mojibake** (MÃ¼ller, â€”) is UTF-8 bytes misdecoded as Latin-1/Windows-1252. Detection: replacement characters (�), signature sequences (Ã + vowel, â + punctuation). Repair: **return to the original bytes and decode correctly** (`Buffer.from(s, 'latin1').toString('utf8')` when the misread encoding is known). Never regex away symptoms — patching destroys the evidence needed for correct repair and mangles innocent text." },
+    { "t": "code", "lang": "js", "code": "// Stage 2 — mojibake triage (runs in Node; playground: detection half)\nfunction looksMojibake(s) {\n  return /�|[ÃÂ][\\u0080-\\u00BF]|â[\\u0080-\\u009F]/.test(s);\n}\nfunction repairMojibake(s) {\n  // ONLY when you know the misread was latin1-over-utf8 bytes:\n  return Buffer.from(s, 'latin1').toString('utf8');\n}\n// 'MÃ¼ller' -> looksMojibake true -> repair -> 'Müller'\n// Rule: detect broadly, repair narrowly (known mis-encoding only).", "caption": "Detect with patterns, repair from bytes — never patch characters" },
+    { "t": "h", "text": "Standardize: one canonical form per type" },
+    { "t": "p", "text": "Dates → ISO-8601 (`2026-10-06`), never locale strings: ISO sorts, compares, and parses unambiguously. Numbers → plain decimals with documented decimal separator handling (European '1.234,56' vs US '1,234.56' need locale-aware parsing, never blind comma-stripping). Case → stated policy (names as-is, emails lowercased, codes uppercased). Each standardization names its input assumption — '06/10/2026' is day-first *by documented corpus convention*, verified on samples." },
+    { "t": "code", "lang": "js", "code": "// Stage 3 — standardize dates (explicit day-first policy, verified on samples)\nfunction standardizeDate(raw) {\n  const m = raw.trim().match(/^(\\d{1,2})[/.](\\d{1,2})[/.](\\d{4})$/);\n  if (!m) return { ok: false, reason: 'unrecognized date shape: ' + raw };\n  const [, d, mo, y] = m; // POLICY: day-first (corpus convention, sampled)\n  const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;\n  const dt = new Date(iso + 'T00:00:00Z');\n  if (Number.isNaN(dt.getTime())) return { ok: false, reason: 'impossible date: ' + raw };\n  return { ok: true, value: iso };\n}\n// standardizeDate('6/10/2026') -> { ok: true, value: '2026-10-06' }\n// standardizeDate('13/13/2026') -> { ok: false, ... } (quarantine, not crash)", "caption": "Parse strictly, return ok/reason objects — failures quarantine, never throw" },
+    { "t": "h", "text": "Dedupe on keys, with provenance" },
+    { "t": "p", "text": "Dedupe only on **declared keys** (email, (name,country), document id) — never on full-row equality (formatting differences hide true dupes; distinct rows can coincide). On key collision with *identical* payloads: keep first, log the merge. On collision with *conflicting* payloads: **quarantine for humans** — auto-merging conflicting data destroys evidence no log can restore. Every survivor records provenance: kept id + merged-from ids." },
+    { "t": "practice", "sim": "js-playground", "title": "Normalize the mess", "query": "function normalizeText(s) {\n  return s.normalize('NFKC').replace(/[\\u00A0\\u2000-\\u200B]/g, ' ').replace(/\\s+/g, ' ').trim();\n}\nfunction looksMojibake(s) {\n  return /�|Ã/.test(s);\n}\nconst samples = ['Mu\u0308ller', 'Müller', 'double  space', 'MÃ¼ller', 'clean'];\nfor (const s of samples) {\n  console.log(JSON.stringify(s) + ' -> ' + JSON.stringify(normalizeText(s)) + ' mojibake=' + looksMojibake(normalizeText(s)));\n}", "note": "Run it: the two Müllers converge (normalization works), double space collapses, and MÃ¼ller still flags mojibake AFTER normalizing — proving detection runs on normalized text, in order." },
+    { "t": "keytakeaways", "items": ["Order: normalize → repair → standardize → dedupe — stages compound in sequence, fight out of it", "Mojibake: detect broadly, repair from bytes narrowly, never patch characters", "Dates to ISO with stated day-first policy; failures return ok/reason into quarantine", "Dedupe on declared keys with provenance; conflicting collisions go to humans, never auto-merge"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice normalizer on three new strings of your invention (one with exotic whitespace, one double-encoded, one clean) and record outputs. (b) Write standardizeDate calls for '6/10/2026', '2026-10-06' (already ISO — what should happen?), and '32/01/2026', predicting each result before running. (c) State the dedupe decision for two rows sharing an email with different hours values.",
+    "hints": [
+      "Exotic whitespace: \\u00A0 (non-breaking space) is the classic; double-encoded: craft 'MÃ¼ller' literally. Predict, then run.",
+      "'2026-10-06' fails the DD/MM/YYYY regex by design — decide: accept-as-ISO first (better function), or reject to quarantine with reason. Either is defensible if stated; silent misparse is not.",
+      "'32/01/2026': day 32 impossible → ok:false → quarantine. Dedup conflict → human review with both rows preserved."
+    ],
+    "solution": "// (a) record NFKC convergence + mojibake flags per your strings.\n// (b) '6/10/2026' → 2026-10-06 (day-first policy); ISO input → quarantine-with-reason\n//     unless the function gains an ISO fast-path (recommended improvement);\n//     '32/01/2026' → ok:false (impossible) → quarantine.\n// (c) Quarantine for human review: same key, conflicting payload — auto-merge\n//     destroys evidence; survivors need kept-id + merged-from provenance.",
+    "why": "The ISO-input question is the lesson's sting: strict parsers reject valid-but-unexpected shapes, and the correct response is a reasoned improvement (ISO fast-path), not silent acceptance or silent dropping. Standards evolve through stated decisions.",
+    "code": "// Try the ISO fast-path improvement (playground):\n// if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return { ok: true, value: raw };",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Why normalize (NFKC + whitespace) before mojibake detection?",
+      "options": ["Alphabetical order", "Detection patterns assume canonical representation — unnormalized variants evade signatures and repair misfires", "Speed", "Unicode requires it legally"],
+      "answer": 1,
+      "explain": "Stages compound in order: normalization makes 'same text, same bytes' true, so detection signatures match reliably. Reversed order fights itself."
+    },
+    {
+      "q": "'MÃ¼ller' appears. Correct first action?",
+      "options": ["Replace Ã¼ with ü via regex", "Confirm mojibake signature, return to original bytes and decode as UTF-8 — repair from bytes, never patch characters", "Delete the row", "Ignore it"],
+      "answer": 1,
+      "explain": "Regex patching destroys evidence and mangles innocent text. Bytes → correct decoding is the only lossless repair; it requires knowing the misread encoding."
+    },
+    {
+      "q": "Two rows share an email key with different hours. Action?",
+      "options": ["Keep first silently", "Quarantine for human review with both rows preserved — conflicting collisions are judgments, not algorithms", "Average the hours", "Delete both"],
+      "answer": 1,
+      "explain": "Auto-merge on conflict destroys evidence. Provenance (kept + merged-from ids) covers identical-payload merges; conflicts need humans."
+    }
+  ],
+  "summary": "Normalize representation, repair from bytes, standardize to canonical forms with stated policies, dedupe on keys with provenance. Ordered stages compound; ad-hoc edits vandalize.",
+  "next": "Consistent values in hand — now slice documents for retrieval: overlap chunking, page metadata, and measuring whether answers survive. Next: chunk, ship, and prove it."
+}

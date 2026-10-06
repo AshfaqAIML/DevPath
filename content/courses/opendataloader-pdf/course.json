@@ -1,0 +1,138 @@
+{
+  "courseSlug": "opendataloader-pdf",
+  "subtitle": "The unglamorous 80% of every data project, written down: take messy real-world PDFs and land them as validated, cleaned, well-chunked datasets your stack can actually use",
+  "audience": "Developers handed a folder of PDFs (manuals, reports, invoices, papers) and told to 'load it into the system'. No ML background needed — just JavaScript fundamentals and willingness to stare at ugly text. Every algorithm in this course (routing, cleaning, validation, chunking, TF-IDF retrieval checks) runs live in the JS Playground; PDF-library calls target your own Node project.",
+  "outcomes": [
+    "Classify any PDF as text-native, scanned, or hybrid — and route each class to the right extraction path",
+    "Extract text with correct reading order and repair the standard damage (hyphenation, headers/footers, ligatures, whitespace)",
+    "Design a target schema for extracted data and validate rows against it with readable error reports",
+    "Run the cleanup cookbook: unicode normalization, mojibake detection, date/number standardization, key-based dedup",
+    "Chunk documents with overlap and page metadata for downstream retrieval, and measure chunk quality with a TF-IDF sanity check",
+    "Assemble the full loader pipeline (route → extract → validate → clean → chunk → evaluate) and report its reject rate honestly"
+  ],
+  "prereqSlugs": [],
+  "technologies": ["JavaScript (ES2019+)", "pdf.js (pdfjs-dist)", "Tesseract.js (OCR)", "Poppler pdftotext (CLI alternative)", "Unicode (NFKC)", "TF-IDF retrieval checks"],
+  "skills": ["PDF triage", "text extraction", "schema validation", "data cleanup", "document chunking", "retrieval evaluation"],
+  "assessment": [
+    {
+      "q": "A PDF renders perfect text on screen but getTextContent returns empty strings. Diagnosis?",
+      "options": ["The file is corrupted", "Scanned/image-only PDF: pixels, not text — route to OCR, not text extraction", "Wrong page number", "pdf.js is broken"],
+      "answer": 1,
+      "explain": "Rendering proves pixels exist; extraction needs a text layer. Screen appearance says nothing about extractability — triage by layer presence (selectable text? embedded fonts?), not by looks (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Extracted words read 'cus- tomer', 'fi-nance' at line ends. Fix?",
+      "options": ["Delete all hyphens", "Dehyphenate: rejoin letter-hyphen-newline-letter sequences; keep real compound hyphens (mid-line, spaced, or capitalized continuations)", "Uppercase everything", "Re-OCR the page"],
+      "answer": 1,
+      "explain": "End-of-line hyphen + lowercase continuation = line-break artifact; mid-line hyphens are usually real. Blanket deletion corrupts compound words (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why validate against a schema instead of cleaning harder?",
+      "options": ["Schemas make data load faster", "Validation separates interpretation (what shape must hold) from repair (fixing values) — rejects get quarantined with reasons instead of silently corrupting downstream", "Cleaning is impossible", "Schemas replace tests"],
+      "answer": 1,
+      "explain": "No amount of cleaning fixes a row missing its key field. Schema-first means rejects carry reasons; clean-first means garbage enters quietly (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Text shows 'MÃ¼ller' and 'â€”'. Diagnosis and first action?",
+      "options": ["German text, leave it", "Mojibake (double-encoded UTF-8): detect via replacement chars/signature sequences, then re-decode from the original bytes — never regex away the symptoms", "Wrong font", "Translate it"],
+      "answer": 1,
+      "explain": "MÃ¼ = UTF-8 bytes misread as Latin-1. Repair means returning to bytes and decoding correctly; character-level patching destroys information (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Two rows share an email key with different names. Dedup decision?",
+      "options": ["Keep the first silently", "Never auto-merge on conflicting keys: quarantine for human review — dedup deletes data, so survivors need provenance (kept id + merged-from log)", "Delete both", "Concatenate the names"],
+      "answer": 1,
+      "explain": "Key collision with conflicting payloads is a human judgment, not an algorithmic one. Auto-merge destroys evidence; quarantine preserves it with reasons (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Chunking with zero overlap for RAG retrieval. Risk?",
+      "options": ["None — cleaner chunks", "Boundary amnesia: answers spanning a cut become unretrievable as one unit — overlap (10–20%) buys boundary recall at linear storage cost", "Faster indexing always wins", "Overlap is illegal"],
+      "answer": 1,
+      "explain": "Cuts fall mid-thought. Overlap duplicates boundary text so split answers survive as retrievable units; metadata (page spans) makes citations possible (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Your TF-IDF check retrieves the wrong chunk for 'refund policy'. First suspect?",
+      "options": ["TF-IDF is obsolete", "Vocabulary mismatch (query says 'refund', chunk says 'reimbursement') or the answer spans a chunk boundary — diagnose before changing chunk size", "More overlap always", "Delete the chunk"],
+      "answer": 1,
+      "explain": "Retrieval failures diagnose the pipeline: mismatch vocabulary vs boundary splits vs missing content. The check's value is the diagnosis, not the score (Ch.5).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Loader reports 2% reject rate with reasons. Good or bad?",
+      "options": ["Bad — must be 0%", "Healthy: a measured, reasoned reject stream proves validation works; 0% means the validators are asleep, 40% means the schema fights reality", "Rejects should be deleted silently", "Only the rate matters, not reasons"],
+      "answer": 1,
+      "explain": "Reject rate is a process metric with reasons attached: low-but-nonzero with categorized reasons signals a working pipeline. Silence (0%) or floods both demand investigation (Ch.3 + capstone).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Manual Loader",
+    "summary": "Pick a real multi-page PDF manual/report in your domain (10+ pages). Build the full OpenDataLoader pipeline — triage, extract, validate, clean, chunk, evaluate — and deliver the loaded dataset plus an honest pipeline report: reject rate with reasons, retrieval hit-rate on 10 hand-written questions, and the three ugliest source artifacts you survived.",
+    "requirements": [
+      "Triage report: PDF class (text/scanned/hybrid) with evidence (layer test results), chosen extraction path per class",
+      "Target schema: 5+ fields with types, required flags, and format rules; validation function returning per-row error lists",
+      "Cleaned dataset: JSONL, one record per chunk with text, page_start, page_end, source label; NFKC-normalized, dehyphenated, dated-standardized",
+      "Chunking: fixed budget (e.g. ~500 chars) with ~15% overlap; no chunk crosses a section boundary silently (record boundary decisions)",
+      "Retrieval check: 10 hand-written questions against the chunks via TF-IDF/cosine; report hit-rate (gold chunk in top-3) with per-question verdicts",
+      "Pipeline report: stage counts in/out, reject rate with categorized reasons, the three ugliest artifacts, and what you would fix with one more day"
+    ],
+    "technical": [
+      "All algorithms (routing, cleaning, validation, chunking, TF-IDF) run in the JS Playground or plain Node — no new dependencies required for the core",
+      "PDF-library calls (pdf.js/Tesseract) run in your own Node project; playground code uses representative extracted text",
+      "Every number reproducible: fixer seeds committed, chunker parameters recorded, gold answers committed alongside questions",
+      "Rejects preserved with reasons — never silently dropped"
+    ],
+    "architecture": "Four sections: (1) Source dossier — triage evidence and path choices; (2) Pipeline — per-stage in/out counts, schema, and the validation/quarantine design; (3) Retrieval evaluation — 10 questions, verdicts, hit-rate, failure diagnoses; (4) Honest report — reject taxonomy, ugliest artifacts, one-more-day fixes.",
+    "steps": [
+      "Triage the PDF: layer tests, class decision, extraction path per class",
+      "Extract raw text (library in Node) and paste representative pages into playground snippets",
+      "Write the schema + validator; run it over extracted rows; tune rules from the reject stream",
+      "Apply the cleanup cookbook in fixed order (normalize → dehyphenate → strip furniture → standardize → dedupe)",
+      "Chunk with overlap + metadata; run the TF-IDF check on 10 questions; diagnose every miss",
+      "Assemble the report; lead with the reject rate and the retrieval hit-rate, not adjectives"
+    ],
+    "evaluation": [
+      "Schema enforced with per-row errors; rejects categorized with reasons and counts",
+      "Ch overlap present with page metadata; no silent section-boundary crossings",
+      "10 questions with gold chunks; hit-rate computed and every miss diagnosed",
+      "Three ugliest artifacts documented with the fix applied",
+      "Numbers reproducible from committed code + parameters"
+    ],
+    "stretch": [
+      "Add table extraction for one real table (cell grid → rows) with a validation rule per column",
+      "OCR one scanned page with Tesseract.js and report character-level diffs vs expectations",
+      "Swap TF-IDF for an embeddings provider on 3 questions and compare verdicts with cost noted"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Text looks perfect on screen but extracts as garbage. Walk me through triage.",
+      "a": "Screen rendering proves pixels, not text layers. Triage: (1) selectable text? extract a page and inspect raw strings — empty/garbled means missing/broken text layer; (2) embedded fonts present? custom encodings without ToUnicode maps extract as mojibake-by-construction; (3) scanned? route to OCR. Each answer picks the path: text layer → pdf.js-style extraction with cleanup; broken encoding → OCR or mapping repair; scans → Tesseract with preprocessing. Never re-run the same extractor hoping — classify first, then route."
+    },
+    {
+      "q": "Dehyphenation: how do you rejoin line breaks without corrupting real hyphens?",
+      "a": "Rule on shape: rejoin only letter-hyphen-newline-lowercase-letter (line-break artifact); preserve mid-line hyphens, spaced dashes, and hyphen-newline-capitalized (likely genuine compounds or proper nouns). Then verify on samples: over-eager joining corrupts 'state-of-the-art' split across lines only if you ignore the lowercase-continuation signal. Report the rule with examples — cleanup without stated rules is unreviewable."
+    },
+    {
+      "q": "Validate-first vs clean-first: defend your order.",
+      "a": "Validate-first: schema defines acceptable shape, rejects quarantine with reasons, cleaning operates on known-good structures. Clean-first risks laundering garbage into plausible-looking rows (a 'fixed' date that was actually a page number). The pipeline order is route → extract → validate → clean → chunk: interpretation before repair, repair before use. Reject rate with reasons is the process metric proving it works."
+    },
+    {
+      "q": "Chunk overlap: wasteful duplication or necessary? Quantify it.",
+      "a": "Necessary for boundary recall: answers spanning a cut are unretrievable as units without it. Cost is linear and bounded — 15% overlap on 500-char chunks adds ~15% storage for large recall gains on cross-boundary questions. Measure, don't philosophize: retrieval hit-rate with 0% vs 15% overlap on the same question set decides the parameter per corpus."
+    },
+    {
+      "q": "Your retrieval check fails on 'refund policy' but the text is in the corpus. Debug live.",
+      "a": "Three suspects in order: (1) vocabulary mismatch — query 'refund' vs chunk 'reimbursement/returns' (TF-IDF has no synonyms; check term overlap directly); (2) boundary split — answer spans two chunks (inspect neighbors, raise overlap); (3) chunk missing — extraction dropped the page (headers/footers strip ate it, or scanned page un-OCRed). Each has a distinct fix: synonym expansion, overlap/boundary rules, extraction repair. The check's job is producing this diagnosis."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,55 @@
+{
+  "title": "Messy Sources, Clean Datasets",
+  "slug": "01-messy-sources-clean-datasets",
+  "objective": "After this lesson you will be able to classify any PDF as text-native, scanned, or hybrid; predict which extraction path each class needs; and state the loader pipeline (route → extract → validate → clean → chunk → evaluate) that the next four lessons fill in.",
+  "why": "Every data project spends ~80% of its effort on loading and cleaning, yet tutorials start from pristine CSVs. Real sources are PDFs with missing text layers, custom font encodings, two-column layouts, and scanned pages stapled between digital ones. Classifying before extracting is the single decision that prevents weeks of rework: wrong path first means rebuilding everything later.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "PDFs are pictures with optional text taped on" },
+    { "t": "p", "text": "A PDF page is a **canvas of positioned glyphs and vector shapes** — not a document with paragraphs. The readable text you select is an optional **text layer** (characters + coordinates) sitting over the visuals. Extraction reads that layer, never the picture. No layer (scans, photos, flattened exports) means nothing to extract — pixels must become text first via OCR. Screen appearance proves rendering, never extractability." },
+    { "t": "table", "headers": ["Class", "Test", "Path"], "rows": [["Text-native", "Select text; extract a page and read raw strings — coherent sentences", "Text extraction (Ch.2): pdf.js / pdftotext"], ["Scanned / image-only", "Nothing selectable; extraction returns empty", "OCR (Tesseract.js); preprocess (deskew, contrast) first"], ["Hybrid", "Some pages extract, some don't", "Per-page routing: text path where layers exist, OCR elsewhere"], ["Broken encoding", "Extracts as mojibake despite selectable text", "Mapping repair or OCR fallback (Ch.4)"]] },
+    { "t": "h", "text": "The triage routine (ten minutes that save weeks)" },
+    { "t": "p", "text": "For any new PDF folder: (1) sample pages across the document (covers lie — middles differ); (2) test selectability and extract raw strings; (3) check fonts (embedded? custom encodings?); (4) detect layout (single vs multi-column, tables present?); (5) record the class **per page range**, because hybrids dominate real corpora. The output is a triage table, not a feeling — and every downstream choice references it." },
+    { "t": "code", "lang": "js", "code": "// Triage router: evidence in, path out (runs in your Node project)\n// Layers come from pdf.js getTextContent (Ch.2) or pdftotext probes.\nfunction routePage(evidence) {\n  if (evidence.textChars === 0) return \"ocr\";                    // scanned\n  if (!evidence.embeddedFonts) return \"ocr-fallback\";          // broken encoding likely\n  if (evidence.textChars < 50) return \"inspect-manually\";      // suspicious page\n  return \"text-extract\";                                       // text-native\n}\n// Dossier entry: { pages: \"12-40\", class: \"text-native\", path: \"text-extract\" }", "caption": "Routing is a function of evidence — encode the triage table, don't eyeball it" },
+    { "t": "p", "text": "The router above is deliberately crude — real triage adds layout and table detection — but its shape is the course's thesis: **decisions from evidence, recorded per page range**. The dossier becomes the project's first artifact, and every later stage (extraction settings, validation strictness, chunk metadata) keys off the class recorded here." },
+    { "t": "h", "text": "The pipeline you are building" },
+    { "t": "p", "text": "Five stages, one direction: **route** (this lesson: classify + record) → **extract** (Ch.2: text with order intact) → **validate** (Ch.3: schema + quarantine) → **clean** (Ch.4: normalize, repair, standardize, dedupe) → **chunk + evaluate** (Ch.5: overlap chunks with page metadata, TF-IDF retrieval check). Each stage's output is the next stage's input — and rejects at any stage carry reasons forward, never vanish." },
+    { "t": "diagram", "caption": "The OpenDataLoader pipeline", "nodes": ["Route: classify per page range, record dossier", "Extract: text with reading order + page numbers", "Validate: schema check, quarantine rejects with reasons", "Clean: normalize, repair, standardize, dedupe", "Chunk + evaluate: overlap chunks, TF-IDF hit-rate"] },
+    { "t": "practice", "sim": "js-playground", "title": "Route the batch", "query": "function routePage(evidence) {\n  if (evidence.textChars === 0) return 'ocr';\n  if (!evidence.embeddedFonts) return 'ocr-fallback';\n  if (evidence.textChars < 50) return 'inspect-manually';\n  return 'text-extract';\n}\nconst batch = [\n  { pages: '1-3', textChars: 4200, embeddedFonts: true },\n  { pages: '4-9', textChars: 0, embeddedFonts: false },\n  { pages: '10-10', textChars: 31, embeddedFonts: true },\n  { pages: '11-20', textChars: 9800, embeddedFonts: false },\n];\nfor (const p of batch) console.log(p.pages + ' -> ' + routePage(p));", "note": "Run it: expect text-extract, ocr, inspect-manually, ocr-fallback — in order. Then change pages 11-20 to embeddedFonts: true and re-run: routing follows evidence, not vibes." },
+    { "t": "keytakeaways", "items": ["PDFs render pixels; extraction reads the optional text layer — looks prove nothing", "Classify per page range (text/scanned/hybrid/broken), record a dossier, route from evidence", "Pipeline: route → extract → validate → clean → chunk + evaluate; rejects carry reasons forward"]} ],
+  "exercise": {
+    "prompt": "You receive a 20-page product manual: pages 1–3 extract cleanly with embedded fonts; 4–9 return empty strings; page 10 extracts 31 garbled characters; 11–20 extract fluently but list no embedded fonts. (a) Run the router on all four ranges in the playground. (b) Write the triage dossier (class + path per range, one evidence line each). (c) State the one range you would investigate first by hand, and what you would check.",
+    "hints": [
+      "Router inputs per range: {textChars, embeddedFonts}. 1–3: thousands + true. 4–9: zero. 10: 31 + true. 11–20: thousands + false.",
+      "Classes: text-native (1–3), scanned (4–9), suspicious (10), broken-encoding-likely (11–20 → OCR fallback or mapping repair).",
+      "Investigate page 10 first by hand: 31 garbled characters with fonts present smells like a scanned figure page or encoding edge — zoom in and decide OCR vs repair before batch settings touch it."
+    ],
+    "solution": "// (a) router outputs: text-extract, ocr, inspect-manually, ocr-fallback\n// (b) dossier:\n// 1-3: text-native → text-extract (4k+ coherent chars, embedded fonts)\n// 4-9: scanned → OCR (zero extractable chars)\n// 10: suspicious → inspect manually (31 garbled chars despite fonts)\n// 11-20: broken-encoding-likely → OCR fallback / mapping repair (fluent volume, no embedded fonts)\n// (c) Page 10 first: anomalies decide batch settings — render it, check for figures vs text, then route.",
+    "why": "Triage is evidence-first project management: the dossier turns a scary folder into four routed work items with per-range settings. Page 10 teaches the meta-lesson — anomalies get human eyes before batch automation, because one weird page reveals the corpus's failure modes.",
+    "code": "// Dossier check (run in playground)\nfunction routePage(e) {\n  if (e.textChars === 0) return 'ocr';\n  if (!e.embeddedFonts) return 'ocr-fallback';\n  if (e.textChars < 50) return 'inspect-manually';\n  return 'text-extract';\n}\nconsole.log(routePage({ textChars: 31, embeddedFonts: true })); // inspect-manually",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "A PDF looks perfect but extraction returns empty strings. Diagnosis?",
+      "options": ["Corrupted file", "Scanned/image-only: pixels without a text layer — route to OCR", "Wrong viewer", "Empty document"],
+      "answer": 1,
+      "explain": "Rendering proves pixels; extraction needs the text layer. Test selectability and raw extracted strings — looks never count as evidence."
+    },
+    {
+      "q": "Why classify per page range instead of per document?",
+      "options": ["More paperwork", "Real corpora are hybrid: covers, scans, and digital pages mix — one global setting mistreats most pages", "Per-page is slower", "Documents forbid it"],
+      "answer": 1,
+      "explain": "Hybrids dominate: a single pipeline setting fits no range well. Per-range routing lets text pages skip OCR costs while scans get the preprocessing they need."
+    },
+    {
+      "q": "Fluent extraction volume but no embedded fonts. Meaning?",
+      "options": ["Perfect file", "Broken-encoding risk: glyphs render via system substitution while extracted codes mislead — OCR fallback or mapping repair", "Scanned pages", "Empty pages"],
+      "answer": 1,
+      "explain": "Volume without font evidence is the mojibake warning light. Verify by reading raw strings, then route to repair-or-OCR before trusting a single character."
+    }
+  ],
+  "summary": "Classify first (text/scanned/hybrid/broken per page range), record the dossier, route from evidence. The pipeline — route, extract, validate, clean, chunk+evaluate — turns the 80% grind into five manageable stages.",
+  "next": "Routed — now extract text that survives contact with reality: reading order, hyphenation, furniture stripping, and whitespace discipline. Next: extraction that holds up."
+}

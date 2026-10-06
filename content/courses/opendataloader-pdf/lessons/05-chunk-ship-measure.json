@@ -1,0 +1,53 @@
+{
+  "title": "Chunk, Ship & Measure",
+  "slug": "05-chunk-ship-measure",
+  "objective": "After this lesson you will be able to chunk documents with overlap and page metadata, sanity-check retrieval with a TF-IDF cosine baseline, assemble the full five-stage pipeline, and report reject rates and hit-rates honestly.",
+  "why": "Cleaned text is not yet usable: downstream systems (search, RAG, analytics) consume chunks with provenance, and unmeasured pipelines rot silently. Chunking decides what answers *can* be retrieved; the TF-IDF check proves what *is*; the pipeline report turns a folder of PDFs into a trustworthy dataset with known quality numbers.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Chunking: budget, overlap, metadata" },
+    { "t": "p", "text": "A **chunk** is a retrievable unit: bounded size (~200–800 characters for most RAG stacks), **overlap** with neighbors (10–20% so split answers survive), and **metadata** (page_start, page_end, source, section) enabling citations. Never split mid-word; prefer splitting at sentence boundaries when the budget allows; record every boundary decision implicitly via metadata — provenance beats cleverness." },
+    { "t": "code", "lang": "js", "code": "// Overlap chunker with page metadata (plain JS, runs anywhere)\nfunction chunkText(text, { size = 500, overlap = 75, source = 'doc', pageOf = null } = {}) {\n  const chunks = [];\n  let start = 0, i = 0;\n  while (start < text.length) {\n    let end = Math.min(start + size, text.length);\n    if (end < text.length) { // prefer sentence boundary\n      const cut = text.lastIndexOf('. ', end);\n      if (cut > start + size * 0.5) end = cut + 1;\n    }\n    chunks.push({ id: `${source}#${i++}`, text: text.slice(start, end).trim(), source, pageOf });\n    if (end >= text.length) break;\n    start = end - overlap;\n  }\n  return chunks;\n}", "caption": "Budget + sentence-aware cuts + overlap + metadata — the whole chunker" },
+    { "t": "h", "text": "TF-IDF sanity check: retrieval you can reason about" },
+    { "t": "p", "text": "Before embeddings, prove the chunks answer questions with **TF-IDF + cosine similarity**: terms weighted by rarity across chunks, query scored per chunk, top-k returned. It has no synonyms and no semantics — which is exactly why it is the perfect *baseline*: every miss diagnoses cleanly as vocabulary mismatch, boundary split, or missing content (Ch.1 of debugging retrieval). Beat this baseline deliberately or keep it proudly." },
+    { "t": "code", "lang": "js", "code": "// Minimal TF-IDF retrieval over chunks (plain JS — the honest baseline)\nfunction tokenize(s) { return s.toLowerCase().match(/[a-z0-9]+/g) || []; }\nfunction tfidfRetrieve(chunks, query, k = 3) {\n  const docs = chunks.map((c) => tokenize(c.text));\n  const df = new Map();\n  for (const d of docs) for (const t of new Set(d)) df.set(t, (df.get(t) || 0) + 1);\n  const N = docs.length;\n  const vec = (tokens) => {\n    const tf = new Map();\n    for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);\n    const v = new Map();\n    for (const [t, f] of tf) v.set(t, f * Math.log(1 + N / (df.get(t) || N)));\n    return v;\n  };\n  const cos = (a, b) => {\n    let dot = 0, na = 0, nb = 0;\n    for (const [t, x] of a) { na += x * x; if (b.has(t)) dot += x * b.get(t); }\n    for (const x of b.values()) nb += x * x;\n    return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;\n  };\n  const qv = vec(tokenize(query));\n  return chunks\n    .map((c, i) => ({ id: c.id, score: cos(qv, vec(docs[i])) }))\n    .sort((a, b) => b.score - a.score)\n    .slice(0, k);\n}", "caption": "Thirty lines, zero dependencies, fully diagnosable misses" },
+    { "t": "h", "text": "Assemble: the pipeline as a report" },
+    { "t": "p", "text": "The loader runs route → extract → validate → clean → chunk, and its deliverable is numbers: per-stage in/out counts, reject rate with categorized reasons, retrieval hit-rate (gold chunk in top-3) over hand-written questions, and the ugliest artifacts survived. Lead every pipeline conversation with these numbers — '2% rejects (encoding), 8/10 hit-rate' beats any adjective about quality." },
+    { "t": "practice", "sim": "js-playground", "title": "Retrieve from chunks", "query": "function tokenize(s) { return s.toLowerCase().match(/[a-z0-9]+/g) || []; }\nfunction tfidfRetrieve(chunks, query, k) {\n  k = k || 3;\n  const docs = chunks.map((c) => tokenize(c.text));\n  const df = new Map();\n  for (const d of docs) for (const t of new Set(d)) df.set(t, (df.get(t) || 0) + 1);\n  const N = docs.length;\n  function vec(tokens) {\n    const tf = new Map();\n    for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);\n    const v = new Map();\n    for (const [t, f] of tf) v.set(t, f * Math.log(1 + N / (df.get(t) || N)));\n    return v;\n  }\n  function cos(a, b) {\n    let dot = 0, na = 0, nb = 0;\n    for (const [t, x] of a) { na += x * x; if (b.has(t)) dot += x * b.get(t); }\n    for (const x of b.values()) nb += x * x;\n    return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;\n  }\n  const qv = vec(tokenize(query));\n  return chunks.map((c, i) => ({ id: c.id, score: Math.round(cos(qv, vec(docs[i])) * 1000) / 1000 }))\n    .sort((a, b) => b.score - a.score).slice(0, k);\n}\nconst chunks = [\n  { id: 'manual#p0', text: 'Refund policy: returns accepted within thirty days with receipt.' },\n  { id: 'manual#p1', text: 'Shipping rates depend on weight zones and delivery speed options.' },\n  { id: 'manual#p2', text: 'To request a refund contact support with your order number.' },\n];\nconsole.log(JSON.stringify(tfidfRetrieve(chunks, 'refund policy')));", "note": "Run it: expect manual#p0 first (refund + policy terms), manual#p2 second (refund only), shipping last at ~0. Then query 'warranty' — zero overlap everywhere — and watch honest zeros: the check reports what the vocabulary supports, nothing more." },
+    { "t": "keytakeaways", "items": ["Chunks: bounded size, 10–20% overlap, page metadata — provenance beats cleverness", "TF-IDF + cosine is the diagnosable baseline: misses mean mismatch, boundary, or absence", "Pipeline deliverable is numbers: stage counts, reject taxonomy, hit-rate over hand-written questions", "Lead with metrics ('2% rejects, 8/10 hits'), never adjectives"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice retrieval and record the full ranking with scores. (b) Add a fourth chunk about 'reimbursement procedures' (no word 'refund') and re-run the 'refund policy' query — record what happens and diagnose it in one sentence. (c) Write the three-line pipeline report for a hypothetical 200-page manual run (invent plausible counts, label them illustrative): stage in/outs, reject taxonomy, hit-rate.",
+    "hints": [
+      "Baseline ranking first: p0 > p2 > p1 with p1 near zero. Scores are cosine similarities, not confidences — read them comparatively.",
+      "The reimbursement chunk tests vocabulary mismatch: TF-IDF has no synonyms, so semantically-right-but-lexically-distant chunks score ~0. That sentence is the diagnosis.",
+      "Illustrative report shape: '1,840 pages → 1,802 extracted (38 scanned→OCR) → 1,790 validated (12 quarantined: 8 encoding, 4 schema) → 3,412 chunks; hit-rate 8/10; misses: 1 vocabulary, 1 boundary.'"
+    ],
+    "solution": "// (a) p0 first, p2 second, p1 ~0 (see practice).\n// (b) reimbursement chunk scores ~0 despite relevance — vocabulary mismatch:\n//     TF-IDF matches terms, not meanings; fix via synonym expansion or embeddings.\n// (c) report shape in hints — numbers illustrative, taxonomy real.",
+    "why": "The reimbursement trap teaches TF-IDF's boundary honestly: lexical matching is both the method and the limit. Knowing exactly where the baseline fails is what justifies (or rejects) upgrading to embeddings with cost noted.",
+    "code": "// Diagnose the miss (playground): add the chunk, re-run, compare scores.\n// Fix directions: synonym map (cheap) vs embeddings (costly, noted).",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Why 10–20% overlap instead of 0% or 50%?",
+      "options": ["Tradition", "0% loses cross-boundary answers; 50% doubles storage for little extra recall — overlap buys boundary survival at bounded linear cost", "Overlap is mandatory syntax", "More overlap always wins"],
+      "answer": 1,
+      "explain": "Boundary amnesia is the failure (split answers unretrievable); storage is the price. 10–20% is the measured sweet spot — verify per corpus via hit-rate with/without."
+    },
+    {
+      "q": "TF-IDF check returns zeros for 'warranty' though the manual covers it. Diagnosis?",
+      "options": ["TF-IDF is broken", "Vocabulary mismatch is one suspect — but first verify the content exists in chunks at all (extraction may have dropped the page); diagnose mismatch vs boundary vs absence in order", "Increase k", "Re-chunk everything"],
+      "answer": 1,
+      "explain": "Ordered diagnosis: content present? (extraction), same unit? (boundaries), same words? (vocabulary). Each answer points at a different stage's fix."
+    },
+    {
+      "q": "Chunk metadata must include?",
+      "options": ["Only the text", "Source + page span (+ section where available): citations and boundary audits are impossible without provenance", "Font names", "File size"],
+      "answer": 1,
+      "explain": "Retrieval without provenance is trivia: citations need page spans, boundary audits need section info. Metadata is the difference between answers and evidence."
+    }
+  ],
+  "summary": "Bound chunks with overlap and metadata, prove retrieval with TF-IDF baselines, diagnose every miss by stage, and ship numbers — stage counts, reject taxonomy, hit-rate. The folder of PDFs is now a dataset with known quality.",
+  "next": "Course complete: take the 8-question final assessment (70% to pass), then build the Manual Loader capstone — and close with interview prep."
+}

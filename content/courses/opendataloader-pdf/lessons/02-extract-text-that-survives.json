@@ -1,0 +1,56 @@
+{
+  "title": "Extract Text That Survives",
+  "slug": "02-extract-text-that-survives",
+  "objective": "After this lesson you will be able to extract page text with correct reading order via pdf.js, repair hyphenation and strip running furniture (headers/footers/page numbers), and normalize whitespace into clean paragraphs.",
+  "why": "Raw extraction output is famously ugly: words split mid-syllable, 'Page 12 of 40' interleaved mid-sentence, two-column layouts interleaved line-by-line. Downstream stages (validation, chunking, retrieval) inherit every artifact — extraction quality is the ceiling on everything after it. An hour here saves ten in debugging retrieval misses later.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Reading order is not line order" },
+    { "t": "p", "text": "PDF text items carry coordinates, not paragraphs — `getTextContent()` returns items in *paint order*, which for two-column layouts interleaves left and right columns line by line. Correct extraction sorts by geometry: group items into lines by vertical position, order lines top-to-bottom, and within multi-column pages split columns by horizontal gaps first. Libraries (pdf.js) expose coordinates; the ordering logic is yours." },
+    { "t": "code", "lang": "js", "code": "// Real pdf.js extraction: items carry coordinates (runs in your Node project)\n// npm i pdfjs-dist (legacy build for Node: pdfjs-dist/legacy/build/pdf.mjs)\nimport * as pdfjsLib from \"pdfjs-dist/legacy/build/pdf.mjs\";\nconst doc = await pdfjsLib.getDocument({ data: fileBytes }).promise;\nconst page = await doc.getPage(1);\nconst tc = await page.getTextContent();\n// Each item: { str, transform: [scaleX, skewY, skewX, scaleY, x, y], ... }\nconst lines = [];\nfor (const it of tc.items) {\n  const [, , , , x, y] = it.transform;\n  lines.push({ text: it.str, x, y });\n}\n// Then: cluster by y into lines, sort top-to-bottom, split columns by x-gaps.", "caption": "getTextContent gives positioned fragments — ordering is your code's job" },
+    { "t": "h", "text": "Dehyphenation: rejoin with rules" },
+    { "t": "p", "text": "Line-end splits ('cus-\\ntomer') must rejoin; genuine compounds ('state-of-the-art') must survive. Rule: rejoin **letter-hyphen-newline-lowercase-letter** only — mid-line hyphens, spaced dashes, and hyphen-newline-capitalized continuations stay untouched. State the rule in a comment; cleanup without stated rules is unreviewable." },
+    { "t": "code", "lang": "js", "code": "// Dehyphenate: join line-break splits, preserve real compounds\nfunction dehyphenate(text) {\n  return text.replace(/([A-Za-z])-[ \\t]*\\n[ \\t]*([a-z])/g, \"$1$2\");\n}\n// 'cus-\\ntomer' -> 'customer'   (rejoined: lowercase continuation)\n// 'state-of-\\nthe-art' stays? 'e-\\nt' + lowercase 't' rejoins to 'the' —\n// correct here! Real danger is 'well-\\nKnown' (capital K: preserved).", "caption": "One regex with a lowercase-continuation guard — verify on samples" },
+    { "t": "h", "text": "Strip the furniture: headers, footers, page numbers" },
+    { "t": "p", "text": "Running heads ('ACME Manual — Page 12 of 40') repeat every page and poison retrieval with identical chunks. Strip by repetition: lines identical (after trimming digits) across ≥3 pages are furniture until proven otherwise. Page numbers match `^\\d+$` or `Page \\d+` patterns positionally (top/bottom 10% of page). Never strip by content blacklist ('Chapter' might be furniture on page tops and real text in body — position + repetition decide)." },
+    { "t": "code", "lang": "js", "code": "// Furniture stripper: repetition + position, never content blacklists\nfunction stripFurniture(pages) {\n  // pages: array of arrays of { text, y, pageHeight }\n  const seen = new Map();\n  for (const lines of pages)\n    for (const l of lines) {\n      const key = l.text.replace(/\\d+/g, \"#\").trim();\n      seen.set(key, (seen.get(key) || 0) + 1);\n    }\n  return pages.map((lines) =>\n    lines.filter((l) => {\n      const key = l.text.replace(/\\d+/g, \"#\").trim();\n      const edge = l.y < l.pageHeight * 0.1 || l.y > l.pageHeight * 0.9;\n      return !(seen.get(key) >= 3 && edge); // repeated + marginal = furniture\n    })\n  );\n}", "caption": "Repeated + marginal = furniture: the two-signal rule" },
+    { "t": "h", "text": "Whitespace discipline" },
+    { "t": "p", "text": "Extraction yields chaotic spacing: multiple spaces, stray newlines mid-sentence, tabs-as-layout. Normalize in fixed order: (1) join soft line breaks *within* paragraphs (single newline → space) while keeping blank lines as paragraph breaks; (2) collapse horizontal runs to single spaces; (3) trim. Order matters — collapsing before joining destroys the paragraph signals you need." },
+    { "t": "practice", "sim": "js-playground", "title": "Repair the damage", "query": "function dehyphenate(text) {\n  return text.replace(/([A-Za-z])-[ \\t]*\\n[ \\t]*([a-z])/g, '$1$2');\n}\nfunction tidy(text) {\n  return text\n    .replace(/([^\\n])\\n([^\\n])/g, '$1 $2')\n    .replace(/[ \\t\\u00A0]+/g, ' ')\n    .trim();\n}\nconst raw = 'The cus-\\ntomer portal  spans\\nmultiple lines.\\n\\nPage 12 of 40';\nconsole.log(JSON.stringify(tidy(dehyphenate(raw))));", "note": "Run it: expect \"The customer portal spans multiple lines.\\n\\nPage 12 of 40\" — hyphen rejoined, soft break joined, spaces collapsed, and the blank-line paragraph break preserved (that preservation is the feature, not a bug). (Furniture stripping needs multi-page repetition — that's the stripFurniture function above, run it on your own pages.)" },
+    { "t": "keytakeaways", "items": ["Order by geometry (columns, then lines top-to-bottom) — paint order lies on multi-column pages", "Dehyphenate letter-hyphen-newline-lowercase only; real compounds survive by rule, stated in comments", "Furniture = repeated + marginal (position), never content blacklists", "Whitespace pipeline order: join soft breaks → collapse runs → trim; paragraph breaks are blank lines"]} ],
+  "exercise": {
+    "prompt": "Given three extracted pages where each contains the header 'ACME Manual' at top and footer 'Page N of 40' at bottom, plus body text with hyphen splits: (a) run the practice repair on one hyphenated body paragraph in the playground; (b) hand-simulate stripFurniture on the header/footer lines (show the digit-masked keys and counts); (c) state what breaks if you strip by the blacklist ['ACME', 'Page'] instead.",
+    "hints": [
+      "Practice repair first on a body sample with a cus-\\ntomer style split — confirm the rejoined output before touching furniture.",
+      "Masked keys: 'ACME Manual' → 'ACME Manual' (count 3), 'Page 12 of 40' → 'Page # of #' (count 3) — both repeated + marginal → stripped.",
+      "Blacklist breakage: a body sentence 'See Page 12 for details' or 'ACME announced…' matches the blacklist mid-page (not marginal, count 1) and gets wrongly deleted — position + repetition is the guard."
+    ],
+    "solution": "// (a) tidy(dehyphenate(body)) → clean paragraph (see practice).\n// (b) header key 'ACME Manual' ×3 + top edge → furniture; footer key\n// 'Page # of #' ×3 + bottom edge → furniture; body lines count 1 → kept.\n// (c) Blacklist deletes mid-page body mentions (count 1, central) —\n// position + repetition is what distinguishes furniture from content.",
+    "why": "The exercise separates the three extraction repairs (order/hyphen/furniture/whitespace) and proves why the furniture rule needs both signals — repetition without position deletes legitimately repeated body phrases; position without repetition deletes unique marginalia like captions.",
+    "code": "// Verify on your pages: masked-key census (run in playground)\nfunction mask(s) { return s.replace(/\\d+/g, '#').trim(); }\nconsole.log(mask('Page 12 of 40')); // Page # of #\nconsole.log(mask('See Page 12 for details')); // See Page # for details",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Two-column PDF extracts with sentences interleaved left-right-left-right. Cause + fix?",
+      "options": ["Corrupted fonts — re-OCR", "Paint order ≠ reading order: sort items geometrically (split columns by x-gaps, then lines top-to-bottom)", "Wrong page size", "Need a bigger model"],
+      "answer": 1,
+      "explain": "Items carry coordinates, not reading sequence. Geometry-first ordering (columns, then lines) restores the author's order — extraction callers own this logic."
+    },
+    {
+      "q": "'well-\\nKnown' vs 'cus-\\ntomer' — rejoin which, and by what rule?",
+      "options": ["Both — all hyphens at line ends are artifacts", "Rejoin cus-tomer (lowercase continuation); preserve well-Known (capitalized continuation signals genuine compound/proper noun)", "Neither — preserve everything", "Delete both hyphens and join"],
+      "answer": 1,
+      "explain": "Lowercase continuation marks line-break splits; capitals mark real compounds. The rule must be stated in comments — silent joining corrupts compounds."
+    },
+    {
+      "q": "Why not strip headers via a content blacklist like ['ACME', 'Page']?",
+      "options": ["Blacklists are slow", "Body text legitimately contains those words mid-page — stripping needs repetition + marginal position, not content matching", "Headers should be kept", "Blacklists only work in Python"],
+      "answer": 1,
+      "explain": "'See Page 12 for details' is body, not furniture. Two-signal rule (repeated across pages AND marginal position) distinguishes them; content matching cannot."
+    }
+  ],
+  "summary": "Extract with geometry (columns, lines, order), dehyphenate by rule, strip furniture by repetition + position, normalize whitespace in pipeline order. Extraction quality ceilings everything downstream.",
+  "next": "Clean text in hand — but what shape must it hold? Next: schemas, validation, and quarantine discipline."
+}
