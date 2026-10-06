@@ -1,0 +1,52 @@
+{
+  "title": "Hybrid Retrieval: Fuse, Don't Choose",
+  "slug": "04-hybrid-retrieval",
+  "objective": "After this lesson you will be able to combine lexical and vector retrieval with staged funnels and RRF-style score fusion, measure each stage's contribution, and decide per-query routing vs fusion.",
+  "why": "Lexical wins SKUs and names; vectors win paraphrase — production queries mix both ('SH-1-v9 return window' has exact tokens AND intent). Single-mode retrieval fails half the catalog by construction. Hybrid strategies (staged funnels, score fusion, per-query routing) cover both miss profiles, and measuring stage contributions tells you which half earns its cost.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Staged funnels: cheap recall, precise top" },
+    { "t": "p", "text": "The standard production shape: **cheap first-stage** retrieval (TF-IDF/BM25 + vector, top-200 each) → **union + dedupe** → **rerank top-50** (Ch.6) → **generate from top-5**. Cost tiers match stages: pennies for recall, dimes for rerank, dollars for generation context. Each stage's contribution is measurable: ablate it (remove → re-score gold) and keep only stages that earn their latency." },
+    { "t": "code", "lang": "js", "code": "// Staged hybrid funnel: union recall, fused ordering (plain JS)\nfunction reciprocalRank(rank, k = 60) { return 1 / (k + rank); }\nfunction fuseRRF(rankedLists) {\n  // rankedLists: arrays of ids, best-first, one per retriever\n  const scores = new Map();\n  for (const list of rankedLists)\n    list.forEach((id, i) => scores.set(id, (scores.get(id) || 0) + reciprocalRank(i + 1)));\n  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);\n}\n// RRF needs only ranks (no score calibration across systems!) — the robust default.", "caption": "RRF fuses rank positions: no cross-system score normalization required" },
+    { "t": "h", "text": "RRF: fusion without calibration" },
+    { "t": "p", "text": "**Reciprocal Rank Fusion** (`1/(k+rank)`, k=60 standard) sums per-system rank scores: a chunk ranked #1 lexically and #3 by vector outscores also-rans everywhere. Its superpower is avoiding score calibration (TF-IDF's 0..1 and cosine's −1..1 never mix directly). Consensus across retrievers also signals confidence — agreed top ranks are rarely wrong." },
+    { "t": "h", "text": "Per-query routing vs always-fuse" },
+    { "t": "p", "text": "Alternative: **route** (SKU pattern → lexical; paraphrase → vector; mixed → fuse). Routing saves the unused retriever's cost but adds a classifier to maintain and misroute. Default to always-fuse (simpler, robust); route only when one retriever's cost dominates AND query intent classifies cleanly (SKU regexes classify perfectly — the rare free lunch)." },
+    { "t": "practice", "sim": "js-playground", "title": "Fuse the rankings", "query": "function reciprocalRank(rank, k) { k = k || 60; return 1 / (k + rank); }\nfunction fuseRRF(rankedLists) {\n  const scores = new Map();\n  for (const list of rankedLists)\n    list.forEach((id, i) => scores.set(id, (scores.get(id) || 0) + reciprocalRank(i + 1)));\n  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);\n}\nconst lexical = ['p3-sku-exact', 'p1', 'p2'];\nconst vector = ['p1', 'p3-sku-exact', 'p4-paraphrase'];\nconst fused = fuseRRF([lexical, vector]);\nconsole.log(fused.join(','));\nconsole.log('consensus top: ' + (fused[0] === 'p3-sku-exact' || fused[0] === 'p1'));\nconsole.log('union size: ' + fused.length);", "note": "Run it: consensus items (p1, p3) float above single-system picks (p2, p4) — agreement outranks loners. Union size 4 shows recall breadth preserved: fusion reorders, never drops." },
+    { "t": "keytakeaways", "items": ["Funnel: cheap union recall → rerank → minimal generation context, cost-tiered per stage", "RRF fuses ranks without score calibration; consensus signals confidence", "Always-fuse by default; route only on clean classifiers (SKU regex) with dominant cost savings"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice fusion and explain why p2/p4 sink below consensus picks. (b) Add a third retriever list ['p4-paraphrase','p2','p5'] and re-run: state the new order and why the consensus pair still holds top-2. (c) State when you would switch this corpus to per-query routing, with the cost condition.",
+    "hints": [
+      "Consensus math: p1 gets 1/61+1/62, p3 gets 1/61+1/62... compute both; loners get single terms. Agreement compounds.",
+      "Third list boosts p4 (two votes now) — watch it climb past p2 to #3 while the consensus pair (p3, p1) holds top-2: agreement resists single-list boosts. p5 enters (union size 5).",
+      "Routing wins when: one retriever dominates cost AND intent classifies cleanly (SKU regex → lexical-only saves the vector call per SKU query)."
+    ],
+    "solution": "// (a) consensus (two votes each) outranks loners (one vote): math, not magic.\n// (b) p4 climbs past p2 to #3; consensus pair holds top-2 (agreement resists\n//     single-list boosts); p5 enters (union size 5).\n// (c) route iff cost-dominant retriever + clean intent classifier (SKU regex).",
+    "why": "Vote-count intuition (agreement compounds) plus the routing-vs-fusion cost analysis are the two hybrid judgments — each computed, not asserted.",
+    "code": "// Fusion-probe pattern: add a retriever list, watch rank deltas.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Why RRF over direct score averaging?",
+      "options": ["Faster", "Rank-only fusion needs no cross-system calibration (TF-IDF 0..1 vs cosine −1..1 never mix directly)", "Prettier", "Required by law"],
+      "answer": 1,
+      "explain": "Incommensurable scales break averaging; ranks are universal. RRF's k=60 dampens top-heavy dominance sanely."
+    },
+    {
+      "q": "SKU-heavy query load, vector calls dominate cost. Move?",
+      "options": ["Always fuse everything", "Route: SKU-regex queries go lexical-only (clean classifier + dominant cost = the rare justified routing)", "Drop lexical", "Bigger vectors"],
+      "answer": 1,
+      "explain": "Routing's two preconditions met: classifies perfectly (regex), saves the dominant cost. Otherwise always-fuse."
+    },
+    {
+      "q": "New reranker added to the funnel. Proof it earns its latency?",
+      "options": ["Vendor benchmarks", "Ablate: remove it, re-score gold hit-rate — keep only measured contributors", "Intuition", "More top-k"],
+      "answer": 1,
+      "explain": "Stage contributions are measured by ablation on gold sets. Unmeasured stages accumulate latency without accountability."
+    }
+  ],
+  "summary": "Union recall, RRF fusion, rerank, minimal context — cost-tiered, ablation-justified. Fuse by default; route on clean classifiers with dominant savings.",
+  "next": "Fused retrieval finds candidates — but vague shopper queries fail before retrieval starts. Next: rewriting intent into retrievable form."
+}

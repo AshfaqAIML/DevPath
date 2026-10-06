@@ -1,0 +1,51 @@
+{
+  "title": "RAG Anatomy: Why Retrieve",
+  "slug": "01-rag-anatomy",
+  "objective": "After this lesson you will be able to explain RAG's three reasons (freshness, grounding, cost), map the ten-stage pipeline, and decide RAG vs fine-tuning vs bigger prompts per use case.",
+  "why": "Language models freeze knowledge at training, invent specifics under uncertainty, and charge per token for everything pasted. RAG (retrieval-augmented generation) answers all three: live data retrieved per query, claims bound to sources, compact relevant context instead of whole manuals. It is the architecture behind every serious store assistant, support copilot, and doc Q&A system — and this course builds it on product data.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Three reasons: fresh, grounded, cheap" },
+    { "t": "p", "text": "**Freshness**: prices, policies, and inventory change hourly — retrieval reads current rows, no retraining. **Grounding**: answers cite spans, converting hallucinations into checkable claims or visible abstentions. **Cost**: retrieving 5 chunks beats pasting manuals and beats fine-tuning runs. Each reason maps to a failure it prevents: staleness, invention, and budget blowout." },
+    { "t": "diagram", "caption": "The ten-stage RAG pipeline", "nodes": ["Ingest documents", "Parse + clean (OpenDataLoader)", "Chunk with metadata", "Embed chunks", "Index vectors", "Retrieve top-k for query", "Rerank + filter", "Assemble context", "Generate with citations", "Evaluate + log"] },
+    { "t": "h", "text": "RAG vs fine-tuning vs bigger prompts" },
+    { "t": "p", "text": "**Bigger prompts** (paste everything): dies on scale, cost, and staleness — prototyping only. **Fine-tuning**: bakes stable behavior/style/reasoning patterns; useless for changing facts, uncitable by construction. **RAG**: live facts with sources; needs retrieval quality work. Production reality combines: tuned behavior over retrieved facts, with prompts structuring both." },
+    { "t": "table", "headers": ["Need", "Answer"], "rows": [["Hourly prices", "RAG (fresh reads)"], ["Brand voice", "Fine-tune or system prompt (stable style)"], ["Cited policy answers", "RAG (sources required)"], ["Reasoning patterns", "Fine-tune or few-shots (stable skill)"], ["10-page manual Q&A", "RAG (can't paste affordably)"]] },
+    { "t": "practice", "sim": "js-playground", "title": "Route the need", "query": "function routeNeed(need) {\n  if (need.changes === 'hourly' || need.cite) return 'rag';\n  if (need.stable && (need.style || need.skill)) return 'finetune-or-prompt';\n  if (need.small && !need.fresh) return 'bigger-prompt';\n  return 'rag';\n}\nconst cases = [\n  [{ changes: 'hourly', cite: true }, 'rag'],\n  [{ stable: true, style: true }, 'finetune-or-prompt'],\n  [{ stable: true, skill: true }, 'finetune-or-prompt'],\n  [{ small: true, fresh: false }, 'bigger-prompt'],\n];\nlet pass = 0;\nfor (const [need, expected] of cases) {\n  const got = routeNeed(need);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(need) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' needs routed');", "note": "Run it: expect 4/4. Architecture choice is a decision procedure over need properties (freshness, citability, stability) — not loyalty to any technique." },
+    { "t": "keytakeaways", "items": ["RAG for fresh/grounded/affordable facts; fine-tuning for stable style/skills; big prompts for prototypes", "Ten stages from ingest to evaluate — each lesson owns stages, failures localize by stage", "Route architectures by need properties, never by hype"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice router and confirm 4/4. (b) Classify five store needs (hourly prices, brand voice, cited returns policy, size advice, full-manual Q&A) with one-line reasons. (c) State which two stages your current project would most likely fail at, and what evidence would prove it.",
+    "hints": [
+      "4/4 baseline; each case exercises one decision rule (fresh/cite → RAG; stable style/skill → tune/prompt; small static → paste).",
+      "Prices→RAG; voice→tune/prompt; cited policy→RAG; size advice→RAG over size charts (fresh-ish, citable); manual→RAG.",
+      "Honest picks with proofs: chunking (hit-rate on gold) or grounding (citation audit) — failures need named evidence, not vibes."
+    ],
+    "solution": "// (a) 4/4 needs routed.\n// (b) prices RAG / voice tune / policy RAG / sizes RAG / manual RAG (reasons per hints).\n// (c) two weakest stages named with proving evidence (hit-rates, citation audits).",
+    "why": "Architecture routing plus self-assessment (weakest stages with proofs) are the two strategic skills: choose rightly, then aim improvement where evidence points.",
+    "code": "// Need-router pattern: freshness/citability/stability → architecture.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Hourly-changing prices with citations required. Architecture?",
+      "options": ["Nightly fine-tuning", "RAG: live reads + citable spans; fine-tuning freezes and can't cite", "Bigger prompts", "No AI"],
+      "answer": 1,
+      "explain": "Freshness + grounding jointly force RAG. Fine-tuning serves stable behavior, never live facts."
+    },
+    {
+      "q": "RAG pipeline fails. How do you localize?",
+      "options": ["Retrain everything", "Per-stage checks: chunks exist? retrieval hits? rerank orders? generation cites? — stage-wise evidence isolates", "Bigger model", "More chunks"],
+      "answer": 1,
+      "explain": "Pipelines debug stage by stage with each stage's metric. Blanket fixes waste effort on healthy stages."
+    },
+    {
+      "q": "When is pasting the whole manual acceptable?",
+      "options": ["Always", "Prototypes and tiny static corpora only — scale, cost, and staleness kill it in production", "Never", "With bigger models"],
+      "answer": 1,
+      "explain": "Dumps work until tokens, money, or freshness object. Production needs retrieval; prototypes need speed."
+    }
+  ],
+  "summary": "Fresh, grounded, cheap — RAG's three reasons with a ten-stage pipeline and need-based architecture routing. Every later lesson owns stages of this map.",
+  "next": "Pipeline mapped — now its first material: chunking product catalogs into retrievable, citable, metadata-rich units. Next: units that answer."
+}

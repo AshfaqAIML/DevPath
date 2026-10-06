@@ -1,0 +1,53 @@
+{
+  "title": "Evaluating RAG: Hit-Rate to Honesty",
+  "slug": "08-evaluating-rag",
+  "objective": "After this lesson you will be able to score retrieval (hit-rate, MRR), generation (faithfulness, citation coverage, abstention precision), combine them into severity-weighted gates, and taxonomize failures by stage for targeted fixes.",
+  "why": "'The demo looked good' ships incidents: retrieval misses hide behind fluent answers, stale prices average into great hit-rates, one severity class poisons the whole. RAG eval separates retrieval truth (found the gold?) from generation truth (said only sourced things?) with per-stage metrics and severity weights — the measurement spine of the capstone.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Retrieval metrics: hit-rate and MRR" },
+    { "t": "p", "text": "**Hit-rate@k**: fraction of questions with a gold chunk in top-k (binary per question, averaged). **MRR** (mean reciprocal rank): 1/rank of the first gold hit, averaged — rewards top placement, not just presence. Track both: hit-rate gates coverage ('found at all'), MRR gates ordering quality ('found first'). Slice by query kind (SKU vs paraphrase vs vague) — aggregate scores hide the segments that need different fixes." },
+    { "t": "code", "lang": "js", "code": "// Hit-rate@k + MRR over gold runs (plain JS)\nfunction ragMetrics(runs, k) {\n  // runs: [{ goldIds: [...], ranked: [...] }]\n  let hits = 0, mrr = 0;\n  for (const r of runs) {\n    const rank = r.ranked.findIndex((id) => r.goldIds.includes(id));\n    if (rank >= 0 && rank < k) { hits++; mrr += 1 / (rank + 1); }\n  }\n  return { hitRate: hits / runs.length, mrr: mrr / runs.length };\n}\n// Presence (hit-rate) vs placement (MRR): two numbers, two different fixes.", "caption": "Two retrieval numbers: found-at-all vs found-first" },
+    { "t": "h", "text": "Generation metrics: faithfulness triple" },
+    { "t": "p", "text": "**Faithfulness**: every claim entailed by cited spans (sampled human or NLI-model judged). **Citation coverage**: % factual claims carrying citations (mechanical check). **Abstention precision**: unknowns truly absent vs answerable-but-missed (gold-labeled). Plus **staleness violations**: money claims past max-age (zero-tolerance counter, never averaged)." },
+    { "t": "h", "text": "Severity weights and gates" },
+    { "t": "p", "text": "Not all misses price equally: price errors >> policy vagueness >> chitchat gaps. **Severity-weighted gates**: money claims require 100% grounding enforcement (hard gate — any violation blocks ship); general hit-rate targets 0.85+; chitchat untracked. A 9/10 with the miss on $500 fails; 8/10 all-benign passes with notes. Averages never overrule severity." },
+    { "t": "code", "lang": "js", "code": "// Severity gate: money violations veto regardless of averages (plain JS)\nfunction shipGate(scores) {\n  // scores: { hitRate, faithfulness, moneyViolations, segments: {sku, paraphrase, vague} }\n  if (scores.moneyViolations > 0) return { ship: false, reason: \"money-grounding\" };\n  const weak = Object.entries(scores.segments).filter(([, s]) => s < 0.7).map(([k]) => k);\n  if (weak.length) return { ship: false, reason: \"weak-segments:\" + weak.join(\",\") };\n  if (scores.hitRate < 0.85 || scores.faithfulness < 0.9) return { ship: false, reason: \"below-bar\" };\n  return { ship: true };\n}\n// Gates compose: vetoes first, segments second, bars last.", "caption": "Vetoes → segments → bars: gating order reflects severity order" },
+    { "t": "practice", "sim": "js-playground", "title": "Score the runs", "query": "function ragMetrics(runs, k) {\n  let hits = 0, mrr = 0;\n  for (const r of runs) {\n    const rank = r.ranked.findIndex((id) => r.goldIds.includes(id));\n    if (rank >= 0 && rank < k) { hits++; mrr += 1 / (rank + 1); }\n  }\n  return { hitRate: Math.round((hits / runs.length) * 100) / 100, mrr: Math.round((mrr / runs.length) * 100) / 100 };\n}\nconst runs = [\n  { goldIds: ['c1'], ranked: ['c1', 'c9'] },\n  { goldIds: ['c2'], ranked: ['c9', 'c2'] },\n  { goldIds: ['c3'], ranked: ['c9', 'c8'] },\n  { goldIds: ['c4'], ranked: ['c4', 'c1'] },\n];\nconsole.log(JSON.stringify(ragMetrics(runs, 2)));\nfunction shipGate(s) {\n  if (s.moneyViolations > 0) return { ship: false, reason: 'money-grounding' };\n  if (s.hitRate < 0.85) return { ship: false, reason: 'below-bar' };\n  return { ship: true };\n}\nconsole.log(JSON.stringify(shipGate({ hitRate: 0.9, moneyViolations: 1 })));\nconsole.log(JSON.stringify(shipGate({ hitRate: 0.9, moneyViolations: 0 })));", "note": "Run it: expect hitRate 0.75, mrr 0.63 (ranks 1,2,miss,1 → 1 + 1/2 + 0 + 1 = 2.5/4 hits... verify: hits at rank<2: c1 rank0 ✓, c2 rank1 ✓, c3 miss, c4 rank0 ✓ → 3/4 = 0.75; mrr (1 + 0.5 + 0 + 1)/4 = 0.625 → 0.63). Then gates: money violation vetoes despite 0.9; clean ships." },
+    { "t": "keytakeaways", "items": ["Retrieval: hit-rate (coverage) + MRR (placement), sliced by query kind", "Generation: faithfulness + citation coverage + abstention precision + zero-tolerance staleness counter", "Gates: money vetoes → weak segments → aggregate bars; severity overrules averages"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice scorer and confirm 0.75/0.63 with per-run rank mapping. (b) Change k to 1 and recompute by hand; state what k-choice measures (coverage depth vs top precision). (c) Write the ship verdicts for: {0.9, 1 violation} vs {0.8, 0 violations} — and defend the counterintuitive one.",
+    "hints": [
+      "Ranks: c1@0, c2@1, c3 miss, c4@0 → hits 3/4, mrr (1+.5+0+1)/4 = 0.625 → 0.63.",
+      "k=1: only rank-0 hits count → c1, c4 → 0.5 hit-rate; MRR same numerator over... recompute: (1+0+0+1)/4 = 0.5. k trades coverage depth for top precision.",
+      "0.9+violation → NO SHIP (veto); 0.8 clean → NO SHIP (below bar) — both blocked, different reasons; severity and bars are independent gates."
+    ],
+    "solution": "// (a) 0.75 / 0.63 with ranks 0,1,miss,0.\n// (b) k=1 → 0.5/0.5: top-precision measure vs coverage-depth at k=2.\n// (c) both blocked: veto (money) vs bar (0.8<0.85) — independent gates, both honored.",
+    "why": "k-sensitivity (what the parameter measures), dual-block verdicts (vetoes AND bars independently), and rank mapping make metrics operational rather than ornamental.",
+    "code": "// Metric-sensitivity pattern: vary k, watch what the number starts measuring.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Hit-rate 0.95, MRR 0.45. Reading?",
+      "options": ["Excellent retrieval", "Found eventually but rarely first — ordering/rerank problem, not coverage: fix ranking, not recall", "Bad chunks", "More top-k"],
+      "answer": 1,
+      "explain": "High coverage + low placement = ordering failure. The fix is reranking/ordering, never broader recall."
+    },
+    {
+      "q": "9/10 hit-rate, the miss is a $500 price. Ship?",
+      "options": ["Yes — 90%", "No: money violations veto regardless of averages — severity-weighted gates overrule hit-rates", "Round up to 10/10", "Delete the question"],
+      "answer": 1,
+      "explain": "Severity gates: money grounding is binary (100% enforced), not averaged. One price hallucination outweighs nine good answers."
+    },
+    {
+      "q": "Right doc retrieved, unsupported answer. First investigation?",
+      "options": ["Embeddings", "Generation: scope/citation/position — context present but unused means consumer failure", "Chunk size", "More retrieval"],
+      "answer": 1,
+      "explain": "Right-doc-wrong-answer exonerates retrieval. Investigate grounding contracts, citation enforcement, and context assembly."
+    }
+  ],
+  "summary": "Hit-rate + MRR (sliced), faithfulness triple + staleness veto, severity-ordered gates. Measure retrieval and generation separately; gate by severity, never averages.",
+  "next": "Measured stages need orchestration across needs: routers, multi-hop loops, and escalation. Next: agentic RAG."
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Reranking: Precision at the Top",
+  "slug": "06-reranking",
+  "objective": "After this lesson you will be able to place rerankers correctly in the funnel (cheap recall → precise rerank → minimal context), fuse cross-encoder scores with retrieval ranks, enforce top-k discipline under cost, and ablate the rerank stage to prove it earns its latency.",
+  "why": "First-stage retrieval optimizes recall (don't miss); generation needs precision (top-5 must be right). Rerankers (cross-encoders scoring query+document pairs jointly) close that gap — at 10–100x the per-pair cost of bi-encoders. Misplaced (reranking 500) or missing (generating from raw recall) both waste the budget. Position and proof are the lesson.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Bi-encoder recall, cross-encoder precision" },
+    { "t": "p", "text": "First-stage retrievers encode query and docs **separately** (fast, precomputable, coarse): bi-encoder vectors, TF-IDF lists. **Rerankers** (cross-encoders) score each query+document **pair jointly** — full attention between them, far sharper relevance, far pricier per pair. The funnel exploits both: cheap systems gather 200 candidates, the reranker orders the top 50, generation reads 5. Cost tiers match precision tiers." },
+    { "t": "code", "lang": "js", "code": "// Staged funnel with budgets enforced (plain JS)\nfunction funnel(firstStage, rerank, kRecall = 200, kRerank = 50, kGen = 5) {\n  return async (query) => {\n    const recalled = (await firstStage(query)).slice(0, kRecall);\n    const reranked = (await rerank(query, recalled.slice(0, kRerank)));\n    return reranked.slice(0, kGen); // generation sees 5, never 500\n  };\n}\n// Budgets are parameters, not accidents: kRerank bounds the expensive calls.", "caption": "k-bounds at every stage: recall breadth, rerank depth, generation focus" },
+    { "t": "h", "text": "Fusing rerank scores with retrieval ranks" },
+    { "t": "p", "text": "Reranker scores and retriever ranks disagree routinely — fuse, don't replace: weighted combination or RRF over both orderings (Ch.4 machinery reused). Pure reranker order ignores recall diversity (near-duplicate top-5); pure retrieval order wastes precision spend. Fusion weights are tuned on gold, not defaulted — and re-tuned when corpora shift." },
+    { "t": "h", "text": "Top-k discipline: generate from few" },
+    { "t": "p", "text": "Generation context holds **5±2 chunks**: more dilutes attention (lost-in-the-middle), costs linearly, and invites contradiction. If answers need more than 5 chunks, the problem is retrieval/chunking (too fragmented), not context size — fix upstream. Top-k is a quality control, not a truncation artifact." },
+    { "t": "practice", "sim": "js-playground", "title": "Enforce the funnel", "query": "function funnelStages(recalled, rerankScores, kRerank, kGen) {\n  const top = recalled.slice(0, kRerank);\n  const reranked = top.map((id) => ({ id, s: rerankScores[id] || 0 })).sort((a, b) => b.s - a.s);\n  return reranked.slice(0, kGen).map((r) => r.id);\n}\nconst recalled = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];\nconst scores = { c1: 0.2, c2: 0.9, c3: 0.5, c4: 0.8, c5: 0.1, c6: 0.7 };\nconsole.log(funnelStages(recalled, scores, 4, 2).join(','));\nconsole.log('rerank calls: 4, generation chunks: 2');", "note": "Run it: expect c2,c4 — recall order ignored, rerank scores rule, top-2 only. Then raise kGen to 6 and note nothing changes past available candidates: bounds cap spend, never pad." },
+    { "t": "keytakeaways", "items": ["Funnel tiers: cheap union recall (200) → precise rerank (50) → minimal generation (5), k-bounded each", "Fuse rerank scores with retrieval ranks (RRF reuse); tune weights on gold", "Top-k discipline: >5 chunks signals upstream (chunking/retrieval) failure, not context shortage"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice funnel and confirm c2,c4 top-2. (b) Change scores so c6 wins outright; state what changed downstream (generation context swaps). (c) Argue for kRerank=50 vs 200 in cost terms (relative rerank calls) and state the ablation that would settle it.",
+    "hints": [
+      "Baseline: rerank order c2(0.9), c4(0.8), c6(0.7), c3(0.5) → top-2 c2,c4 regardless of recall order.",
+      "c6 to 0.95: top-2 becomes c6,c2 — generation context swaps one chunk; downstream answer may flip on that swap.",
+      "50 vs 200: 4x rerank calls. Ablation: gold hit-rate at top-5 for both settings — keep 200 only on measured gain."
+    ],
+    "solution": "// (a) c2,c4 (rerank order rules).\n// (b) c6 at 0.95 → top-2 c6,c2 (context swap propagates to answers).\n// (c) 4x cost for 200; ablation on gold hit-rate decides — measured, not defaulted.",
+    "why": "Rerank mechanics (order override), context propagation (top-k swaps change answers), and cost ablation (settings earn latency) are the three rerank judgments — each computed on the toy, applied to production.",
+    "code": "// Funnel-probe pattern: vary scores/k, watch generation-context swaps.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Rerank all 500 recalled candidates. Verdict?",
+      "options": ["Thorough", "Budget blowout: rerankers cost 10–100x per pair — bound to top-50 after cheap recall; unspent precision budget is waste", "More accurate always", "Required"],
+      "answer": 1,
+      "explain": "Cost tiers exist because precision is pricey. k-bounds match spend to stage value; unbounded reranking burns budget for flat gains."
+    },
+    {
+      "q": "Generation reads 20 chunks 'for safety'. Problem?",
+      "options": ["None — thorough", "Attention dilution + linear cost + contradiction risk: >5 signals upstream (chunking/retrieval) failure to fix instead", "Faster answers", "Better citations"],
+      "answer": 1,
+      "explain": "Top-k discipline: context beyond ~5 degrades focus and grows cost. Fragmented needs mean chunk/retrieval redesign, not bigger windows."
+    },
+    {
+      "q": "Reranker disagrees with retriever order. Resolve by…",
+      "options": ["Trust retriever always", "Fuse (RRF/weighted) with weights tuned on gold — disagreement is information from complementary scorers", "Trust reranker blindly", "Average randomly"],
+      "answer": 1,
+      "explain": "Complementary scorers disagree productively: lexical vs joint-attention signals fuse better than either alone — tuned, not defaulted."
+    }
+  ],
+  "summary": "Cheap recall, precise rerank (k-bounded), minimal generation context — fused, ablated, disciplined. Precision positioned where it pays.",
+  "next": "Ordered candidates in hand — now generate answers that stay honest: citations, abstention, and staleness guards. Next: grounded generation."
+}

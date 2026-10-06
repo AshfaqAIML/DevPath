@@ -1,0 +1,53 @@
+{
+  "title": "Grounded Generation: Cite or Abstain",
+  "slug": "07-grounded-generation",
+  "objective": "After this lesson you will be able to write scope-to-context generation contracts, demand per-claim citations, build abstention paths for absent evidence, and guard money claims (prices) with staleness checks.",
+  "why": "Retrieval without grounding is a suggestion box: the model may answer from context, from training memory, or from thin air — indistinguishably. Grounded generation binds every claim to spans, refuses what sources lack, and treats prices with hard gates. The difference between a demo and a store assistant is entirely here.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Scope-to-context contracts" },
+    { "t": "p", "text": "The generation contract names sources as the **only** evidence: 'Answer SOLELY from CONTEXT below. Every factual claim cites [id]. If the context lacks the answer, output {\"answer\": \"unknown\"}.' Three clauses doing three jobs: exclusivity (kills training-memory leakage), citation demands (kills unverifiable claims), abstention path (kills invention under absence). Prompt 101 Ch.6 scope rules, applied to generation." },
+    { "t": "code", "lang": "text", "code": "GENERATION CONTRACT:\nAnswer SOLELY from CONTEXT. Rules:\n1. Every factual claim ends with [chunk-id].\n2. Prices MUST cite a chunk whose as-of date is within 7 days.\n3. If CONTEXT lacks the answer: {\"answer\": \"unknown\"} and nothing else.\n4. Never merge two chunks' numbers into one figure.\n--- CONTEXT ---\n[c1 as-of 2026-10-05] Runner v9 $139 ...\n--- QUESTION ---\n<query>", "caption": "Exclusivity + citations + freshness bound + abstention — the four generation laws" },
+    { "t": "h", "text": "Staleness guards on money" },
+    { "t": "p", "text": "Prices decay: a cited price from March misleads in October. Guards: **as-of dates** on chunks, **freshness bounds** in contracts (7-day rule above), **recency preference** in ranking, and **refusal** when only stale evidence exists ('last listed $139 on 2026-03-01 — confirm current price' beats silent quoting). Money claims get hard gates; severity-weighted eval (Ch.8) enforces them." },
+    { "t": "code", "lang": "js", "code": "// Staleness gate: claims carry dates or they don't ship (plain JS)\nfunction stalenessGate(claim, todayISO, maxAgeDays) {\n  if (!claim.asOf) return { ok: false, error: \"missing-as-of\" };\n  const ageDays = (Date.parse(todayISO) - Date.parse(claim.asOf)) / 86400000;\n  if (!(ageDays >= 0)) return { ok: false, error: \"future-date\" };\n  if (ageDays > maxAgeDays) return { ok: false, error: \"stale:\" + Math.floor(ageDays) + \"d\" };\n  return { ok: true };\n}\n// Money path: gate BEFORE generation cites; stale evidence routes to abstain-with-note.", "caption": "Dates or it doesn't ship: freshness as a hard gate, not a hint" },
+    { "t": "h", "text": "Abstention that helps" },
+    { "t": "p", "text": "Helpful abstention names the gap and the path: 'I don't have current pricing for X in the catalog I can see — check the product page or ask support with order details.' Never bare 'I don't know' (dead end), never partial answers stitched from absence (invention). Abstention rate is a tracked metric: rising means corpus gaps to fill, not model failures to hide." },
+    { "t": "practice", "sim": "js-playground", "title": "Gate the price", "query": "function stalenessGate(claim, todayISO, maxAgeDays) {\n  if (!claim.asOf) return { ok: false, error: 'missing-as-of' };\n  const ageDays = (Date.parse(todayISO) - Date.parse(claim.asOf)) / 86400000;\n  if (!(ageDays >= 0)) return { ok: false, error: 'future-date' };\n  if (ageDays > maxAgeDays) return { ok: false, error: 'stale:' + Math.floor(ageDays) + 'd' };\n  return { ok: true };\n}\nconst today = '2026-10-06';\nconsole.log(JSON.stringify(stalenessGate({ price: 139, asOf: '2026-10-05' }, today, 7)));\nconsole.log(JSON.stringify(stalenessGate({ price: 139, asOf: '2026-03-01' }, today, 7)));\nconsole.log(JSON.stringify(stalenessGate({ price: 139 }, today, 7)));\nconsole.log(JSON.stringify(stalenessGate({ price: 139, asOf: '2026-12-01' }, today, 7)));", "note": "Run it: expect ok, then stale:219d, missing-as-of, future-date — in order. Four evidence states, four routings (cite / abstain-with-note / abstain / reject): freshness as control flow." },
+    { "t": "keytakeaways", "items": ["Generation contracts: exclusivity + per-claim citations + abstention path + freshness bounds", "Money gets hard gates (as-of dates, max-age, abstain-with-note) — severity-weighted, never averaged", "Helpful abstention names gaps + paths; abstention rate tracks corpus gaps"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice gate on all four evidence states and map routings. (b) Write the abstention response for a missing-price case (gap + path, no invention). (c) State the eval metric triple for generation (faithfulness, citation coverage, abstention precision) and what each catches.",
+    "hints": [
+      "Mappings: fresh→cite, stale→abstain-with-note, missing→abstain, future→reject (data error, investigate).",
+      "Abstention shape: 'I don't have current pricing for X in visible catalog (last seen $139 on 2026-03-01) — check the product page or ask support.' Gap named, path given, stale number flagged not quoted.",
+      "Faithfulness (claims⊂context), citation coverage (% claims cited), abstention precision (unknowns truly absent vs answerable-but-missed)."
+    ],
+    "solution": "// (a) ok / stale:219d / missing-as-of / future-date (in order).\n// (b) gap + path + flagged-stale abstention (see hints).\n// (c) faithfulness (invention), coverage (discipline), abstention precision (recall of unknowns).",
+    "why": "Evidence-state routing (four states, four handlings) plus metric-triple design makes grounding operational: gates in code, abstention in contracts, measurement in eval.",
+    "code": "// Gate-then-generate pattern: evidence states computed before any claim ships.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Cited price, as-of March, today October. Action?",
+      "options": ["Quote it — cited is safe", "Staleness gate trips: abstain-with-note (last-seen flagged, path given) — cited-but-stale still misleads", "Round it", "Drop citations"],
+      "answer": 1,
+      "explain": "Citations prove sourcing, not freshness. Money needs both: span + recent date, else abstain helpfully."
+    },
+    {
+      "q": "Context lacks the answer entirely. Best output?",
+      "options": ["Best guess with hedging", "Sanctioned abstention naming the gap + path — invention under absence is the hallucination business model", "Empty string", "Unrelated facts"],
+      "answer": 1,
+      "explain": "Abstention paths convert gaps into visible, helpful states. Hedged invention is still invention."
+    },
+    {
+      "q": "Abstention rate triples after a catalog refresh. Reading?",
+      "options": ["Model degraded", "Corpus gap signal: new content unchunked/unindexed — abstentions track coverage, investigate the pipeline not the model", "Users ask worse questions", "Ignore it"],
+      "answer": 1,
+      "explain": "Abstention rate is a corpus-health metric. Spikes point at ingestion/chunking gaps before model behavior."
+    }
+  ],
+  "summary": "Exclusivity, citations, abstention paths, staleness gates — grounding as control flow with money under hard gates. Demos answer; assistants prove.",
+  "next": "Honest answers need measured retrieval behind them: hit-rates, faithfulness, and failure taxonomies. Next: evaluating RAG."
+}

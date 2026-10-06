@@ -1,0 +1,52 @@
+{
+  "title": "Embeddings & Similarity, Honestly",
+  "slug": "03-embeddings-similarity",
+  "objective": "After this lesson you will be able to explain what embeddings capture (and miss), compute cosine similarity, choose embedding granularity (query vs chunk symmetry), and keep a TF-IDF baseline that justifies every upgrade.",
+  "why": "Embeddings feel magical until they fail: 'reimbursement' matches 'refund' beautifully, then SKU 'SH-1-v9' matches nothing and prices collide semantically. Understanding vectors as *lossy meaning projections* — brilliant at paraphrase, blind to exact tokens — determines chunk design, hybrid strategy, and when the baseline beats the upgrade. No linear algebra worship; just working mental models with numbers.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Vectors as lossy meaning projections" },
+    { "t": "p", "text": "An **embedding** maps text to a dense vector where related meanings sit nearby. **Cosine similarity** (angle, not length) scores closeness: 1 identical direction, 0 orthogonal, −1 opposed. What they capture: paraphrase, synonyms, topical aboutness. What they miss: exact tokens (SKUs, IDs, numbers), negation scope, and fine distinctions the training never emphasized. Lossy in known directions — design around the losses." },
+    { "t": "code", "lang": "js", "code": "// Cosine similarity: the only equation this lesson needs (plain JS)\nfunction cosine(a, b) {\n  let dot = 0, na = 0, nb = 0;\n  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }\n  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;\n}\n// Toy vectors (NOT real embeddings — geometry demo only):\n// refund ~ reimbursement (nearby), refund vs SKU (orthogonal by construction)\nconst refund = [0.9, 0.1, 0.0], reimburse = [0.85, 0.15, 0.05], sku = [0.0, 0.05, 0.95];\n// cosine(refund, reimburse) ≈ 0.996 (paraphrase wins)\n// cosine(refund, sku) ≈ 0.05 (exact tokens need lexical rescue → Ch.4)", "caption": "Angle measures meaning overlap; toy vectors show the geometry, not real scores" },
+    { "t": "h", "text": "Symmetry: embed queries like chunks (mostly)" },
+    { "t": "p", "text": "Retrieval compares query vectors against chunk vectors — both must come from **compatible encoders** (same model, or vendor-matched pairs). Asymmetric setups (short queries vs long chunks) benefit from instruction prefixes ('Represent this query for retrieval:') where supported. Mismatched encoders produce confident nonsense: similarity scores without shared geometry are random numbers with decimals." },
+    { "t": "h", "text": "The baseline that justifies upgrades" },
+    { "t": "p", "text": "Keep the OpenDataLoader TF-IDF baseline running beside embeddings: per-query, record both rankings. Upgrade justified only on measured miss-swaps (lexical misses fixed > semantic misses introduced) *minus* cost delta. Teams that delete baselines lose the ability to say whether embeddings helped — and on SKU-heavy catalogs, they often haven't." },
+    { "t": "practice", "sim": "js-playground", "title": "Feel the geometry", "query": "function cosine(a, b) {\n  let dot = 0, na = 0, nb = 0;\n  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }\n  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;\n}\nconst refund = [0.9, 0.1, 0.0];\nconst reimburse = [0.85, 0.15, 0.05];\nconst sku = [0.0, 0.05, 0.95];\nconsole.log('paraphrase=' + Math.round(cosine(refund, reimburse) * 1000) / 1000);\nconsole.log('sku=' + Math.round(cosine(refund, sku) * 1000) / 1000);\nconsole.log('self=' + cosine(refund, refund));", "note": "Run it: expect paraphrase ≈0.996, sku ≈0.006, self ≈1 (0.9999999999999999 — floating-point dust on the sqrt round-trip; real code compares with epsilon, never ===). Toy vectors demonstrate geometry (nearby vs orthogonal vs identical) — real embeddings show the same three relationships on real text." },
+    { "t": "keytakeaways", "items": ["Cosine scores direction overlap: paraphrase-near, exact-tokens-orthogonal, identical-one", "Encoder compatibility is load-bearing: mismatched spaces produce confident nonsense", "TF-IDF baselines justify upgrades per-query: miss-swaps minus cost, measured always"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice geometry and record all three scores. (b) Add a fourth vector 'returns' = [0.7, 0.3, 0.1] and rank all three against 'refund' — state the order with scores. (c) In one sentence each: when embeddings beat TF-IDF on your catalog, and when TF-IDF beats embeddings.",
+    "hints": [
+      "Baseline: 0.996 / 0.006 / 1. Ranked addition slots by angle: returns lands between paraphrase and SKU (compute exactly).",
+      "Embeddings win: paraphrase-heavy shopper language ('comfy long-distance shoes' → cushioning copy). TF-IDF wins: SKUs, exact model numbers, prices.",
+      "Both sentences name miss profiles, not vibes: lexical gaps vs semantic blur."
+    ],
+    "solution": "// (a) 0.996 / ~0.006 / 1 (in order).\n// (b) refund-self 1 > reimburse ~0.996 > returns (compute) > sku ~0.006.\n// (c) embeddings: paraphrase queries over descriptive copy; TF-IDF: exact\n//     tokens (SKUs, numbers) where semantics blur distinctions.",
+    "why": "Ranking by angle on controlled vectors builds geometric intuition cheaply; the two sentences convert intuition into corpus-specific policy (which queries route where — preview of hybrid Ch.4).",
+    "code": "// Geometry probe pattern: controlled vectors → ranked angles → policy sentences.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'SH-1-v9' query retrieves semantically-nearby-but-wrong products. Diagnosis?",
+      "options": ["Bad embeddings", "Exact-token blindness: vectors blur SKUs/IDs — lexical rescue (TF-IDF/BM25/metadata filter) required alongside", "More dimensions", "Lower temperature"],
+      "answer": 1,
+      "explain": "Lossy projections sacrifice exact tokens for meaning. SKU/ID queries need lexical paths — the hybrid motivation (Ch.4)."
+    },
+    {
+      "q": "Query and chunk embedded with different models. Result?",
+      "options": ["Slightly worse", "Confident nonsense: similarities without shared geometry are meaningless decimals — encoder compatibility is load-bearing", "Faster", "Cheaper"],
+      "answer": 1,
+      "explain": "Vector spaces aren't interchangeable. Cross-encoder comparisons score noise; matched pairs (or vendor-matched asymmetric setups) only."
+    },
+    {
+      "q": "Team deleted the TF-IDF baseline after adopting embeddings. Cost?",
+      "options": ["None — progress", "Lost measurability: no per-query miss-swap accounting, so upgrade value becomes faith — keep baselines running", "Faster evals", "Cleaner code"],
+      "answer": 1,
+      "explain": "Baselines price upgrades: lexical misses fixed vs semantic misses introduced, minus cost. Deleted baselines make regressions undetectable."
+    }
+  ],
+  "summary": "Cosine geometry (near/orthogonal/identical), encoder compatibility, baselines that price upgrades. Vectors project meaning lossily — design for the losses.",
+  "next": "Meaning plus terms beats either alone: fusing lexical and vector retrieval with discipline. Next: hybrid retrieval."
+}

@@ -1,0 +1,174 @@
+{
+  "courseSlug": "rag-agents-for-e-commerce",
+  "subtitle": "Retrieval that works on product data: chunking, embeddings, hybrid search, reranking, and grounded answers — build the RAG layer behind a store's assistant",
+  "audience": "Developers who finished Prompt Engineering 101 and OpenDataLoader PDF (chunking, validation, TF-IDF baselines) and now connect retrieval to generation on catalog, policy, and order data. Retrieval machinery runs as executable JS in the playground; embedding/vector-store calls target your own project with provider-neutral patterns.",
+  "outcomes": [
+    "Explain why RAG exists (freshness, grounding, cost) and map the full pipeline stage by stage",
+    "Chunk product catalogs into retrievable units with SKU/category/price/version metadata",
+    "Use embeddings and cosine similarity correctly — and know what they capture and miss",
+    "Fuse keyword and vector retrieval with hybrid strategies and RRF-style score fusion",
+    "Rewrite vague shopper queries (multi-query, step-back, filter extraction) before retrieval",
+    "Rerank candidates with score fusion and top-k discipline under cost constraints",
+    "Generate grounded answers with citations, abstention paths, and staleness guards",
+    "Evaluate RAG with hit-rate, faithfulness checks, and failure-taxonomy gold sets",
+    "Route agentic RAG (answer-direct vs retrieve vs tools vs escalate) with loop budgets",
+    "Ship a store-assistant RAG layer with measured retrieval and grounded generation"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "opendataloader-pdf"],
+  "technologies": ["Embeddings APIs (provider-neutral)", "Vector stores (pgvector-first concepts)", "TF-IDF baselines", "Rerankers", "JavaScript (ES2020+) for RAG machinery"],
+  "skills": ["RAG pipelines", "product chunking", "embeddings", "hybrid retrieval", "query rewriting", "reranking", "grounded generation", "RAG evaluation"],
+  "assessment": [
+    {
+      "q": "Catalog prices change hourly. Fine-tune vs RAG?",
+      "options": ["Fine-tune nightly", "RAG: retrieval reads current prices at query time — freshness without retraining; fine-tuning bakes static knowledge", "Bigger model", "Longer prompts"],
+      "answer": 1,
+      "explain": "Freshness is RAG's core reason: dynamic data stays in the store, retrieved live. Fine-tuning freezes knowledge at train time (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Product variants (sizes/colors/prices) chunked how?",
+      "options": ["One chunk per catalog, variants omitted", "Per-variant retrievable units with SKU/price/version metadata — variants differ on exactly what shoppers ask", "One chunk per word", "No chunking needed"],
+      "answer": 1,
+      "explain": "Chunk boundaries follow question boundaries: shoppers ask variant-level questions, so units carry variant-level metadata (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Embeddings retrieve 'reimbursement' for query 'refund'. TF-IDF returns nothing. Meaning?",
+      "options": ["Embeddings are broken", "Semantic vs lexical gap: embeddings capture meaning overlap, TF-IDF needs term overlap — the hybrid case for fusing both", "TF-IDF always wins", "Delete both"],
+      "answer": 1,
+      "explain": "Complementary miss profiles motivate hybrid retrieval: each covers the other's blind spot (Ch.3–4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "'Something for my feet, cheap' as a shopper query. First move?",
+      "options": ["Retrieve verbatim", "Rewrite: expand to concrete candidates (shoes/sneakers/sandals) + extract budget filter — vague queries need interpretation before retrieval", "Abstain always", "Return everything"],
+      "answer": 1,
+      "explain": "Vague queries fail retrieval literally. Multi-query expansion + filter extraction translate intent into retrievable form (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Reranker budget allows 50 candidates but retrieval returns 500. Setup?",
+      "options": ["Rerank all 500", "Funnel: cheap first-stage retrieval (TF-IDF/vector top-200) → rerank top-50 → generate from top-5 — cost-tiered pipeline", "Skip reranking", "Random 50"],
+      "answer": 1,
+      "explain": "Rerankers are precise and pricey: funnels match cost tiers to stages (cheap recall, precise rerank, minimal generation context) (Ch.6).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Answer cites a price with no source span. Handling?",
+      "options": ["Ship it — prices rarely change", "Quarantine: uncited specifics fail grounding checks; regenerate with citation demands or abstain — staleness quarantines, not ships", "Round the price", "Drop citations"],
+      "answer": 1,
+      "explain": "Grounded generation requires source spans per claim, especially money. Uncited specifics are hallucination signatures (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "RAG retrieves the right doc but answers unsupportedly. Investigate first?",
+      "options": ["Retriever — wrong doc", "Generation: context present but unused/overridden — check scope-to-context rules, citation demands, and context position effects", "Embeddings", "Chunk size"],
+      "answer": 1,
+      "explain": "Right-doc-wrong-answer localizes to generation: grounding rules, citation enforcement, and attention position — not retrieval (Ch.8).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "'Do you price-match?' (policy) vs 'Where is order 4821?' (lookup). Router?",
+      "options": ["Retrieve for both", "Policy → RAG retrieval; lookup → order tool; greetings → direct answer — route by information need, with confidence fallback to retrieval", "Tools for both", "Escalate both"],
+      "answer": 1,
+      "explain": "Agentic RAG routes by need: static knowledge→retrieve, live records→tools, chitchat→direct, uncertainty→safe default. One path per need (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Multi-hop retrieval loops 'specs → compatible accessories → price'. Guard?",
+      "options": ["Unlimited hops", "Hop budget + done-condition (answer complete?) + visited-set against cycles — retrieval loops terminate by construction", "Single hop only", "No retrieval"],
+      "answer": 1,
+      "explain": "Iterative retrieval is managed looping: budgets, completion criteria, cycle guards — same termination discipline as agent loops (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Hit-rate 9/10 but the miss is a $500 price answer. Verdict?",
+      "options": ["Ship — 90% is great", "Segment by stakes: money answers need 100% grounding enforcement (citations + staleness checks), not average hit-rates — severity-weighted eval", "Delete the question", "Lower the bar"],
+      "answer": 1,
+      "explain": "Averages hide severity: price errors cost real money. Eval weights by stakes with hard gates on money claims (Ch.8 + capstone).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Chunk without SKU metadata answers correctly. Problem?",
+      "options": ["None — correct is correct", "Uncitable and unfilterable: correctness without provenance can't be verified, filtered, or freshness-checked — metadata is load-bearing", "Too slow", "Too long"],
+      "answer": 1,
+      "explain": "Metadata enables citations, filtering, and staleness checks. Correct-but-orphaned answers fail production requirements silently (Ch.2).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "v2 chunking beats v1 hit-rate but breaks price citations. Ship?",
+      "options": ["Yes — hit-rate wins", "No: per-metric no-regression gate — retrieval gains must not cost grounding; fix citations first (same eval discipline, RAG flavor)", "Average the metrics", "Drop citations"],
+      "answer": 1,
+      "explain": "Multi-metric gates: hit-rate AND faithfulness must hold. Trading grounding for retrieval is a regression wearing an improvement costume (Ch.8).",
+      "difficulty": "medium"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Store-Assistant RAG Layer",
+    "summary": "Build the RAG layer behind a shoe-store assistant: chunked catalog + policy corpus with metadata, hybrid retrieval with reranking, grounded generation with citations, agentic routing (retrieve/tools/direct/escalate), and a gold-set evaluation with per-segment truth. Measured retrieval, honest grounding.",
+    "requirements": [
+      "Corpus: 20+ product/policy chunks with SKU/category/price/version metadata and as-of dates",
+      "Retrieval: TF-IDF baseline + hybrid fusion + reranked top-k with staged funnel (cheap recall → precise rerank → minimal context)",
+      "Query layer: rewriter (expansion + filter extraction) with before/after retrieval comparisons on 5 vague queries",
+      "Generation: scope-to-context contracts, citation demands, abstention path, staleness guard on prices",
+      "Agentic router: retrieve/tools/direct/escalate with routing tests and loop budgets",
+      "Evaluation: 15-question gold set (in-stock/policy/price/edge/attack) with hit-rate + faithfulness scores and failure taxonomy"
+    ],
+    "technical": [
+      "Retrieval machinery in runnable JS (playground-verified); embedding/vector calls in your project with provider-neutral patterns",
+      "Every chunk carries provenance metadata; every money claim carries citations + freshness",
+      "Router tests enumerated; loop budgets enforced; quarantine paths demonstrated",
+      "Numbers reproducible: gold set + chunker parameters committed"
+    ],
+    "architecture": "Four sections: (1) Corpus & chunking — units, metadata schema, version policy; (2) Retrieval — stages, fusion, rerank, router with budgets; (3) Generation — contracts, citations, abstention, staleness guards; (4) Evaluation — gold scores per segment, failure taxonomy, iterated fix with delta.",
+    "steps": [
+      "Build the corpus: chunk catalog + policies with full metadata and dates",
+      "Implement retrieval stages with TF-IDF baseline first; add hybrid + rerank with measured deltas",
+      "Add rewriting; prove gains on 5 vague queries before/after",
+      "Write generation contracts with citations + abstention; enforce staleness on prices",
+      "Add the agentic router with tests and budgets; run the gold set; iterate once; re-score",
+      "Write the findings with per-segment truth and the deferred list"
+    ],
+    "evaluation": [
+      "Metadata complete on all chunks (SKU/category/price/version/date where applicable)",
+      "Retrieval staged with measured stage contributions; rerank justified by delta",
+      "Rewriting proven on vague queries with before/after comparisons",
+      "Money claims cited + fresh or abstained; no silent staleness",
+      "Gold baseline + iteration with per-segment diffs; failures taxonomized"
+    ],
+    "stretch": [
+      "Add multi-hop retrieval for 'compatible accessories' questions with cycle guards",
+      "Benchmark chunk sizes (200 vs 500 vs 1000 chars) on hit-rate with cost noted",
+      "Convert one retrieval path to embeddings and report the lexical-vs-semantic miss swap"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "RAG vs fine-tuning — decide for hourly-changing prices.",
+      "a": "RAG: prices live in the store, retrieved fresh per query — no retraining, always current. Fine-tuning bakes knowledge at train time: stale within the hour, expensive to refresh, and incapable of citing sources. Rule: dynamic/factual/citable → RAG; stable style/reasoning patterns → fine-tuning. Most production systems combine both (tuned behavior over retrieved facts)."
+    },
+    {
+      "q": "Right document retrieved, unsupported answer. Debug order?",
+      "a": "Generation side first: scope-to-context rules present? citation demands enforced? decisive evidence positioned for recency? Then context assembly (truncation cut the span? ordering buried it?), then retrieval scoring (was it top-1 or rank-9 filler?). Right-doc-wrong-answer exonerates retrieval — investigate the consumer, not the retriever."
+    },
+    {
+      "q": "Hybrid retrieval: why fuse, and how?",
+      "a": "Lexical (TF-IDF/BM25) wins exact terms, SKUs, names; vector wins paraphrase and semantics. Fuse with staged pipelines (cheap recall from both, union) plus reranking, or score fusion (RRF/normalized weighted sums) — measured per corpus. Fuse because miss profiles complement: each covers the other's blindness (vocabulary mismatch vs term tyranny)."
+    },
+    {
+      "q": "How do you keep RAG prices from lying?",
+      "a": "As-of dates on chunks, freshness recency in ranking, staleness guards (reject/flag aged prices), citations binding claims to spans, and abstention when sources lack current data. Price claims get hard gates, not average hit-rates: severity-weighted eval with 100% grounding enforcement on money."
+    },
+    {
+      "q": "When does RAG need an agent around it?",
+      "a": "When needs vary per query (lookup vs policy vs chitchat → router), retrieval must iterate (multi-hop with budgets), or tools join sources (orders DB + catalog). Static single-shot Q&A stays a pipeline; variable, multi-source, multi-step needs agentic routing with loop budgets and escalation paths."
+    },
+    {
+      "q": "Chunking strategy for a product catalog — defend it.",
+      "a": "Per-variant units (shoppers ask variant questions) with SKU/price/version/date metadata; overlap for boundary recall; section-aware cuts (specs vs reviews separate); as-of dating for freshness. Boundaries follow question boundaries; metadata enables citations, filtering, and staleness checks. Measured by hit-rate deltas on vague + precise gold queries, not by aesthetics."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,51 @@
+{
+  "title": "Query Rewriting: Intent Into Retrieval",
+  "slug": "05-query-rewriting",
+  "objective": "After this lesson you will be able to expand vague shopper queries (multi-query, step-back), extract filters (budget, category, SKU), and prove rewriting gains with before/after retrieval comparisons.",
+  "why": "'Something comfy for long walks, cheap' retrieves nothing literally — yet a human clerk hears cushioning + walking + budget instantly. Rewriting translates shopper language into retrievable form: expansions for vocabulary, step-back for abstractions, extracted filters for constraints. Retrieval quality is bounded above by query quality; rewriting raises the ceiling.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Vague in, concrete out: three rewrites" },
+    { "t": "p", "text": "**Multi-query**: one vague query → several concrete sub-queries ('cushioned walking shoes', 'budget walking shoes under $100', 'walking shoe return policy'), retrieve per sub-query, fuse (Ch.4). **Step-back**: abstract the principle first ('what defines walking comfort? cushioning + support'), retrieve the principle, then instantiate. **Filter extraction**: pull structured constraints (budget < $100, category shoes, size 9) for metadata filtering alongside text retrieval." },
+    { "t": "code", "lang": "js", "code": "// Rewriter: expand + extract filters (deterministic rules + model fallback in prod)\nfunction rewriteQuery(q) {\n  const out = { queries: [q], filters: {} };\n  const budget = q.match(/under \\$(\\d+)|cheap|budget/i);\n  if (budget) out.filters.maxPrice = budget[1] ? Number(budget[1]) : 100;\n  const size = q.match(/size\\s*(\\d+)/i);\n  if (size) out.filters.size = Number(size[1]);\n  const expansions = {\n    comfy: [\"cushioned\", \"supportive\", \"padded\"],\n    cheap: [\"budget\", \"affordable\", \"under $100\"],\n    walks: [\"walking\", \"long-distance\", \"all-day\"],\n  };\n  for (const [k, syns] of Object.entries(expansions))\n    if (new RegExp(k, \"i\").test(q)) out.queries.push(...syns.map((s) => q.replace(new RegExp(k, \"i\"), s)));\n  return out;\n}\n// Rules handle the known vocabulary; model rewriting covers the long tail.", "caption": "Deterministic expansion + filter extraction; models handle the tail" },
+    { "t": "h", "text": "Prove gains before/after" },
+    { "t": "p", "text": "Rewriting must earn its latency: run gold vague queries with and without rewriting, compare hit-rates. Wins concentrate on vocabulary-mismatch and multi-constraint queries; precise SKU queries gain nothing (and pay expansion cost). Gate rewriting on vagueness signals (no exact tokens, hedges like 'something', multiple intents) — precise queries skip straight to retrieval." },
+    { "t": "callout", "variant": "tip", "title": "Log rewrites with the query", "text": "Persist each query alongside its rewrites and the vagueness signals that triggered them. Rewrite logs turn 'why did it search that?' from archaeology into lookup — and the signal distribution (which vagueness dominates) tells you what to fix next: vocabulary (expansions), structure (filters), or corpus (nothing to retrieve)." },
+    { "t": "practice", "sim": "js-playground", "title": "Rewrite the vague", "query": "function rewriteQuery(q) {\n  const out = { queries: [q], filters: {} };\n  const budget = q.match(/under \\$(\\d+)|cheap|budget/i);\n  if (budget) out.filters.maxPrice = budget[1] ? Number(budget[1]) : 100;\n  const size = q.match(/size\\s*(\\d+)/i);\n  if (size) out.filters.size = Number(size[1]);\n  return out;\n}\nconst r1 = rewriteQuery('Something comfy for long walks, cheap');\nconst r2 = rewriteQuery('SH-1-v9 return window');\nconsole.log('vague queries: ' + r1.queries.length + ' filters=' + JSON.stringify(r1.filters));\nconsole.log('precise queries: ' + r2.queries.length + ' filters=' + JSON.stringify(r2.filters));\nconsole.log('rewrite-worthy: ' + (r1.queries.length > 1 || Object.keys(r1.filters).length > 0));", "note": "Run it: the vague query gains the maxPrice filter (rewrite-worthy true via filters); the SKU query stays single with empty filters (skip rewriting, retrieve directly). Expansions live in the full lesson version — filters alone already gate correctly. Gate by vagueness signals, not habit." },
+    { "t": "keytakeaways", "items": ["Multi-query expansion, step-back principles, filter extraction — three rewrites for three vagueness kinds", "Gate rewriting on vagueness signals; precise queries skip to retrieval", "Prove with before/after hit-rates on vague gold queries — rewriting earns its latency or ships without it"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice rewriter on both queries and map outputs. (b) Add a size-9 constraint to the vague query and confirm the size filter extracts. (c) Write the skip rule: which query shapes bypass rewriting entirely, and what breaks if they don't?",
+    "hints": [
+      "Vague: expansions + maxPrice 100, rewrite-worthy true. Precise: single query, no filters, rewrite-worthy false.",
+      "Size extraction: /size\\s*(\\d+)/i on '...size 9...' → filters.size 9. Confirm alongside maxPrice.",
+      "Skip: SKU/exact-name/single-fact queries — rewriting them adds latency and synonym noise to already-perfect retrieval."
+    ],
+    "solution": "// (a) vague expands+filters (worthy); precise stays single (skip).\n// (b) size 9 extracts alongside maxPrice (filters compose).\n// (c) skip exact-token queries: rewriting adds cost + synonym noise to solved retrieval.",
+    "why": "Gating (rewrite-worthy signals) plus filter composition plus skip rules make rewriting a measured subsystem — applied where vague, absent where precise.",
+    "code": "// Rewrite-gate pattern: vagueness signals → expand; exact tokens → skip.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Something comfy, cheap' retrieves nothing. First move?",
+      "options": ["Bigger index", "Rewrite: expand vocabulary (cushioned/budget), extract maxPrice filter — translate intent before retrieval", "More chunks", "Lower threshold"],
+      "answer": 1,
+      "explain": "Vague queries fail literally. Expansion + filters convert shopper language into retrievable form."
+    },
+    {
+      "q": "SKU query through the rewriter gains synonyms. Verdict?",
+      "options": ["Good — more coverage", "Harmful noise on solved retrieval: gate rewriting to vague queries; precise ones skip", "Neutral", "Required"],
+      "answer": 1,
+      "explain": "Rewriting taxes precise queries with latency + synonym drift for zero gain. Vagueness-gated application only."
+    },
+    {
+      "q": "Step-back ('what defines walking comfort?') helps when?",
+      "options": ["Always", "Abstraction gaps: query asks instances, corpus discusses principles — retrieve the principle, then instantiate", "Never", "Only for shoes"],
+      "answer": 1,
+      "explain": "Instance-principle mismatch defeats literal retrieval. Step-back bridges abstraction levels before instantiating."
+    }
+  ],
+  "summary": "Expand vocabulary, extract filters, step back abstractions — gated by vagueness, proven by before/after. Retrieval quality starts at query quality.",
+  "next": "Candidates retrieved — now order them ruthlessly: reranking with fusion, budgets, and top-k discipline. Next: precision at the top."
+}

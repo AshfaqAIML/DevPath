@@ -1,0 +1,52 @@
+{
+  "title": "Product Chunking That Answers",
+  "slug": "02-product-chunking",
+  "objective": "After this lesson you will be able to chunk catalogs by question boundaries (per-variant units), attach SKU/category/price/version metadata, and verify chunk answerability with gold probes before indexing anything.",
+  "why": "Generic fixed-size chunking shreds product semantics: a variant's price lands three chunks from its size chart, and no retrieval recovers the pairing. Product questions target variants, policies target clauses, comparisons target rows — chunk boundaries must follow question boundaries, with metadata carrying everything filters, citations, and freshness need.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Boundaries follow questions" },
+    { "t": "p", "text": "Ask what shoppers ask, then cut there: **per-variant units** (size/color/price answers live at variant grain), **per-clause policy chunks** (one rule + its exceptions together), **per-row spec tables** (comparisons need aligned rows). Fixed-character chunking is the fallback when structure is absent — never the default on structured catalogs. A chunk should answer its question class alone, without assembly." },
+    { "t": "code", "lang": "js", "code": "// Product-aware chunker: variant grain + metadata (plain JS)\nfunction chunkProduct(product) {\n  const chunks = [];\n  for (const v of product.variants) {\n    chunks.push({\n      id: `${product.sku}-${v.sku}`,\n      text: `${product.name} (${v.size}, ${v.color}): $${v.price}. ${product.blurb}`,\n      meta: { sku: v.sku, parentSku: product.sku, category: product.category, price: v.price, version: product.version, updated: product.updated },\n    });\n  }\n  chunks.push({\n    id: `${product.sku}-policy`,\n    text: `Returns for ${product.name}: ${product.returns}. Warranty: ${product.warranty}.`,\n    meta: { sku: product.sku, category: product.category, kind: \"policy\", version: product.version, updated: product.updated },\n  });\n  return chunks;\n}\n// Grain = question grain; metadata = everything filters/citations/freshness need.", "caption": "Structure-aware units with complete provenance per chunk" },
+    { "t": "h", "text": "Metadata is load-bearing" },
+    { "t": "p", "text": "Every chunk carries: **identity** (sku/id for citations), **category** (filtering), **price + version + updated** (freshness/staleness), **kind** (variant vs policy vs review — different handling). Missing metadata fails silently downstream: unfilterable, uncitable, unfreshenable. The metadata schema is reviewed like a DB schema — because it is one." },
+    { "t": "h", "text": "Answerability probes before indexing" },
+    { "t": "p", "text": "Before embedding anything, prove chunks answer: take 10 real questions, require each answer's facts present **in one chunk** (or explicitly adjacent pair). Failures redesign boundaries (split merged topics, merge scattered facts) — chunking iterates on probes, never aesthetics. Indexing unprobed chunks is hoping at scale." },
+    { "t": "practice", "sim": "js-playground", "title": "Chunk and probe", "query": "function chunkProduct(p) {\n  const out = [];\n  for (const v of p.variants) out.push({ id: p.sku + '-' + v.sku, text: p.name + ' (' + v.size + '): $' + v.price, meta: { sku: v.sku, price: v.price } });\n  return out;\n}\nconst product = { sku: 'SH-1', name: 'Runner', category: 'shoes', variants: [{ sku: 'v8', size: 8, price: 129 }, { sku: 'v9', size: 9, price: 139 }], version: 3, updated: '2026-10-01' };\nconst chunks = chunkProduct(product);\nconsole.log('units=' + chunks.length);\nconsole.log('ids=' + chunks.map((c) => c.id).join(','));\nconst probe = chunks.find((c) => c.text.includes('9') && c.text.includes('139'));\nconsole.log('size-9 price answerable in one chunk: ' + !!probe);\nconsole.log('metadata present: ' + chunks.every((c) => c.meta && c.meta.sku && c.meta.price));", "note": "Run it: expect 2 units with variant ids, the size-9 price self-contained in one chunk, and full metadata. Answerability proven per question class before any embedding happens." },
+    { "t": "keytakeaways", "items": ["Cut at question boundaries (variants, clauses, rows) — fixed-size is the fallback, never the default", "Metadata (sku/category/price/version/updated/kind) enables filtering, citations, freshness — schema-reviewed", "Answerability probes gate indexing: each question class answerable in ≤1 chunk or boundaries redesign"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice chunker and confirm units/ids/answerability/metadata. (b) Add the policy chunk (returns + warranty with kind+version metadata) and re-run. (c) Write two answerability probes (variant price; return window) stating the chunk each must hit — then confirm both hit.",
+    "hints": [
+      "Baseline: 2 units, SH-1-v8/SH-1-v9 ids, size-9 self-contained, metadata complete.",
+      "Policy chunk: id SH-1-policy, kind policy, version/updated carried — third unit, same guarantees.",
+      "Probes assert single-chunk containment: price→variant unit, window→policy unit. Scattered facts fail probes by design."
+    ],
+    "solution": "// (a) 2 units, variant ids, self-contained price, metadata true.\n// (b) +policy unit (kind/version/updated) → 3 units, same guarantees.\n// (c) price probe → variant unit; window probe → policy unit (both single-chunk).",
+    "why": "Answerability-driven chunking (probes before indexes, boundaries from questions, metadata as schema) is the unit economics of RAG: every downstream stage inherits these decisions.",
+    "code": "// Probe pattern: question → required facts → assert single-chunk containment.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Size-9 price needs three chunks assembled. Problem?",
+      "options": ["Normal", "Boundary failure: variant questions need variant-grain units — redesign cuts, don't assemble at query time", "Add overlap", "Bigger chunks"],
+      "answer": 1,
+      "explain": "Assembly-at-query is fragile composition. Question-grain units answer alone; probes enforce it pre-index."
+    },
+    {
+      "q": "Chunks lack updated dates. Consequence?",
+      "options": ["None", "Unfreshenable: staleness checks, recency ranking, and price guards all need dates — metadata gaps fail silently downstream", "Slower retrieval", "Bigger index"],
+      "answer": 1,
+      "explain": "Metadata is load-bearing infrastructure for filtering, citations, and freshness. Missing fields fail downstream invisibly."
+    },
+    {
+      "q": "Fixed 500-char chunks on a structured catalog. Verdict?",
+      "options": ["Best practice", "Fallback thinking: structure-aware cuts (variants/clauses/rows) first; fixed-size only where structure is absent", "Required", "Faster"],
+      "answer": 1,
+      "explain": "Structure carries semantics fixed sizes shred. Cut with the grain (questions), fall back to characters only unstructured."
+    }
+  ],
+  "summary": "Question-grain units, complete metadata, probe-gated indexing. Chunks are answers waiting for questions — design them as such.",
+  "next": "Units built — now make them findable: embeddings, similarity, and honest baselines. Next: meaning as vectors."
+}
