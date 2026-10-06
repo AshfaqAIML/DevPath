@@ -240,10 +240,19 @@ export function HomeView({ categoriesData, featuredItems, trendingItems, onOpenS
           <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {recentEntries.map((r) => {
               const a = getAccent(r.categoryAccent);
+              const playable = r.categorySlug === "simulators" && isPlayableSimulator(r.slug);
               return (
                 <li key={r.slug}>
                   <Link
-                    href={`/?category=${r.categorySlug}&item=${r.slug}`}
+                    href={
+                      playable
+                        ? simulatorViewHref(r.slug)
+                        : r.categorySlug === "courses"
+                          // courses with lesson content open the course view;
+                          // catalog-only courses fall back to the category view
+                          ? `/?course=${r.slug}`
+                          : `/?category=${r.categorySlug}&item=${r.slug}`
+                    }
                     className={cn(
                       "group flex items-center gap-3 rounded-xl border bg-card p-3 transition-all duration-200",
                       "hover:-translate-y-0.5 hover:shadow-md",

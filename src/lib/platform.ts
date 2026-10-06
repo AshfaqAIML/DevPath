@@ -50,6 +50,8 @@ export type ResourceItemView = {
   categoryTitle: string;
   categoryIcon: string;
   categoryAccent: string;
+  /** Live lessons count for courses with real content (0 otherwise) */
+  lessonCount?: number;
 };
 
 const toCategoryView = (
@@ -141,6 +143,7 @@ export async function getItems(opts: {
   level?: string;
   sort?: string;
   includeDrafts?: boolean;
+  featured?: boolean;
   limit?: number;
 }): Promise<ResourceItemView[]> {
   const where: Record<string, unknown> = {};
@@ -181,7 +184,20 @@ export async function getItems(opts: {
     include: { category: true },
     take: opts.limit ?? 200,
   });
-  return items.map((i) => toResourceItemView(i, i.category));
+
+  // Attach live lesson counts so course cards/dialogs/search can surface
+  // "N lessons" chips and the Start-course CTA only where content exists.
+  const lessonCounts = await db.lesson.groupBy({
+    by: ["courseSlug"],
+    where: { published: true, course: { contentStatus: "published" } },
+    _count: { _all: true },
+  });
+  const lessonMap = new Map(lessonCounts.map((l) => [l.courseSlug, l._count._all]));
+
+  return items.map((i) => ({
+    ...toResourceItemView(i, i.category),
+    lessonCount: lessonMap.get(i.slug) ?? 0,
+  }));
 }
 
 export async function logAnalyticsEvent(

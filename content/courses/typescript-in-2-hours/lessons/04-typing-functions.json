@@ -1,0 +1,147 @@
+{
+  "title": "Typing Functions",
+  "slug": "04-typing-functions",
+  "objective": "After this lesson you will be able to type function parameters, returns, optional/default/rest parameters and callbacks, distinguish void from never, and read overload signatures in library code.",
+  "why": "Functions are where types earn their keep: almost every runtime bug crosses a function boundary. A function's signature is a contract — takes these, returns that — and a typed signature is executable documentation that the compiler enforces at every call site, forever, across every file that touches it.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The full signature" },
+    { "t": "p", "text": "You've been typing parameters since Lesson 1. The complete picture adds the return type after the parameter list:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n\n// Arrow form — identical contract\nconst shout = (text: string): string => text.toUpperCase() + \"!\";\n\n// Async functions return a Promise of the value\nasync function loadUser(id: number): Promise<User> {\n  const res = await fetch(`/api/users/${id}`);\n  // ... Lesson 8 handles the body properly\n  return res as unknown as User;\n}"
+    },
+    { "t": "p", "text": "The return annotation is worth writing on any shared function for two reasons: it documents the contract for callers, and it catches accidental drift — if a refactor starts returning `null` where a `string` was promised, the compiler flags the *function*, not a distant consumer." },
+    { "t": "h", "text": "Optional, default and rest parameters" },
+    { "t": "p", "text": "Parameters have three modifiers that map directly to how you already design APIs:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function retry(\n  fn: () => Promise<void>,\n  attempts: number = 3,          // default: type comes from the value (number)\n  backoffMs = 500,               // default: inferred number — no annotation needed\n  label?: string                 // optional: string | undefined\n): Promise<void> { /* ... */ }\n\nfunction log(...parts: unknown[]): void {   // rest: an array of the rest\n  console.log(\"[app]\", ...parts);\n}\n\nlog(\"boot\", { ok: true }, 42);   // ✓ — parts: unknown[3]"
+    },
+    { "t": "list", "ordered": false, "items": [
+      "Optional (`?`) parameters become `T | undefined` inside the function — you must handle the missing case.",
+      "Default parameters get their type *from* the default value; annotate only if the default is narrower than what you accept.",
+      "Rest parameters collect everything remaining into a typed array — the last parameter only."
+    ]},
+    { "t": "callout", "variant": "warn", "title": "Common mistake #4", "text": "Placing an optional parameter before a required one: `function f(a?: string, b: number)`. TypeScript rejects it (required can't follow optional). If you genuinely want a leading optional, use `a?: string | undefined` explicitly — or reorder, which is almost always the better API." },
+    { "t": "h", "text": "void: \"I don't return anything\"" },
+    { "t": "p", "text": "`void` says the return value should be ignored. It's the return type of side-effect functions like `log`. The subtlety worth knowing: a `void`-returning type also accepts functions that *do* return something — because the caller is declaring it won't use the result:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "type Callback = () => void;\n\nconst cb: Callback = () => 42;   // ✓ compiles! return value ignored by contract\n\n// This is what makes forEach-type APIs ergonomic:\n[1, 2, 3].forEach((n) => n * 2);  // the map-like arrow is accepted as a void callback\n// ...but if YOU declare : void yourself, you can't consume a return from it."
+    },
+    { "t": "h", "text": "never: \"this cannot happen\"" },
+    { "t": "p", "text": "`never` is the type of code that doesn't finish: a function that always throws, or an infinite loop. It's not `void` (which finishes, returning nothing). `never` shines in exhaustiveness checking — the pattern you'll use constantly with Lesson 5's unions:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function fail(message: string): never {\n  throw new Error(message);\n}\n\nfunction assertDefined<T>(value: T | undefined, name: string): T {\n  if (value === undefined) fail(`${name} was undefined`);\n  return value;   // ✓ compiles: control-flow knows fail() never returns\n}\n\n// Exhaustiveness guard — remember this for Lesson 5:\nfunction handle(state: \"idle\" | \"loading\" | \"error\") {\n  switch (state) {\n    case \"idle\": return \"Ready\";\n    case \"loading\": return \"Loading…\";\n    case \"error\": return \"Failed\";\n    default: {\n      const unreachable: never = state;  // Error if a new state is ever added!\n      return unreachable;\n    }\n  }\n}"
+    },
+    { "t": "callout", "variant": "tip", "title": "Why the never trick matters", "text": "When a teammate adds `\"success\"` to the state union later, the default branch stops compiling — TypeScript points at the exact switch statement you forgot to update. It converts future refactoring mistakes into present compile errors." },
+    { "t": "h", "text": "Function types: callbacks as parameters" },
+    { "t": "p", "text": "Functions are values, so they have types. Spell them with arrow syntax — the most common typed-callback patterns:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface User { readonly id: number; email: string }\n\n// Callback parameter type in full\ntype Comparator<T> = (a: T, b: T) => number;\n\nfunction sortBy<T>(xs: T[], cmp: Comparator<T>): T[] {\n  return [...xs].sort(cmp);\n}\n\n// Event-handler shape\ntype Handler = (event: { type: string; payload?: unknown }) => void;\n\n// Transform function for a map-like utility\nfunction applyAll<T, R>(xs: T[], f: (x: T) => R): R[] {\n  return xs.map(f);\n}\n\napplyAll([1, 2, 3], (n) => `#${n}`);   // R infers as string — no annotations needed\napplyAll([1, 2, 3], (n) => n.length);  // Error: number has no .length"
+    },
+    { "t": "p", "text": "Notice how `applyAll`'s callback needs **no annotations at the call site** — the generic parameters (Lesson 6 deep-dives) flow the element type into the callback's parameter automatically. That's inference working across function boundaries, and it's why typed code isn't more verbose than JavaScript." },
+    { "t": "h", "text": "Overloads: one name, multiple contracts" },
+    { "t": "p", "text": "Sometimes a function legitimately behaves differently per input shape. Overload signatures declare each contract; the implementation must satisfy them all. You'll *read* overloads in every major library, so learn to recognize the shape:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function format(value: number): string;            // overload 1\nfunction format(value: Date): string;             // overload 2\nfunction format(value: number | Date): string {   // implementation\n  if (value instanceof Date) return value.toISOString();\n  return value.toFixed(2);\n}\n\nformat(19.99);   // → \"19.99\"   (matched overload 1)\nformat(new Date()); // → \"2026-…\" (matched overload 2)\nformat(\"19.99\"); // Error: no overload matches string"
+    },
+    { "t": "p", "text": "Callers only see the overload signatures — the implementation signature is invisible from outside. In modern TypeScript, unions + narrowing (Lesson 5) cover many cases overloads used to handle; prefer the simpler union when the body logic is shared, and reserve overloads for genuinely different contracts." },
+    { "t": "h", "text": "How it appears in real applications" },
+    { "t": "p", "text": "A retry wrapper — the kind of utility every codebase grows — types cleanly with everything from this lesson:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "async function withRetry<T>(\n  fn: () => Promise<T>,\n  attempts: number = 3,\n  onRetry?: (error: unknown, attempt: number) => void\n): Promise<T> {\n  let lastError: unknown;\n  for (let i = 0; i < attempts; i++) {\n    try {\n      return await fn();\n    } catch (e) {\n      lastError = e;\n      onRetry?.(e, i + 1);          // optional callback, invoked if provided\n    }\n  }\n  throw lastError;                   // control-flow: this line always throws\n}"
+    },
+    { "t": "p", "text": "Default `attempts`, an optional observer callback typed as `(error: unknown, attempt: number) => void`, a generic `T` tying input promise to output promise, and an error held as `unknown` — every idea from the last three lessons cooperating in one function." },
+    { "t": "keytakeaways", "items": [
+      "Full signatures are (params): ReturnType; annotate returns on shared functions to lock contracts",
+      "Optional (?), default and rest parameters map 1:1 to API design intent; defaults infer their type",
+      "void = caller ignores the result; never = code that cannot finish — the exhaustiveness-checking workhorse",
+      "Callback types use arrow syntax; generics flow element types into callbacks so call sites stay clean",
+      "Overloads declare multiple visible contracts over one implementation — prefer unions when the logic is shared"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Write a typed `pipe` utility: pipe(f, g) returns a function that runs f, passes its result to g, and returns g's result — with types so precise that pipe(toString, double) fails to compile but pipe(double, toString) works, where `const double = (n: number) => n * 2` and `const toString = (n: number) => `n=${n}``... wait — that's the two-argument version. Keep it to two functions and make the output of the first feed the input of the second, enforced by the compiler.",
+    "hints": [
+      "Start from the types of the two functions you'll accept: what must be true about f's output and g's input?",
+      "Name it: `function pipe<A, B>(f: (a: A) => B, g: (b: B) => ???)` — the second function's input is the first's output type.",
+      "The result is a function you can call later: the return type of pipe is itself a function type — (a: A) => D where g: (b: B) => D."
+    ],
+    "solution": "function pipe<A, B, C>(\n  f: (a: A) => B,\n  g: (b: B) => C\n): (a: A) => C {\n  return (a) => g(f(a));\n}\n\nconst double = (n: number) => n * 2;        // (a: number) => number\nconst show = (n: number) => `n=${n}`;        // (a: number) => string\nconst shout = (s: string) => s.toUpperCase(); // (a: string) => string\n\nconst f = pipe(double, show);    // ✓ (a: number) => string\nconst g = pipe(show, shout);     // ✓ (a: number) => string — output feeds input\nconst h = pipe(show, double);    // Error: string is not assignable to number",
+    "why": "The chain B — f produces it, g consumes it — is exactly what generics encode. The compiler literally checks the arrows connect: f's output type flows into g's parameter slot. When pipe(show, double) is attempted, B is string but g wants number, and the mismatch is a compile error instead of a NaN at runtime. This same shape underlies every compose/pipe utility in real codebases (and fp-ts, RxJS map chains, etc.).",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "function notify(user: string, message?: string): void — which call is invalid?",
+      "options": [
+        "notify(\"ada\")",
+        "notify(\"ada\", \"hello\")",
+        "notify(\"ada\", undefined)",
+        "notify(undefined, \"hello\")"
+      ],
+      "answer": 3,
+      "explain": "The first parameter is required (string, not optional). Passing undefined there is an error. The message parameter accepts a string or can be omitted entirely — passing undefined explicitly is also allowed for optional parameters."
+    },
+    {
+      "q": "What distinguishes never from void?",
+      "options": [
+        "Nothing — they're synonyms",
+        "void = returns but value ignored; never = execution never completes (throws or loops forever)",
+        "never = returns undefined; void = returns null",
+        "never is only for async functions"
+      ],
+      "answer": 1,
+      "explain": "A void function completes; its return value is just ignored by contract. A never function never returns control at all — the compiler tracks this, which is why code after `fail(...)` is treated as unreachable and exhaustiveness checks work."
+    },
+    {
+      "q": "type Handler = (e: {type: string}) => void — const h: Handler = (e) => e.type.length works. Why does e need no annotation?",
+      "options": [
+        "Arrow functions can't be annotated",
+        "Contextual typing: the assignment target's type flows into the parameter automatically",
+        "e is implicitly any, which is allowed here",
+        "void callbacks skip parameter checking"
+      ],
+      "answer": 1,
+      "explain": "Contextual typing is inference across function boundaries: when a function expression is assigned to a typed target, its parameters adopt the target's parameter types. This is why callbacks in typed APIs stay annotation-free."
+    },
+    {
+      "q": "Inside `if (value === undefined) fail(...); return value;` — why does the return compile when value was `T | undefined`?",
+      "options": [
+        "strict mode is off in that file",
+        "fail's never return type tells control-flow analysis that reaching the return means undefined was eliminated",
+        "The compiler doesn't check returns after if-statements",
+        "undefined is assignable to T"
+      ],
+      "answer": 1,
+      "explain": "TypeScript's control-flow analysis removes impossible states per branch. If the undefined path throws (never), the only way to reach `return value` is with value defined — so the type has narrowed to T."
+    },
+    {
+      "q": "You see two bare signatures above a concrete implementation in library code. What are they?",
+      "options": [
+        "Dead code the library forgot to remove",
+        "Overload declarations — the visible contracts callers match against; the third is the hidden implementation",
+        "Deprecated syntax from TypeScript 1.x",
+        "JSDoc hints the compiler ignores"
+      ],
+      "answer": 1,
+      "explain": "That two-signatures-then-implementation stack is the overload pattern: callers see only the declared overloads. Recognizing it turns intimidating library type definitions into readable contracts."
+    }
+  ],
+  "summary": "Function signatures are contracts enforced at every call site: parameters take the modifiers you design APIs with (? for optional, defaults that infer, rest as arrays), return types lock behavior against drift, void and never say \"ignore the result\" and \"cannot finish\" respectively, and callback arrow types + contextual typing keep higher-order code as terse as JavaScript. Overloads declare multi-contract functions when unions can't.",
+  "next": "So far every value has had exactly one type. Lesson 5 introduces unions — values that are honestly one of several things — and the narrowing machinery that makes unions a superpower instead of a liability."
+}

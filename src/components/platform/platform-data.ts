@@ -60,7 +60,11 @@ export function trackEvent(
     | "item_view"
     | "search"
     | "simulator_view"
-    | "challenge_complete",
+    | "challenge_complete"
+    | "lesson_view"
+    | "lesson_complete"
+    | "quiz_attempt"
+    | "assessment_pass",
   slug?: string | null,
   label?: string | null
 ) {

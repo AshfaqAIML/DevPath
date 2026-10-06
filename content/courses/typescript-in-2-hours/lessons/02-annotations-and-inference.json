@@ -1,0 +1,140 @@
+{
+  "title": "Type Annotations, Inference & Primitives",
+  "slug": "02-annotations-and-inference",
+  "objective": "After this lesson you will be able to annotate variables, arrays and object literals with their types, predict what TypeScript infers on its own, and choose between any and unknown at untrusted boundaries.",
+  "why": "90% of the TypeScript you write day-to-day is exactly this lesson: declaring what a value is. Get the annotation/inference balance right and your code stays light while the compiler still catches everything; get it wrong and you either drown in redundant types or drown in any. This is the skill every subsequent lesson builds on.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The anatomy of an annotation" },
+    { "t": "p", "text": "A type annotation is a colon followed by a type, attached to whatever you're declaring. It reads as a sentence: \"title **is a** string\":" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "let title: string = \"TypeScript in 2 Hours\";\nlet episode: number = 2;\nlet isPublished: boolean = true;\n\n// The primitives map 1:1 to JavaScript's typeof values:\n// string, number, boolean, null, undefined, symbol, bigint\n// (number covers both int and float — there's no separate int type.)"
+    },
+    { "t": "p", "text": "Once annotated, assignments are checked. That's the whole game — `title = 42` is now a compile error, and every reader of the code can see the contract at the declaration site." },
+    { "t": "h", "text": "Inference: the compiler's best friend" },
+    { "t": "p", "text": "Here's the surprise for most JavaScript developers: **you rarely need to annotate local variables**. When a variable is initialized with a value, TypeScript infers its type from that value and enforces it exactly as if you'd written it:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "const course = \"TypeScript\";   // inferred as the literal type \"TypeScript\"\nlet count = 0;                 // inferred as number\ncount = \"ten\";                 // Error: 'string' is not assignable to 'number'\n\nconst parts = [\"intro\", \"types\"];  // inferred as string[]\nparts.push(3);                      // Error: 'number' is not assignable to 'string'"
+    },
+    { "t": "p", "text": "The rule of thumb that experienced TypeScript developers follow:" },
+    { "t": "list", "ordered": false, "items": [
+      "**Infer** local variables initialized with an obvious value — an annotation would be noise.",
+      "**Annotate** function parameters — the compiler can't see your intent, only the caller's input.",
+      "**Annotate** return types on public/shared functions — it documents the contract and catches accidental shape changes.",
+      "**Annotate** anything born empty (`[]`, `{}`) or from untyped sources — inference has nothing to learn from."
+    ]},
+    { "t": "callout", "variant": "tip", "title": "Hover is your teacher", "text": "In any editor with TS support, hover a variable to see its inferred type. Doing this constantly builds an accurate intuition for what the compiler knows — you'll quickly develop a feel for when an annotation adds information versus when it just decorates." },
+    { "t": "h", "text": "Arrays, tuples and object literals" },
+    { "t": "p", "text": "Collections annotate with `[]` after the element type. Object literals use inline shape types — property names with types, separated by semicolons, inside braces:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "const tags: string[] = [\"types\", \"course\"];\nconst matrix: number[][] = [[1, 2], [3, 4]];\n\nconst lesson: { title: string; minutes: number; free: boolean } = {\n  title: \"Annotations & Inference\",\n  minutes: 18,\n  free: true,\n};\n\nlesson.minutes = \"18\";  // Error: 'string' is not assignable to 'number'\nlesson.price = 0;       // Error: 'price' does not exist in the literal's type"
+    },
+    { "t": "p", "text": "A **tuple** is a fixed-length array where each position has its own type — perfect for pairs like coordinates or `[value, error]` returns:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "const point: [number, number] = [48.85, 2.35];\nconst result: [number, string] = [200, \"OK\"];\n\nresult[0] = \"500\";      // Error: position 0 must be a number\nresult.push(true);      // Error — a [number, string] tuple is length 2"
+    },
+    { "t": "callout", "variant": "info", "title": "Fixed positions, checked assignments", "text": "Tuples are checked per-position. They're the type-level version of destructuring: `const [lat, lng] = point` gives you a `number` for each name, no annotation needed." },
+    { "t": "h", "text": "any vs unknown: the two escape hatches" },
+    { "t": "p", "text": "Sooner or later you'll meet a value whose type the compiler genuinely can't know — a parsed JSON body, a third-party module without types, a DOM quirk. There are two ways to say \"I don't know what this is,\" and they are **not** symmetric:" },
+    {
+      "t": "table",
+      "headers": ["", "any", "unknown"],
+      "rows": [
+        ["Accepts any value", "yes", "yes"],
+        ["Usable without checks", "yes — no checks, ever", "no — must narrow first"],
+        ["Spreads to other values", "yes — contaminates everything it touches", "no — stays contained"],
+        ["Honest signal", "\"don't check me\"", "\"check me before use\""]
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "const parsed: any = JSON.parse('{\"id\": 1}');\nparsed.course.lesson.title.push();  // compiles! then crashes at runtime 💥\n\nconst guarded: unknown = JSON.parse('{\"id\": 1}');\nguarded.id;                        // Error: 'guarded' is of type 'unknown'\nif (typeof guarded === \"object\" && guarded !== null && \"id\" in guarded) {\n  // inside here the compiler knows it's an object with an id field\n}"
+    },
+    { "t": "p", "text": "The asymmetry is the whole point. `any` disables checking *for the value and everything derived from it* — one `any` in a data flow silently turns the downstream half of your file untyped. `unknown` says: hold this value, but whoever uses it must prove what it is first. The discipline that falls out of this — **unknown at the boundary, narrow before use** — is the recurring pattern of Lesson 8." },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #2", "text": "Annotating with `any` because an error message confused you. The message is telling you the types don't line up; the fix is to align them (or narrow), never to delete the checking. When truly stuck, `unknown` plus a runtime check keeps the compiler working for you." },
+    { "t": "h", "text": "Reading inference like the compiler" },
+    { "t": "p", "text": "Run these declarations through your head and predict the inferred types before hovering:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "let a = \"hello\";        // string — a let widens to the general type\nconst b = \"hello\";      // \"hello\" — a const locks the literal type\nconst c = { n: 1 };     // { n: number }\nconst d = [1, \"1\"];     // (number | string)[] — mixed widens to a union\nlet e = null;           // any (untyped!) — this is why empty needs annotations\nconst f: string[] = []; // string[] — annotated because inference sees nothing"
+    },
+    { "t": "p", "text": "The `let`/`const` distinction is real: a `const` can never be reassigned, so the compiler records the exact literal; a `let` might be reassigned to any string later, so it widens to `string`. You'll exploit the const-literal behavior heavily in Lesson 5 on unions." },
+    { "t": "keytakeaways", "items": [
+      "Annotations are `name: type` contracts enforced at assignment; parameters always get them",
+      "Inference covers initialized locals — annotate function boundaries and empty containers instead",
+      "Tuples [A, B] type fixed-length, fixed-position arrays; object shapes can be written inline",
+      "any disables checking and contaminates; unknown quarantines and demands proof — prefer unknown at boundaries",
+      "let widens to the general type; const preserves the exact literal type"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Below is a config loader with three type problems: an `any` at the boundary, a missing return annotation, and an array that will hold mixed content. Rewrite it so that: (1) `raw` flows through unknown, (2) the function's return contract is explicit, and (3) the array is typed for what it will actually contain. The goal is zero `any` and code a reader can trust.",
+    "hints": [
+      "JSON.parse returns any by declaration — but you can receive it into an unknown-typed variable to contain it.",
+      "What shape does the function actually return? Two fields, both strings — write that shape as the return type.",
+      "For the list, think about what gets pushed: only strings. A string[] annotation makes the empty array checkable."
+    ],
+    "solution": "type Config = { env: string; region: string };\n\nfunction loadConfig(rawJson: string): Config {\n  const raw: unknown = JSON.parse(rawJson);   // boundary: contain, don't trust\n  if (\n    typeof raw === \"object\" && raw !== null &&\n    \"env\" in raw && typeof raw.env === \"string\" &&\n    \"region\" in raw && typeof raw.region === \"string\"\n  ) {\n    return { env: raw.env, region: raw.region };\n  }\n  throw new Error(\"Invalid config payload\");\n}\n\nconst log: string[] = [];   // annotated: it will hold strings",
+    "why": "The unknown variable forces the validation block to exist — the compiler *makes* you prove the shape before returning it, so a malformed payload fails loudly at the guard instead of silently at some distant property access. The explicit return type documents the contract for every caller, and annotating the empty array gives inference something to check pushes against. This exact pattern — parse to unknown, validate, return a precise type — is the boundary discipline of Lesson 8.",
+    "code": "function loadConfig(rawJson: any) {          // ← any at the boundary\n  const raw = JSON.parse(rawJson);\n  return { env: raw.env, region: raw.region }; // shape unverified\n}\n\nconst log = [];   // ← will hold strings, but inference sees nothing\nlog.push(\"boot\");\nlog.push(42);     // ← whoops",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "const answer = 42 — what type does the compiler infer?",
+      "options": ["number", "42 (the literal type)", "any, since there's no annotation", "const"], "answer": 1,
+      "explain": "A const can never be reassigned, so TypeScript records the exact literal type 42. For a `let answer = 42`, the type would widen to number because reassignment is possible."
+    },
+    {
+      "q": "Which declaration most needs an explicit annotation?",
+      "options": [
+        "const name = \"Ada\"",
+        "function double(x: number) { return x * 2 }'s local x",
+        "let stack = [] — an empty array that will be filled later",
+        "const flag = true"
+      ],
+      "answer": 2,
+      "explain": "An empty array gives inference nothing to learn from (it would infer never[] under strict mode, blocking pushes). Initializing with obvious values lets inference do its job; empty containers need you to declare intent."
+    },
+    {
+      "q": "const data: unknown = JSON.parse(raw) — what happens when you then call data.map(...)?",
+      "options": [
+        "It works — unknown behaves like any",
+        "Compile error: you can't call methods on unknown without narrowing it first",
+        "Runtime exception before map runs",
+        "TypeScript auto-converts it to any for method calls"
+      ],
+      "answer": 1,
+      "explain": "unknown blocks *all* operations until you prove the value's shape. That's the safety: the parse might have produced anything, and the compiler refuses to guess on your behalf."
+    },
+    {
+      "q": "const pair = [200, \"OK\"] infers which type?",
+      "options": ["[number, string] — a tuple", "(number | string)[] — an array of the union", "any[]", "string[]"], "answer": 1,
+      "explain": "Without a tuple annotation, arrays widen to element unions — every element could be either type. If you want fixed positions, annotate: const pair: [number, string] = [200, \"OK\"]."
+    },
+    {
+      "q": "What does `\"id\" in raw && typeof raw.env === \"string\"` accomplish inside the unknown guard?",
+      "options": [
+        "It creates a runtime class named raw",
+        "It gives the compiler proof of shape so raw's properties become usable in the branch",
+        "It converts unknown to any temporarily",
+        "Nothing — these checks are documentation only"
+      ],
+      "answer": 1,
+      "explain": "Every check narrows. `in` proves the property exists; typeof proves its primitive. Stack enough proofs and the compiler tracks the narrowed shape through the branch — that's control-flow analysis doing your typing for you."
+    }
+  ],
+  "summary": "Annotations declare contracts with `name: type`; inference already covers locals initialized with obvious values, so spend your annotations where information is missing — parameters, return types, empty containers, and untyped boundaries. Arrays and object shapes annotate directly, tuples lock position types, and the any/unknown split teaches the platform's most important boundary rule: contain uncertainty with unknown, prove it with checks, then use the precise type.",
+  "next": "Writing object shapes inline gets old fast — `{ title: string; minutes: number }` repeated across a file is a maintenance bug waiting to happen. Lesson 3 gives shapes names with interfaces and type aliases."
+}

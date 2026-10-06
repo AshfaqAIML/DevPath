@@ -1,0 +1,123 @@
+{
+  "title": "Unions, Literals & Narrowing",
+  "slug": "05-unions-and-narrowing",
+  "objective": "After this lesson you will be able to model values that are one of several things with union and literal types, narrow them with typeof, in, instanceof and discriminants, and write exhaustive switches the compiler will guard for you.",
+  "why": "Real data is honest about being multiple things: a request is idle, loading, or failed; a response is a user or an error; a keydown event is one of a known set of keys. Plain JavaScript models this with strings and prayers — the wrong branch runs at 3am. Unions plus narrowing turn \"maybe\" into compiler-tracked certainty, and it's the pattern you'll use more than any other in production TypeScript.",
+  "minutes": 22,
+  "xp": 90,
+  "blocks": [
+    { "t": "h", "text": "Unions as sets of possibilities" },
+    { "t": "p", "text": "A union type (`A | B`) reads as OR: the value is an A, or a B — the compiler tracks which members are on the table. The first rule of unions is what you're *allowed* to do with one: only operations that are valid for **every** member:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function length(x: string | string[]) {\n  x.length;   // ✓ — both string and string[] have length\n  x.push(\"\");  // Error — string has no push\n  x.trim();   // Error — string[] has no trim\n}\n\nconst id: string | number = fetchId();\nid.toUpperCase();  // Error: toUpperCase doesn't exist on string | number\nid.toString();    // ✓ — both members have toString"
+    },
+    { "t": "p", "text": "This is the honest trade: a union is *less capable* than either member alone until you narrow it. Which raises the obvious question — how do you get back to a specific type? Answer: prove which member you have, and the compiler follows along." },
+    { "t": "callout", "variant": "tip", "title": "The mental model", "text": "Think of a union as a sealed envelope of possibilities. You can't read the letter until you prove what's inside. Every narrowing check is evidence you present to the compiler; inside the branch where the evidence holds, the envelope is open." },
+    { "t": "h", "text": "Literal types: unions of exactly one value" },
+    { "t": "p", "text": "A literal type is a type containing exactly one value. Alone it's boring; unioned, it's the typed enum you actually want:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "type Status = \"idle\" | \"loading\" | \"error\";\n\ndeclare function setStatus(s: Status): void;\n\nsetStatus(\"loading\");   // ✓\nsetStatus(\"Loading\");   // Error — capital L isn't in the union\nsetStatus(\"fail\");     // Error — typo caught at compile time\n\n// Direction of control:\ntype Method = \"GET\" | \"POST\" | \"PATCH\" | \"DELETE\";\n\n// Combined with booleans and null for state machines:\ntype Toggle = \"on\" | \"off\" | null;"
+    },
+    { "t": "p", "text": "Remember Lesson 2's `const` preserving literal types? That's where this power comes from — \"loading\" as a value has the type \"loading\", so string literals in your code carry exactly the evidence the union needs. This one construct replaces most uses of enums, with zero runtime overhead." },
+    { "t": "h", "text": "The narrowing toolbox" },
+    { "t": "p", "text": "TypeScript understands a specific set of checks and *carries the conclusion into the branch*. This is control-flow analysis — the compiler executing your if-statements symbolically. The four checks you'll use daily:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// 1. typeof — for primitives\nfunction size(x: string | number) {\n  if (typeof x === \"string\") {\n    return x.length;   // x: string here\n  }\n  return x.toString().length;  // x: number here (the only member left)\n}\n\n// 2. in — property presence, for object shapes\ninterface Admin { permissions: string[] }\ninterface Member { joinedAt: string }\nfunction describe(user: Admin | Member) {\n  if (\"permissions\" in user) {\n    return `admin: ${user.permissions.length} perms`;  // user: Admin\n  }\n  return `member since ${user.joinedAt}`;               // user: Member\n}\n\n// 3. instanceof — for classes and built-ins\nfunction parse(input: string | Date) {\n  if (input instanceof Date) return input.toISOString();\n  return new Date(input).toISOString();\n}\n\n// 4. Equality against a literal — for literal unions\nfunction icon(s: \"idle\" | \"loading\" | \"error\") {\n  if (s === \"idle\") return \"▶\";      // s: \"idle\"\n  if (s === \"loading\") return \"…\";   // s: \"loading\"\n  return \"!\";                         // s: \"error\" — everything else eliminated"
+    },
+    { "t": "p", "text": "The fourth example demonstrates **elimination**: with only three members on the table and two checked, the final branch narrows to the survivor without a check. Narrowing works with both truthiness checks (for `T | null | undefined`), `else` branches, early returns, ternaries, and `while` conditions — any control flow the compiler can follow." },
+    { "t": "h", "text": "Discriminated unions: the production pattern" },
+    { "t": "p", "text": "Here is the single most valuable pattern in this course. When every member of a union carries the **same field holding a distinct literal type** — a discriminant — switching on that field narrows the entire object per case:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "type Shape =\n  | { kind: \"circle\"; radius: number }         // payload: radius\n  | { kind: \"square\"; side: number }          // payload: side\n  | { kind: \"rect\"; w: number; h: number };   // payload: w + h\n\nfunction area(s: Shape): number {\n  switch (s.kind) {\n    case \"circle\": return Math.PI * s.radius ** 2;  // s narrowed: radius ✓\n    case \"square\": return s.side ** 2;             // s narrowed: side ✓\n    case \"rect\":   return s.w * s.h;               // s narrowed: w, h ✓\n  }\n}\n\narea({ kind: \"circle\", radius: 2 });     // ✓\narea({ kind: \"circle\", side: 2 });       // Error: side doesn't exist on the circle member\narea({ kind: \"triangle\", base: 3 });     // Error: \"triangle\" isn't in the union"
+    },
+    { "t": "p", "text": "Each case of the switch knows *the whole object's shape* — not just the `kind` field. Adding `triangle` to the union makes every switch that doesn't handle it fail to compile (with the `never` guard from Lesson 4). This is the standard way production TypeScript models API responses, Redux actions, parsed ASTs, WebSocket messages, error envelopes — any tagged data:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// API responses as a discriminated union:\ntype FetchResult<T> =\n  | { status: \"ok\"; data: T }\n  | { status: \"error\"; message: string; retry: boolean };\n\nfunction render<T>(result: FetchResult<T>) {\n  switch (result.status) {\n    case \"ok\":    return show(result.data);                    // T available\n    case \"error\": return showError(result.message, result.retry);\n  }\n}"
+    },
+    { "t": "diagram", "caption": "Narrowing a FetchResult by its discriminant", "nodes": ["result: FetchResult<User>", "switch (result.status)", "case \"ok\" → result.data: User", "case \"error\" → result.message: string"] },
+    { "t": "callout", "variant": "info", "title": "Naming the pattern", "text": "You'll also see discriminants called tags or markers, and the union a tagged union. Different vocabulary, same mechanics: one shared literal-typed field, distinct per member, switch to dispatch. When reviewing TypeScript codebases, `kind`/`type`/`status`/`variant` fields are the usual suspects." },
+    { "t": "h", "text": "Custom type guards" },
+    { "t": "p", "text": "Sometimes narrowing needs logic too complex for a built-in check — validating an API object, for example. A **type guard** is a function whose return type is a *predicate* (`x is T`), and it plugs your runtime validation into the compiler's narrowing:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface User { readonly id: number; email: string; role?: string }\n\n// The predicate return type makes this a narrowing check the compiler trusts\nfunction isUser(value: unknown): value is User {\n  return (\n    typeof value === \"object\" && value !== null &&\n    \"id\" in value && typeof value.id === \"number\" &&\n    \"email\" in value && typeof value.email === \"string\"\n  );\n}\n\nconst payload: unknown = await response.json();\nif (isUser(payload)) {\n  payload.email.toUpperCase();   // ✓ — payload narrowed to User\n} else {\n  reject(\"Invalid user payload\");\n}"
+    },
+    { "t": "p", "text": "One honest caveat: the compiler trusts your predicate *without verifying the body*. A guard that returns `true` unconditionally compiles fine and lies to every caller. Treat guard bodies as load-bearing validation code — they're the bridge between runtime data and compile-time types, which is exactly the Lesson 8 discipline." },
+    { "t": "keytakeaways", "items": [
+      "Unions mean OR; only operations valid for every member are allowed until you narrow",
+      "Literal types (\"idle\" | \"loading\") give you type-safe enums with zero runtime cost",
+      "typeof, in, instanceof, and literal equality all narrow — the conclusion follows the branch",
+      "Discriminated unions (shared kind field + switch) narrow whole objects — the production pattern for tagged data",
+      "Custom guards (x is T) plug runtime validation into compile-time narrowing; keep their bodies honest"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "A message queue delivers three message kinds: `type Message = { type: \"text\"; body: string } | { type: \"file\"; url: string; sizeKb: number } | { type: \"payment\"; amount: number; currency: \"INR\" | \"USD\" }`. Write `describe(msg: Message): string` that returns \"text: <first 20 chars>\", \"file: <sizeKb> KB\", or \"payment: <amount> <currency>\" — then extend it with a fourth member `{ type: \"system\"; level: \"info\" | \"warn\" }` and verify the compiler points at your non-exhaustive switch (fix it with a never guard).",
+    "hints": [
+      "The discriminant is `type` — one switch, one case per member, and each case sees that member's full payload.",
+      "For the text truncation, slice the body — but check: does case \"text\" even see `body` typed as string? It should, if the switch is on msg.type.",
+      "For exhaustiveness, add a `default` (or after-switch) branch where you assign msg to a never variable — if any member wasn't handled, that assignment errors and names the missing type."
+    ],
+    "solution": "type Message =\n  | { type: \"text\"; body: string }\n  | { type: \"file\"; url: string; sizeKb: number }\n  | { type: \"payment\"; amount: number; currency: \"INR\" | \"USD\" }\n  | { type: \"system\"; level: \"info\" | \"warn\" };\n\nfunction describe(msg: Message): string {\n  switch (msg.type) {\n    case \"text\":    return `text: ${msg.body.slice(0, 20)}`;\n    case \"file\":    return `file: ${msg.sizeKb} KB`;\n    case \"payment\": return `payment: ${msg.amount} ${msg.currency}`;\n    case \"system\":  return `system: ${msg.level}`;\n    default: {\n      const unreachable: never = msg;   // errors if any member missed\n      return unreachable;\n    }\n  }\n}",
+    "why": "The discriminant dispatch makes each case type-safe by construction — msg.body, msg.sizeKb, msg.currency are only reachable inside the case that proved them. And the never guard is a tripwire for the future: delete the system case and the default branch fails to compile, telling the next developer exactly what they forgot. This combination — tagged union + exhaustive switch + never guard — is how production codebases make adding a message type a compiler-guided change instead of a runtime surprise.",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "function f(x: string | number) — which expression compiles inside f without narrowing?",
+      "options": ["x.toUpperCase()", "x.toFixed(2)", "x.length", "x.toString()"], "answer": 3,
+      "explain": "Only toString exists on both string and number, so it's the lone legal call on the un-narrowed union. The others require a typeof branch first — which is precisely the incentive structure unions create."
+    },
+    {
+      "q": "What does the `in` operator narrow on?",
+      "options": [
+        "The object's class hierarchy",
+        "Presence of a property — \"permissions\" in user proves the member that has it",
+        "Whether a value is in an array",
+        "The keys of the global scope"
+      ],
+      "answer": 1,
+      "explain": "`\"permissions\" in user` is evidence: only the Admin member of Admin | Member declares that property, so the branch narrows to Admin. It's property-presence discrimination for non-literal unions."
+    },
+    {
+      "q": "Why do discriminated unions work with switch when plain unions of objects don't narrow as neatly?",
+      "options": [
+        "switch is faster than if for objects",
+        "Each member carries a shared field with a distinct literal type, so each case value maps to exactly one member",
+        "The objects must be frozen first",
+        "Literal types create runtime tags the browser can read"
+      ],
+      "answer": 1,
+      "explain": "The discriminant field's type differs per member (\"circle\" vs \"square\"), so matching a case value identifies the member unambiguously — no runtime tags, just the compiler connecting literal evidence to a union member."
+    },
+    {
+      "q": "A custom guard `function isList(x: unknown): x is string[] { return true; }` — what's the consequence of its dishonest body?",
+      "options": [
+        "It fails to compile — guards are verified",
+        "It compiles; every caller that uses it on a non-array will crash at runtime where they trust the narrowing",
+        "It silently returns false at runtime",
+        "TypeScript downgrades it to any"
+      ],
+      "answer": 1,
+      "explain": "Predicate bodies are trusted, not checked. A lying guard converts the compiler into a co-conspirator. This is why guards belong next to real validation code — they're the seam between runtime truth and compile-time claims."
+    },
+    {
+      "q": "After `if (s === \"idle\") return A; if (s === \"loading\") return B;` with s: \"idle\" | \"loading\" | \"error\" — what is s in the final line?",
+      "options": ["\"idle\" | \"error\"", "string", "\"error\" — the only surviving member", "never"], "answer": 2,
+      "explain": "Control-flow elimination: two members checked and returned, so only \"error\" can reach the final statement. This is narrowing by exhaustion — the compiler keeps a live set of possible types per program point."
+    }
+  ],
+  "summary": "Unions model honest multiplicity; literal types make them precise; and the narrowing toolbox — typeof, in, instanceof, literal equality — lets control flow prove which member you hold. Discriminated unions with a shared kind field are the production idiom for tagged data, custom guards bridge runtime validation into compile-time certainty, and never-guarded switches keep exhaustiveness compiler-enforced as unions grow.",
+  "next": "One function, many types: Lesson 6 introduces generics — type parameters that keep relationships between inputs and outputs precise without writing the same logic per type."
+}

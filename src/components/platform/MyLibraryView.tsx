@@ -13,6 +13,7 @@ import {
   Check,
   Clock,
   Compass,
+  GraduationCap,
   History,
   Library as LibraryIcon,
   Route,
@@ -39,6 +40,7 @@ export function MyLibraryView({ categoriesData }: MyLibraryViewProps) {
   const completed = useLibrary((s) => s.completed);
   const recent = useLibrary((s) => s.recent);
   const stepProgressMap = useLibrary((s) => s.stepProgress);
+  const courseProgressMap = useLibrary((s) => s.courseProgress);
   const clearRecent = useLibrary((s) => s.clearRecent);
   const [selected, setSelected] = React.useState<ResourceItemView | null>(null);
 
@@ -73,11 +75,26 @@ export function MyLibraryView({ categoriesData }: MyLibraryViewProps) {
     })
     .filter(Boolean)
     .sort((x, y) => y!.pct - x!.pct) as { item: ResourceItemView; done: number; total: number; pct: number }[];
-  const hasAnything = savedItems.length > 0 || completedItems.length > 0 || recentEntries.length > 0 || inProgressPaths.length > 0;
+  // Courses with real lesson content + started progress (not yet passed)
+  const inProgressCourses = Object.entries(courseProgressMap)
+    .filter(([slug, p]) => p.lessons.length > 0 && !p.completedAt)
+    .map(([slug, p]) => {
+      const item = bySlug.get(slug);
+      const total = item?.lessonCount ?? 0;
+      if (!item || total === 0) return null;
+      const done = p.lessons.filter((n) => n <= total).length;
+      const next = Math.min(...item.lessonCount ? Array.from({ length: total }, (_, i) => i + 1).filter((n) => !p.lessons.includes(n)) : [1], 1);
+      return { item, done, total, pct: Math.round((done / total) * 100), next, assessmentScore: p.assessmentScore };
+    })
+    .filter(Boolean)
+    .sort((x, y) => y!.pct - x!.pct) as { item: ResourceItemView; done: number; total: number; pct: number; next: number; assessmentScore?: number }[];
+  const hasAnything = savedItems.length > 0 || completedItems.length > 0 || recentEntries.length > 0 || inProgressPaths.length > 0 || inProgressCourses.length > 0;
   const totalStepsDone = inProgressPaths.reduce((s, p) => s + p.done, 0);
+  const totalLessonsDone = inProgressCourses.reduce((s, c) => s + c.done, 0);
 
   const stats = [
     { label: "Saved", value: savedItems.length, icon: BookmarkCheck },
+    { label: "Lessons done", value: totalLessonsDone, icon: GraduationCap },
     { label: "Steps completed", value: totalStepsDone, icon: Route },
     { label: "Completed", value: completedItems.length, icon: Check },
   ];
@@ -113,7 +130,7 @@ export function MyLibraryView({ categoriesData }: MyLibraryViewProps) {
       </motion.header>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         {stats.map((s, i) => (
           <motion.div
             key={s.label}
@@ -167,13 +184,17 @@ export function MyLibraryView({ categoriesData }: MyLibraryViewProps) {
                 {recentEntries.slice(0, 6).map((r) => {
                   const a = getAccent(r.categoryAccent);
                   const playable = r.categorySlug === "simulators" && isPlayableSimulator(r.slug);
+                  const isCourseWithLessons =
+                    r.categorySlug === "courses" && (bySlug.get(r.slug)?.lessonCount ?? 0) > 0;
                   return (
                     <li key={r.slug}>
                       <Link
                         href={
                           playable
                             ? simulatorViewHref(r.slug)
-                            : `/?category=${r.categorySlug}&item=${r.slug}`
+                            : isCourseWithLessons
+                              ? `/?course=${r.slug}`
+                              : `/?category=${r.categorySlug}&item=${r.slug}`
                         }
                         onClick={() => trackEvent("item_view", r.slug, r.title)}
                         className={cn(
@@ -265,6 +286,64 @@ export function MyLibraryView({ categoriesData }: MyLibraryViewProps) {
                     </li>
                   );
                 })}
+              </ul>
+            </section>
+          )}
+
+          {/* Courses in progress — real lesson-content progress */}
+          {inProgressCourses.length > 0 && (
+            <section aria-labelledby="courses-heading" className="space-y-4">
+              <div className="flex items-center gap-2.5">
+                <GraduationCap aria-hidden className="size-4 text-teal-500" />
+                <h2 id="courses-heading" className="text-lg font-bold tracking-tight">
+                  Courses in progress
+                </h2>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                  {inProgressCourses.length}
+                </span>
+              </div>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {inProgressCourses.map(({ item, done, total, pct, next, assessmentScore }) => (
+                  <li key={item.id}>
+                    <Link
+                      href={`/?course=${item.slug}&lesson=${next}`}
+                      className={cn(
+                        "group block rounded-xl border bg-card p-4 transition-all duration-200",
+                        "hover:-translate-y-0.5 hover:shadow-md",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                        getAccent(item.categoryAccent).hoverBorder
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-medium">{item.title}</p>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {done}/{total} lessons
+                        </span>
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-valuenow={pct}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`${item.title} course progress`}
+                        className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted"
+                      >
+                        <div
+                          className="h-full rounded-full bg-teal-500 transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        {pct}% · continue with lesson {next}
+                        {assessmentScore !== undefined ? ` · best assessment ${assessmentScore}%` : ""}
+                        <ArrowRight
+                          aria-hidden
+                          className="ml-auto size-3 opacity-0 transition-opacity group-hover:opacity-100"
+                        />
+                      </p>
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </section>
           )}

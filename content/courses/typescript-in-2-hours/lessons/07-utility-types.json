@@ -1,0 +1,114 @@
+{
+  "title": "Utility Types & Type-Level Tools",
+  "slug": "07-utility-types",
+  "objective": "After this lesson you will be able to reach for the right built-in utility type when refactoring (Partial, Required, Pick, Omit, Record, ReturnType, Awaited…), and understand keyof, indexed access and typeof as the operators they're built from.",
+  "why": "Real codebases are full of derived shapes: an update PATCH that sends some fields, a list view that shows three columns, a table keyed by ID, a handler wrapping a function's return. Writing those by hand duplicates the source type and rots on every model change. Utility types transform existing types programmatically — the refactoring superpower that keeps one source of truth.",
+  "minutes": 18,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The operators underneath everything" },
+    { "t": "p", "text": "Three tiny operators power every utility type. Learn them once and the whole toolbox becomes readable:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface User {\n  readonly id: number;\n  email: string;\n  role?: \"admin\" | \"user\";\n  joinedAt: string;\n}\n\n// 1. keyof T — the union of T's property names (all string literals)\ntype UserKeys = keyof User;   // \"id\" | \"email\" | \"role\" | \"joinedAt\"\n\n// 2. Indexed access T[K] — the type of one property (look it up!)\ntype Email = User[\"email\"];           // string\ntype Role = User[\"role\"];             // \"admin\" | \"user\" | undefined\ntype Values = User[keyof User];       // union of all value types\n\n// 3. typeof (in type position) — the type OF a value\ndeclare const defaultUser: User;\ntype DefaultUser = typeof defaultUser;   // User — no retyping!\n\nconst config = { host: \"localhost\", port: 8080 };\ntype Config = typeof config;   // { host: string; port: number } — captured from the value"
+    },
+    { "t": "p", "text": "`typeof` in a type position is the quiet hero: it means your *runtime* constants can be the single source of truth their types derive from. Change the value, and every dependent type updates on the next compile. The `keyof` + indexed-access pair is how the compiler can follow a property name to its type — you used this in Lesson 6's `prop<T, K extends keyof T>`." },
+    { "t": "callout", "variant": "tip", "title": "The mental model", "text": "Think of these as array methods for types: keyof is Object.keys (as a type union), T[K] is indexing into a lookup table, and typeof x is \"the type of this actual value.\" Everything else in this lesson is a function built from these primitives." },
+    { "t": "h", "text": "The daily-driver utility types" },
+    { "t": "p", "text": "These six cover the overwhelming majority of real-world shape derivations. Each entry shows the operator definition (right) so it demystifies, plus the canonical use case:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Partial<T> — every property optional. THE update-payload type.\ntype UserUpdate = Partial<User>;\n// ≙ { id?: number; email?: string; role?: ...; joinedAt?: string }\nfunction updateUser(id: number, patch: Partial<User>): void { /* ... */ }\nupdateUser(1, { email: \"new@example.com\" });   // ✓ any subset\n\n// Required<T> — the inverse: all properties present.\ntype MandatoryUser = Required<User>;   // role becomes required too\n\n// Pick<T, K> — keep only the listed properties. Views, DTOs, API fields.\ntype UserCard = Pick<User, \"email\" | \"role\">;\n// ≙ { email: string; role?: \"admin\" | \"user\" }\n\n// Omit<T, K> — remove the listed properties. Secrets, internals.\ntype PublicUser = Omit<User, \"id\">;   // ≙ Pick's complement\n\n// Record<K, V> — a dictionary with a fixed key set.\ntype Roles = Record<\"admin\" | \"editor\" | \"viewer\", string[]>;\n// ≙ { admin: string[]; editor: string[]; viewer: string[] }\nconst perms: Roles = {\n  admin: [\"read\", \"write\"],\n  editor: [\"read\", \"write\"],\n  viewer: [\"read\"],\n};   // missing any key → compile error. Autocomplete for every key ✓\n\n// ReturnType<F> — the return type of a function.\nfunction loadUser(): Promise<User> { /* ... */ return null as never; }\ntype Loaded = ReturnType<typeof loadUser>;   // Promise<User>"
+    },
+    { "t": "table",
+      "headers": ["You need…", "Reach for", "Why"],
+      "rows": [
+        ["PATCH/update payloads", "Partial<T>", "Callers send any subset safely"],
+        ["A view/DTO with 3 of 10 fields", "Pick<T, K>", "Compiler-verified subset, no drift"],
+        ["Strip secrets before returning", "Omit<T, K>", "Removing is checked, hand-copies aren't"],
+        ["A keyed lookup with known keys", "Record<K, V>", "Exhaustive keys + autocomplete"],
+        ["Type of what a function returns", "ReturnType<typeof f>", "Follows the function when it changes"],
+        ["Unwrap an async type", "Awaited<Promise<User>>", "Async signatures, sync thinking"]
+      ]
+    },
+    { "t": "p", "text": "Two details to internalize. First, these compose — a real pattern is a paginated list view: `type UserListItem = Pick<User, \"email\" | \"role\">` then `type UserList = { items: UserListItem[]; total: number }`. Second, they're *lazy*: `Partial<User>` re-derives from `User` on every compile, so adding a field to User flows into every derived type automatically. That's the single-source-of-truth payoff." },
+    { "t": "h", "text": "Awaited and async plumbing" },
+    { "t": "p", "text": "One modern addition earns its own headline because async code is everywhere. `Awaited<T>` unwraps a promise's type — including recursively through nested promises:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "type T1 = Awaited<Promise<User>>;              // User\ntype T2 = Awaited<Promise<Promise<User>>>;    // User — recursion handled\ntype T3 = Awaited<User | Promise<Error>>;     // User | Error — unions too\n\n// Where you'll actually use it — tying an async function's result into another type:\nasync function fetchUser(): Promise<User> { /* ... */ return null as never; }\n\nasync function render() {\n  const user: Awaited<ReturnType<typeof fetchUser>> = await fetchUser();\n  // verbose but bulletproof — more often you just write: const user = await fetchUser();\n  // inference handles it. Awaited shines in generic wrappers:\n}\n\nasync function cached<T>(fn: () => Promise<T>): Promise<T> {\n  // note the .then plumbing keeps T; if you mapped values yourself you'd use\n  // Awaited<T> to normalize whatever a chain hands you\n  return fn();\n}"
+    },
+    { "t": "h", "text": "A refactoring story (how it appears in real applications)" },
+    { "t": "p", "text": "The moment utility types click is a mid-sized change. Your API grows a `User` interface; a week later three consumers need different views of it. Watch the before/after:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// BEFORE — three hand-written shapes, three ways to drift:\ninterface UserUpdatePayload { email?: string; role?: \"admin\" | \"user\" }\ninterface UserTableRow { email: string; role?: \"admin\" | \"user\" }\ninterface AdminUserResponse { email: string; role: \"admin\" | \"user\"; joinedAt: string }\n\n// A new field `displayName?: string` on User requires remembering three\n// places to update. Miss one → silent type mismatch between layers.\n\n// AFTER — derived, self-updating:\ntype UserUpdatePayload = Partial<Pick<User, \"email\" | \"role\">>;\ntype UserTableRow = Pick<User, \"email\" | \"role\">;\ntype AdminUserResponse = Omit<User, \"id\">;\n\n// Add displayName to User and all three views gain it (or gain the OPTION to\n// gain it) automatically. The compiler flags any place that must decide."
+    },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #6", "text": "Omitting a field for security with `Omit<User, \"passwordHash\">` and believing the field is gone at runtime. Utility types are type-level transforms — the actual object still carries the property. The pattern is correct as a *contract* (you can't accidentally access it through the typed view), but the strip must happen in code: `const { passwordHash, ...safe } = user; return safe satisfies Omit<User, \"passwordHash\">;`" },
+    { "t": "keytakeaways", "items": [
+      "keyof, indexed access T[K], and typeof are the operators; every utility type is a function over them",
+      "Partial = update payloads, Pick/Omit = verified views, Record = exhaustive dictionaries, ReturnType/Awaited = function-derived types",
+      "Utility types re-derive on every compile — one source of truth, zero manual syncing across derived shapes",
+      "typeof + a runtime constant makes the value the single source of truth for its whole type family",
+      "Type-level removal (Omit) doesn't remove runtime properties — pair it with a destructure for real stripping"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "You're hardening an API layer. Given `interface User { readonly id: number; email: string; passwordHash: string; role: \"admin\" | \"user\"; displayName?: string }`, define: (1) `PublicUser` — everything a client may see, i.e. User minus passwordHash; (2) `UserPatch` — the update payload, any subset of email/role/displayName; (3) a `sanitize(user: User): PublicUser` function that actually strips the secret at runtime (no type lies); and (4) a `RolePerms` record mapping every role to its allowed permissions list, exhaustive by construction.",
+    "hints": [
+      "PublicUser is one Omit away; UserPatch is a Partial over a Pick.",
+      "For sanitize, destructure the secret out: const { passwordHash, ...rest } = user; — then return rest. The spread genuinely removes the field at runtime.",
+      "The `satisfies` operator (TS 4.9+) lets you check the destructure's type against PublicUser without widening: return rest satisfies PublicUser.",
+      "RolePerms: Record<User[\"role\"], string[]> — indexed access pulls the role union so the record stays exhaustive if roles grow."
+    ],
+    "solution": "interface User {\n  readonly id: number;\n  email: string;\n  passwordHash: string;\n  role: \"admin\" | \"user\";\n  displayName?: string;\n}\n\ntype PublicUser = Omit<User, \"passwordHash\">;\ntype UserPatch = Partial<Pick<User, \"email\" | \"role\" | \"displayName\">;\ntype RolePerms = Record<User[\"role\"], string[]>;\n\nconst rolePerms: RolePerms = {\n  admin: [\"users:read\", \"users:write\"],\n  user: [\"users:read\"],\n};\n\nfunction sanitize(user: User): PublicUser {\n  const { passwordHash, ...rest } = user;\n  return rest satisfies PublicUser;   // runtime strip + compile-time proof\n}\n\n// add a third role to User.role and RolePerms stops compiling until you\n// decide its permissions — exhaustiveness working for you"
+  ,
+    "why": "Each piece derives from User, so the source of truth is singular: add displayName and every derived type updates; add a role and RolePerms refuses to compile until permissions are decided. The sanitize function is the honest pairing — a type-level Omit claims the field is unreachable through the view, while the destructure+satisfies actually removes it from the object. This layering (contract derived from the model, runtime behavior matching the contract) is exactly how production API layers stay safe as models evolve.",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "type Draft = Partial<User> — what is Draft[\"email\"]?",
+      "options": ["string", "string | undefined", "unknown", "Error — Partial removes properties"], "answer": 1,
+      "explain": "Partial maps every property to optional, so each access yields T | undefined. Callers get subset freedom; consumers of the draft handle absence — that trade is the point of the utility."
+    },
+    {
+      "q": "You need a type for exactly { email: string; role: \"admin\" | \"user\" } derived from User. Which is most direct?",
+      "options": ["Omit<User, \"id\" | \"joinedAt\" | \"passwordHash\">", "Pick<User, \"email\" | \"role\">", "Partial<User>", "Record<\"email\" | \"role\", string>"], "answer": 1,
+      "explain": "Pick keeps the listed properties — a positive selection matching the requirement exactly. Omit also works but listing what to remove gets longer and drifts as User grows. Choose by which list is shorter and more stable."
+    },
+    {
+      "q": "type Perms = Record<\"read\" | \"write\", boolean> — what must an object of this type contain?",
+      "options": [
+        "Either a read or a write key",
+        "Exactly both read and write keys, each boolean — missing either is a compile error",
+        "Any string keys with boolean values",
+        "Nothing — Record is a suggestion"
+      ],
+      "answer": 1,
+      "explain": "Record over a literal union demands every key. That exhaustiveness (plus autocomplete for the keys) is why Record beats a hand-written interface for mappings between known sets."
+    },
+    {
+      "q": "const endpoints = { users: \"/users\", orders: \"/orders\" } as const; — what does keyof typeof endpoints give you?",
+      "options": [
+        "string",
+        "\"users\" | \"orders\" — the literal keys, perfect for routing lookups",
+        "[\"users\", \"orders\"] as an array type",
+        "unknown"
+      ],
+      "answer": 1,
+      "explain": "typeof captures the object's shape; as const locks the values AND keys as literal types. keyof then yields exactly \"users\" | \"orders\" — a routing table that's both the runtime data and the compile-time key union, one source of truth."
+    },
+    {
+      "q": "What does Awaited<Promise<User[]> unwrap to?",
+      "options": ["Promise<User[]>", "User[]", "User", "Awaited<User>"], "answer": 1,
+      "explain": "Awaited strips the promise wrapper one level (handling nested promises recursively): Promise<User[]> → User[]. It's how generic wrappers normalize async results without knowing the payload type."
+    }
+  ],
+  "summary": "keyof, indexed access and typeof are the primitives; Partial, Pick, Omit, Record, ReturnType and Awaited are the everyday functions built on them. Derived types re-compute on every compile, so models stay the single source of truth and views can't drift. Pair type-level removal with runtime destructuring when data must actually disappear, and let Record over literal unions enforce exhaustiveness.",
+  "next": "Everything converges: Lesson 8 wires these tools to the most common boundary in web development — fetch + JSON — and closes with your final assessment and the course project."
+}

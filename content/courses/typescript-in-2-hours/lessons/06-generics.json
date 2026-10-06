@@ -1,0 +1,127 @@
+{
+  "title": "Generics",
+  "slug": "06-generics",
+  "objective": "After this lesson you will be able to write generic functions and types, constrain type parameters with extends, read generic library signatures fluently, and recognize when generics add precision versus when they add ceremony.",
+  "why": "Your utility belt keeps growing: firstElement for string arrays, firstElement for number arrays… or one function with any, which is no function at all. Generics solve the exact problem: one implementation, precise per-call types. Every serious library you use — React's useState, Array.map, Promise.all, Prisma's queries — is generic, so reading generics is a job requirement, and writing them is how your own abstractions stop leaking types.",
+  "minutes": 22,
+  "xp": 90,
+  "blocks": [
+    { "t": "h", "text": "The problem, precisely stated" },
+    { "t": "p", "text": "Watch the three failed attempts at the same utility, and notice what each loses:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Attempt 1: overloads — one signature per type, still no coverage for\n// your custom types, and maintenance grows linearly\nfunction first(xs: string[]): string;\nfunction first(xs: number[]): number;\nfunction first(xs: (string | number)[]): string | number;\nfunction first(xs: unknown[]): unknown {\n  return xs[0];\n}\n\n// Attempt 2: any — compiles, but the caller gets any back. All checking off.\nfunction firstAny(xs: any[]): any { return xs[0]; }\nconst n = firstAny([1, 2, 3]);\nn.toUpperCase();   // compiles — crashes at runtime 💥\n\n// Attempt 3: unknown — honest, but forces every caller to narrow manually\nfunction firstUn(xs: unknown[]): unknown { return xs[0]; }"
+    },
+    { "t": "p", "text": "What we want is a *relationship*: the output's type should be the input's element type, whatever that is, decided per call. That's a job for a **type parameter**:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function first<T>(xs: T[]): T {\n  return xs[0];\n}\n\nconst a = first([\"x\", \"y\"]);   // T = string → a: string\nconst b = first([1, 2, 3]);     // T = number → b: number\nconst c = first([1, \"x\"]);     // T = number | string\n\na.toUpperCase();   // ✓ — the compiler knows a is a string\nb.toFixed(2);      // ✓ — and b is a number"
+    },
+    { "t": "callout", "variant": "tip", "title": "The mental model", "text": "A type parameter is a blank in a form the compiler fills per call by reading your arguments. You declare the shape of the relationship; inference supplies the specifics. It's function arguments, one level up." },
+    { "t": "h", "text": "Syntax, in all the places you'll meet it" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Function declaration\nfunction identity<T>(value: T): T { return value; }\n\n// Arrow function (note the trailing comma — required to disambiguate JSX)\nconst identity2 = <T,>(value: T): T => value;\n\n// Method on an interface\ninterface Box<T> {\n  value: T;\n  map<R>(f: (value: T) => R): Box<R>;\n}\n\n// Type alias with a default (learn to read defaults in library code!)\ntype ApiResponse<T = unknown> = { status: number; data: T };\n\n// Class\nclass Stack<T> {\n  private items: T[] = [];\n  push(item: T): void { this.items.push(item); }\n  pop(): T | undefined { return this.items.pop(); }\n}"
+    },
+    { "t": "p", "text": "You've already used all of this: `Promise<User>` is a generic type with one parameter; `useState<string>(\"hello\")` is a generic function with an explicit argument; `Array<T>` and `Map<K, V>` are two-parameter generics. The syntax stops being scary the moment you see it's all the same one idea." },
+    { "t": "h", "text": "Multiple parameters and inference" },
+    { "t": "p", "text": "The killer generic ties *two* types into a relationship. The canonical example — a type-safe property accessor — uses two parameters, and inference wires them:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function prop<T, K extends keyof T>(obj: T, key: K): T[K] {\n  return obj[key];\n}\n\ninterface Course { title: string; minutes: number }\nconst course: Course = { title: \"Generics\", minutes: 22 };\n\nconst t = prop(course, \"title\");    // T=Course, K=\"title\" → t: string\nconst m = prop(course, \"minutes\");  // → m: number\nprop(course, \"titel\");             // Error: \"titel\" isn't assignable to keyof Course\nprop(course, \"title\".length);      // Error — nonsense argument rejected"
+    },
+    { "t": "p", "text": "Read `K extends keyof T` as \"K is one of T's property names\" — a **constraint**. The call site can only pass keys the type actually has, and the return type `T[K]` becomes exactly the type of the property you named. One generic function, and every misuse is a compile error with the actual property names in the message. This signature is worth memorizing; you will use it for real." },
+    { "t": "h", "text": "Constraints: extends and defaults" },
+    { "t": "p", "text": "Unconstrained type parameters accept anything, which means you can't do anything with them. Constraints narrow what's allowed so the body can act:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Without the constraint, .length is illegal — T could be anything\nfunction logLength<T extends { length: number }>(x: T): T {\n  console.log(x.length);   // ✓ every T has .length\n  return x;\n}\n\nlogLength(\"hello\");      // T = \"hello\" (string literal)\nlogLength([1, 2, 3]);    // T = number[]\nlogLength(42);           // Error: number has no length — caught!\n\n// Defaults make the parameter optional at the type level\ntype Paginated<T, Meta = { total: number; page: number }> = {\n  items: T[];\n  meta: Meta;\n};\n\ntype Users = Paginated<User>;                        // default meta\ntype Custom = Paginated<User, { cursor: string }>;   // custom meta"
+    },
+    { "t": "p", "text": "Note what the constraint bought in `logLength`: not just permission to call `.length`, but a *rejection of inputs that lack it*. Constraints tighten the contract in both directions — the body gains capabilities, the callers gain a check." },
+    { "t": "h", "text": "Reading real-world generic signatures" },
+    { "t": "p", "text": "You now have everything needed to read the signatures you meet daily. Three famous ones, decoded:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// React: useState<S>(initial: S | (() => S)): [S, Dispatch<SetStateAction<S>>]\n//   → S is captured from your initial value; the setter only accepts S or\n//     an updater function. useState(0) gives you number state, guaranteed.\n\n// Array.prototype.map in the lib: map<U>(callbackfn: (value: T, index: number, array: T[]) => U): U[]\n//   → T flows in from the array, U is captured from your callback's return.\n//     [\"a\",\"b\"].map(s => s.length) → number[]. Zero annotations written.\n\n// Promise.all: all<T extends readonly unknown[] | []>(values: T):\n//   Awaited<{ [K in keyof T]: T[K] extends PromiseLike<infer U> ? U : T[K] }>\n//   → tuple-aware: [Promise<User>, Promise<Order>] unwraps to [User, Order].\n//     (Mapped + conditional types — Lesson 7 covers the syntax.)"
+    },
+    { "t": "h", "text": "When NOT to use generics" },
+    { "t": "p", "text": "Generics have a failure mode: generic-itis, where every function sprouts `<T>` regardless of need. The test is simple — **does the type parameter appear in a relationship that matters?**" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// ✗ Generic-itis: T appears once, adds nothing, ceremony only\nfunction printValue<T>(value: T): void {\n  console.log(value);   // could just be (value: unknown): void\n}\n\n// ✗ Over-general: pretending we support anything when we don't\nfunction fetchUser<T>(id: number): Promise<T> {\n  // ...the body casts anyway; T is a lie callers chose\n}\n\n// ✓ Right-sized: the constraint documents the real contract\ntype Direction = \"asc\" | \"desc\";\nfunction sortBy<T>(xs: T[], key: keyof T, dir: Direction = \"asc\"): T[] { /*...*/ return xs; }"
+    },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #5", "text": "Writing `fetchUser<T>(): Promise<T>` and having callers choose the type by wishful thinking. If the function determines the type, it must declare it or validate it — a caller-chosen T on unvalidated data is any with extra steps. Honest boundary: Promise<unknown> + a guard (Lesson 8)." },
+    { "t": "keytakeaways", "items": [
+      "Type parameters are per-call blanks the compiler fills from your arguments — one implementation, precise types everywhere",
+      "Constraints (T extends X) grant the body capabilities and reject unqualified inputs; defaults make parameters optional",
+      "The prop<T, K extends keyof T>(obj, key): T[K] signature ties arguments to results exactly — memorize it",
+      "React hooks, Array methods and Promise combinators are all this same machinery — you can now read them",
+      "If a type parameter appears only once with no relationship, delete it: unknown expresses that contract honestly"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Write `groupBy<T, K extends string>(items: T[], keyOf: (item: T) => K): Record<K, T[]>` — a real utility (Lodash has one) that buckets items by a key the caller extracts. It must: (1) infer T from the array, (2) constrain K to the string the callback returns, (3) produce a Record whose keys are exactly the possible K values with T[] buckets, and (4) reject non-string keys at compile time. Then verify groupBy(courses, c => c.level) gives you Record<\"Beginner\"|\"Intermediate\"|\"Advanced\", Course[]> with full autocomplete on the result's keys.",
+    "hints": [
+      "The output type Record<K, T[]> is the whole answer — declare it on the signature and let the body satisfy it.",
+      "For building the record at runtime, start from {} as Record<K, T[]> and accumulate: (acc[keyOf(item)] ??= []).push(item).",
+      "K extends string is the constraint that both lets you use K as a Record key and rejects number/symbol keyOf callbacks."
+    ],
+    "solution": "function groupBy<T, K extends string>(\n  items: T[],\n  keyOf: (item: T) => K\n): Record<K, T[]> {\n  const acc = {} as Record<K, T[]>;\n  for (const item of items) {\n    const key = keyOf(item);\n    (acc[key] ??= []).push(item);\n  }\n  return acc;\n}\n\ninterface Course { title: string; level: \"Beginner\" | \"Intermediate\" | \"Advanced\" }\nconst courses: Course[] = [\n  { title: \"Git\", level: \"Beginner\" },\n  { title: \"TS\", level: \"Beginner\" },\n  { title: \"React\", level: \"Intermediate\" },\n];\n\nconst byLevel = groupBy(courses, (c) => c.level);\n// byLevel: Record<\"Beginner\" | \"Intermediate\" | \"Advanced\", Course[]>\nbyLevel.Beginner.length;      // 2 — autocomplete offers exactly the three levels\nbyLevel.Beginnar;             // Error — typo'd key caught at compile time",
+    "why": "Every piece earns its place: T infers from the array so elements keep their type; K extends string both enables Record keys and documents that keyOf must return strings; and Record<K, T[]> ties the output's key set to what the callback can produce. The result has autocomplete for bucket names and compile-time rejection of typo'd access — a utility that's genuinely more than its JavaScript twin. The `{} as Record<K, T[]>` cast is the one accepted idiom here (an empty object is a degenerate record), noted precisely because the rest of the function stays cast-free.",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "first([\"a\", \"b\"]) with function first<T>(xs: T[]): T — what is the type of the result?",
+      "options": ["any", "unknown", "string", "T"], "answer": 2,
+      "explain": "Inference reads the argument: [\"a\",\"b\"] is string[], so T binds to string and the call returns string. The type parameter resolves to a concrete type per call — that's the entire mechanism."
+    },
+    {
+      "q": "Why does `function logLength<T extends { length: number }>(x: T)` compile when it calls x.length?",
+      "options": [
+        "All objects have length",
+        "The constraint proves every acceptable T has the property, so the body may use it",
+        "length is a special compiler-blessed method",
+        "T is really any under the hood"
+      ],
+      "answer": 1,
+      "explain": "Constraints are promises the compiler enforces: since only types with .length can be passed, calling .length inside is sound. And logLength(42) failing is the same contract working in the other direction."
+    },
+    {
+      "q": "prop<T, K extends keyof T>(obj: T, key: K): T[K] — what does prop(course, \"minutes\") return when course is { title: string; minutes: number }?",
+      "options": ["string", "number", "T", "keyof T"], "answer": 1,
+      "explain": "K binds to the literal \"minutes\", and T[K] resolves to the type of that exact property — number. The result type follows the key you passed, checked against the real property names."
+    },
+    {
+      "q": "Which is a symptom of generic-itis?",
+      "options": [
+        "A generic with two related type parameters",
+        "A type parameter that appears exactly once and adds no constraint or relationship",
+        "Using Record<K, V>",
+        "A generic method on an interface"
+      ],
+      "answer": 1,
+      "explain": "One appearance, no relationship = the parameter is decoration. The honest alternative is unknown (for inputs) or the concrete type (for outputs). Generics pay rent only when they connect two types or constrain inputs."
+    },
+    {
+      "q": "type EventMap = { login: User; error: Error } — which listener type is precisely typed for bus.on(\"login\", handler)?",
+      "options": [
+        "handler: (payload: any) => void",
+        "handler: (payload: User) => void — payload type follows the key literal",
+        "handler: (payload: User | Error) => void",
+        "handler: (payload: unknown) => void"
+      ],
+      "answer": 1,
+      "explain": "on<K extends keyof EventMap>(key: K, handler: (payload: EventMap[K]) => void) makes the payload follow the key: \"login\" → User, \"error\" → Error, wrong payloads rejected at compile time. This indexed-access pattern is the typed event-emitter idiom."
+    }
+  ],
+  "summary": "Generics are per-call blanks: one implementation with type parameters that inference fills from your arguments. Constraints grant body capabilities and reject unqualified inputs; defaults make parameters optional; and the keyof/indexed-access combination ties argument choices to result types exactly. Read useState, map and Promise.all as the same machinery — and delete type parameters that appear once with no relationship.",
+  "next": "The type system ships a toolbox of prebuilt generic transformations — Partial, Pick, Omit, Record, ReturnType and friends. Lesson 7 makes them automatic refactoring tools instead of mysterious incantations."
+}

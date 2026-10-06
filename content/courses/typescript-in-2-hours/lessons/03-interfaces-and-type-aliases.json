@@ -1,0 +1,137 @@
+{
+  "title": "Interfaces & Type Aliases",
+  "slug": "03-interfaces-and-type-aliases",
+  "objective": "After this lesson you will be able to model object shapes with interfaces and type aliases, compose them with extends and intersections, use optional and readonly properties meaningfully, and pick the right construct for a given shape.",
+  "why": "Every real program is object soup: users, requests, config, payloads, DOM events. Inline literal types work for one-off shapes, but the moment the same shape appears twice you have a copy-paste maintenance risk — change one, miss the other. Named shapes are the unit of reuse in TypeScript, and they're what makes cross-file contracts readable.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "From inline literal to named shape" },
+    { "t": "p", "text": "Lesson 2 left us with this. Watch the same object, three ways — inline, interface, and type alias:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// 1. Inline — fine once, painful twice\nconst lesson: { title: string; minutes: number } = { title: \"Interfaces\", minutes: 20 };\n\n// 2. Interface — a named, reusable contract\ninterface Lesson {\n  title: string;\n  minutes: number;\n}\n\n// 3. Type alias — a named, reusable… also a contract\ntype LessonT = {\n  title: string;\n  minutes: number;\n}\n\n// All three accept the same values and reject the same mistakes\nconst a: Lesson = { title: \"Interfaces\", minutes: 20 };  // ✓\nconst b: Lesson = { title: \"Interfaces\", minutes: \"20\" }; // Error: string ≠ number\nconst c: Lesson = { title: \"Interfaces\" };               // Error: minutes is missing"
+    },
+    { "t": "p", "text": "TypeScript checks shapes **structurally**: a value satisfies a type by having the right members with the right types — no `implements` keyword required at the use site, no nominal linkage. If it walks like a Lesson and talks like a Lesson, the compiler is satisfied. This is why third-party plain-JS objects can satisfy your interfaces with zero ceremony." },
+    { "t": "callout", "variant": "tip", "title": "The mental model", "text": "An interface is a checklist, not a class. The compiler walks up to a value with the checklist and ticks off properties: title, string ✓, minutes, number ✓. Nothing more mystical than that." },
+    { "t": "h", "text": "Optional, readonly and excess properties" },
+    { "t": "p", "text": "Three modifiers carry a lot of practical weight:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface User {\n  readonly id: number;    // cannot be reassigned after creation\n  email: string;          // required\n  role?: \"admin\" | \"user\"; // optional — may be absent/undefined\n  nickname?: string;\n}\n\nconst u: User = { id: 1, email: \"ada@example.com\" };  // ✓ role/nickname absent is fine\nu.id = 2;                 // Error: cannot assign to 'id' — it's readonly\n\n// But watch the fresh-literal rule:\nconst bad = { id: 1, email: \"x@y.co\", nickname: 42 };\nconst ok: User = bad;           // Error? No — structural pass… nickname: number fails!\n// Error: Type 'number' is not assignable to 'string | undefined'.\nconst extra: User = { id: 1, email: \"e\", admin: true }; // Error: 'admin' does not exist"
+    },
+    { "t": "p", "text": "Two things just happened. `?` makes a property optional — accessing it yields `string | undefined`, which strict mode forces you to handle (Lesson 5's narrowing is the tool). `readonly` forbids reassignment at compile time — note this is *not* `Object.freeze`; the emitted JavaScript does nothing, it's purely an agreement the compiler enforces. And the **excess property check** applies only to fresh object literals: assign a literal directly and unknown properties are flagged; assign a pre-built variable and only the declared members are checked (the extra ones are ignored, not errors)." },
+    { "t": "h", "text": "Composition: extends, intersections and index signatures" },
+    { "t": "p", "text": "Real domains layer shapes. A `Lesson` is part of a `Course`; an API response wraps a payload. Interfaces compose with `extends`, type aliases with `&`:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface Content {\n  title: string;\n  minutes: number;\n}\n\ninterface Lesson extends Content {\n  quizCount: number;\n}\n\ninterface Course extends Content {\n  lessons: Lesson[];\n}\n\n// type-alias equivalent — intersection\ntype LessonT = Content & { quizCount: number };\n\n// API envelope pattern, composed:\ninterface ApiResponse<T> {\n  status: number;\n  data: T;\n  error?: string;\n}"
+    },
+    { "t": "p", "text": "Both routes produce the same checked shape. And yes — `ApiResponse<T>` is a *generic interface*; Lesson 6 makes that syntax yours. One more composition tool matters for dictionaries: when keys are open-ended but values share a type, use an **index signature**:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface Scores {\n  [student: string]: number;  // any string key → number value\n}\n\nconst exam: Scores = { ada: 98, grace: 95 };  // ✓\nexam.linus = \"100\";                          // Error: string ≠ number\n\n// A stricter dictionary you'll meet in Lesson 7:\ntype Roles = Record<\"admin\" | \"editor\" | \"viewer\", string[]>;"
+    },
+    { "t": "h", "text": "interface vs type: the actual decision" },
+    { "t": "p", "text": "For pure object shapes, they're interchangeable — pick one and be consistent. The differences that matter:" },
+    { "t": "table",
+      "headers": ["Capability", "interface", "type"],
+      "rows": [
+        ["Object shapes", "yes", "yes"],
+        ["Unions / primitives aliases", "no", "yes — type ID = string | number"],
+        ["Merging / reopening", "yes — declaration merging (open)", "no — a type is closed"],
+        ["Extending errors surface early", "yes — bad extends is flagged", "intersections may create never silently"],
+        ["Mapped & conditional types", "no", "yes (Lesson 7 territory)"]
+      ]
+    },
+    { "t": "p", "text": "The practical guidance most style guides converge on: use `interface` for object contracts others might extend (public API shapes, library types), use `type` for unions, aliases over primitives, and computed shapes. Declaration merging is the sharp edge worth understanding either way — it's how libraries let you *augment* their types (the classic example: adding properties to `Window`):" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// analytics.d.ts in your project — merges with the global Window interface\ndeclare global {\n  interface Window {\n    __DEVPATH_CONFIG__?: { debug: boolean };\n  }\n}\n\n// elsewhere in your app, now fully typed:\nwindow.__DEVPATH_CONFIG__?.debug;  // boolean | undefined — no cast needed"
+    },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #3", "text": "Modeling optional *data* as optional *type* members out of laziness. `role?: string` means \"may be absent\" — that's a data fact, so fine. But don't reach for `?` to silence strictNullChecks; it moves the null-handling to every consumer (Lesson 5 shows the disciplined alternative)." },
+    { "t": "h", "text": "How it appears in real applications" },
+    { "t": "p", "text": "Look at how a typed fetch wrapper shapes up with everything so far — this is the skeleton you'll complete in Lesson 8:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "interface User {\n  readonly id: number;\n  email: string;\n  role?: \"admin\" | \"user\";\n}\n\ninterface UsersResponse {\n  status: number;\n  data: User[];\n  error?: string;\n}\n\nasync function fetchUsers(url: string): Promise<UsersResponse> {\n  const res = await fetch(url);\n  // The body is unknown at this boundary — Lesson 8 validates before returning.\n  return JSON.parse(await res.text()) as UsersResponse; // placeholder cast; fixed soon\n}"
+    },
+    { "t": "keytakeaways", "items": [
+      "Interfaces and type aliases name reusable object shapes; checking is structural, not nominal",
+      "? marks optional members (value | undefined); readonly forbids reassignment — both compile-time only",
+      "Compose with extends or & intersections; index signatures type open-ended dictionaries",
+      "interface = open contracts (declaration merging, library augmentation); type = unions, primitives, computed shapes",
+      "Fresh object literals get excess-property checking; pre-built variables are checked structurally"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Model a comment system. Requirements: every Comment has a readonly id (number), body (string), and author (a User with readonly id and email; an optional display name). Comments can be either plain comments or replies — replies carry an optional `replies` array *of Comments* (nesting), and every Comment may optionally carry a `editedAt` date string. Then write a function `countAllComments(comments: Comment[]): number` that counts comments including nested replies. Define the shapes with an interface, then implement the recursive counter.",
+    "hints": [
+      "Start from the leaf: model User first, then Comment referencing it — interfaces compose by fields, so order doesn't matter, but thinking order does.",
+      "Nesting is just an optional self-reference: `replies?: Comment[]`. The recursion in the type mirrors the recursion in the counting function.",
+      "For the counter: map each comment to 1 plus whatever countAllComments returns for its (possibly missing) replies — `c.replies ? countAllComments(c.replies) : 0` handles the optional."
+    ],
+    "solution": "interface User {\n  readonly id: number;\n  email: string;\n  displayName?: string;\n}\n\ninterface Comment {\n  readonly id: number;\n  body: string;\n  author: User;\n  editedAt?: string;\n  replies?: Comment[];   // self-reference models nesting\n}\n\nfunction countAllComments(comments: Comment[]): number {\n  return comments.reduce(\n    (sum, c) => sum + 1 + (c.replies ? countAllComments(c.replies) : 0),\n    0\n  );\n}",
+    "why": "The type mirrors the data's shape precisely: readonly on id and User.id encodes \"identifiers don't change\", optional replies/editedAt/displayName encode \"may be absent\", and the self-referential array models arbitrary nesting. Because the compiler enforces that shape everywhere, the recursive counter is almost mechanical — every property access it makes is one the types guaranteed. When the shape is right, the logic follows.",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "interface Post { title: string; body: string } — which object satisfies it?",
+      "options": [
+        "{ title: \"Hi\" } — body can be added later",
+        "{ title: \"Hi\", body: \"Words\", views: 10 } assigned directly as a literal",
+        "{ title: \"Hi\", body: \"Words\", views: 10 } assigned via a pre-declared variable",
+        "None — interfaces require a class instance"
+      ],
+      "answer": 2,
+      "explain": "Structural checking passes the pre-built variable (extra views is ignored), but the fresh literal fails excess-property checking. Both behaviors are deliberate: literals are where typos live; variables are integration points where strictness would be hostile."
+    },
+    {
+      "q": "What does `readonly id: number` guarantee at runtime?",
+      "options": [
+        "Object.freeze is applied automatically",
+        "Nothing — it's a compile-time rule that reassignment is flagged",
+        "The property becomes a getter only in the emitted JS",
+        "The value is encrypted until read"
+      ],
+      "answer": 1,
+      "explain": "readonly exists only in the type world. Emitted JavaScript is unchanged — a determined caller can still mutate at runtime. It documents and enforces *intent* during development, which is where most of the value lives."
+    },
+    {
+      "q": "You need `type Status = \"idle\" | \"loading\" | \"error\"`. Can an interface express this?",
+      "options": [
+        "Yes — interface Status { idle: true }",
+        "No — unions of literals need a type alias; interfaces only describe object shapes",
+        "Yes, with an index signature",
+        "No — it requires an enum"
+      ],
+      "answer": 1,
+      "explain": "A type alias can name *any* type: unions, intersections, primitives, tuples. Interfaces are strictly object-shape contracts. (An enum would also work but is a runtime construct with different semantics — the union is the idiomatic choice.)"
+    },
+    {
+      "q": "Two interfaces with the same name in the same file — what happens?",
+      "options": [
+        "Compile error: duplicate identifier",
+        "They merge into one interface with all members (declaration merging)",
+        "The second silently wins",
+        "The first silently wins"
+      ],
+      "answer": 1,
+      "explain": "Interfaces are open — same-name declarations merge their members. This powers module augmentation (adding to library types like Window). Conflicting member *types* under the same name, though, are errors."
+    },
+    {
+      "q": "interface Scores { [k: string]: number } — what is exam[\"ada\"] if ada was never added?",
+      "options": ["0", "number (the declared value type)", "undefined, and the compiler won't warn — index signatures are unsound here", "Error at compile time"], "answer": 2,
+      "explain": "The index signature promises a number for every string, but JavaScript returns undefined for missing keys. This known gap is why Lesson 7's Record + explicit keys, or Map, are preferred for dictionaries where presence matters."
+    }
+  ],
+  "summary": "Interfaces and type aliases turn inline shapes into named, reusable, composable contracts, checked structurally so plain objects satisfy them without ceremony. Optional (`?`) and `readonly` encode data facts the compiler then enforces; extends and intersections layer shapes; index signatures type open dictionaries. interface is the open contract for object shapes, type the closed alias for unions and computed types — consistency beats ideology.",
+  "next": "Shapes done, behavior next. Lesson 4 types the workhorse of JavaScript — functions: parameters, returns, callbacks, and the special types void and never."
+}

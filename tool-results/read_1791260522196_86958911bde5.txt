@@ -1,0 +1,273 @@
+     1→     1→# DevPath — Platform Category Hub · Worklog
+     2→     2→
+     3→     3→---
+     4→     4→Task ID: 1
+     5→     5→Agent: Z.ai Code (main agent)
+     6→     6→Task: Build the Platform Category Hub — a five-category resource navigation system (Masterclass / Roadmaps / Courses / Resources / Simulators) as the core information architecture of a database-driven learning platform.
+     7→     7→
+     8→     8→Work Log:
+     9→     9→- Explored existing scaffold (Next.js 16 + App Router, Tailwind 4, shadcn/ui, Prisma/SQLite, TanStack Query, framer-motion, next-themes all available).
+    10→    10→- Defined Prisma schema (`prisma/schema.prisma`): `Category` (slug, title, tagline, description, countLabel, icon, route, badge, badgeVariant, accent, order, enabled, seo fields), `ResourceItem` (title, description, level, duration, tags, published, featured, views, order + categoryId FK), `AnalyticsEvent` (type, slug, label). Pushed with `bun run db:push`.
+    11→    11→- Generated 5 original category icons via image-generation skill (flat vector, dark charcoal background, distinct accent per category) into `/public/icons/{slug}/icon.jpg` (renamed from .png because the generator emits JPEG data). No hotlinked external assets.
+    12→    12→- Wrote and ran `prisma/seed.ts`: 15 published masterclass workshops, 11 roadmaps, 44 mini courses (+1 draft), 27 guides (+1 draft), 4 simulator drafts (unpublished → hub shows only the "New" badge). Seeded counts exactly match the reference values.
+    13→    13→- Built the API layer (all data/config flows through APIs, no server actions):
+    14→    14→  - `GET /api/categories` — categories with DB-derived published counts, honors `enabled` + `order`.
+    15→    15→  - `PATCH /api/categories/[id]` — admin: title/tagline/countLabel/badge/badgeVariant/icon/order/enabled.
+    16→    16→  - `GET /api/resources` — search (`q`), level filter, sort (featured/popular/newest/az), category filter; `all=1` + admin key includes drafts.
+    17→    17→  - `POST /api/resources` — admin creates items (auto-unique slug); `PATCH/DELETE /api/resources/[id]` — publish/feature/edit/delete.
+    18→    18→  - `POST /api/admin/auth` — password gate (ADMIN_PASSWORD env, default `devpath-admin`); admin APIs check `x-admin-key` header (401 otherwise).
+    19→    19→  - `POST /api/analytics` — events (category_view / card_click / item_view / search); item_view also increments item views; `GET /api/analytics` — admin summary (per-category views, per-type counts, recent events).
+    20→    20→- Built the frontend on the single `/` route with URL-driven view routing (sandbox constraint: only `/` is user-visible):
+    21→    21→  - `/` → landing: hero + Category Hub + Editor's picks + CTA band.
+    22→    22→  - `/?category=slug` → the category's real application section (explorer). Canonical `route` values (`/masterclass` etc.) are stored in the DB and shown as route chips; in-app navigation uses the query-param form of the same route.
+    23→    23→  - `/?category=slug&item=slug` → deep link that auto-opens the item dialog.
+    24→    24→  - `/?view=admin` → admin console.
+    25→    25→- `ResourceCategoryCard` (`src/components/platform/ResourceCategoryCard.tsx`): fully prop-driven reusable component (title, description, count, icon, href, badge, badgeVariant, accent, onNavigate, index). Count string is split so the number is emphasized; badge is a genuine shadcn `Badge`; whole card is a `next/link` (keyboard focusable, focus-visible ring); hover = lift + accent glow + icon scale + arrow slide; next/image with width/height via fill container, `sizes`, alt text; framer-motion staggered entrance.
+    26→    26→- `CategoryHub` renders cards from the live `useCategories` query (SSR-seeded via initialData + setQueryData sync) — never hardcoded in JSX. Includes the IA strip (Masterclass → Roadmaps → Courses → Resources → Simulators).
+    27→    27→- `CategoryExplorer`: breadcrumb, category header (icon, title, badge, route chip, live count line), debounced search, level ToggleGroup, sort Select, skeleton loading, item grid, empty/coming-soon states, item detail dialog.
+    28→    28→- `GlobalSearch` (⌘K/Ctrl+K command palette): searches all items, grouped by category, deep-links on select.
+    29→    29→- `AdminPanel`: auth gate (sessionStorage key) + 3 tabs — Categories (reorder ↑↓, enable/disable switch, editable countLabel + badge, live published/total counts), Content (search, category filter, publish/feature toggles, delete with confirm, add-content dialog), Analytics (event stats, per-category view bars, recent events feed).
+    30→    30→- `SiteHeader` (sticky, backdrop blur, 5-category primary nav, search, theme toggle, admin link, mobile Sheet) + `SiteFooter` (mt-auto sticky footer, category links, live counts).
+    31→    31→- SEO: dynamic `generateMetadata` per category from DB fields, JSON-LD WebSite+ItemList, semantic HTML (nav/main/section/ol), ARIA labels throughout, sr-only descriptions.
+    32→    32→- Theme: next-themes dark default + light support; both verified visually.
+    33→    33→
+    34→    34→Stage Summary (verification results — Agent Browser + VLM):
+    35→    35→- Homepage renders 200, zero console errors/warnings after fixes. VLM QA: 9/10, "production-ready".
+    36→    36→- Counts rendered from DB: 15 workshops / 11 career paths / 44 mini courses / 27 guides / Simulators "New" (no count). Confirmed via DOM text + a11y tree.
+    37→    37→- Card click → `/?category=masterclass`, title/metadata adapt; search ("typescript") + Advanced filter combine correctly; item dialog + toast work; ⌘K palette search "docker" → deep link opens Docker Foundations dialog.
+    38→    38→- Admin: login works (401 on wrong password); publishing a simulator draft made the hub card live-update to "1 simulators" (then reverted); editing countLabel "workshops"→"sessions" reflected in hub (then reverted); reorder moved Roadmaps above Masterclass across hub/nav/footer (then reverted); analytics tab shows recorded events.
+    39→    39→- Fixed during QA: explorer state persistence across category switch (added `key={slug}` remount), deep-link dialog re-opening loop (handled-once ref), Sheet missing description warning (added sr-only SheetDescription), dialog aria-describedby wiring.
+    40→    40→- Mobile (390px): cards stack, mobile Sheet nav with counts, no overflow. Footer sticks to bottom on short pages (min-h-screen flex col + mt-auto), pushed naturally on long pages. Keyboard: search input + toolbar tab order verified, card focus ring renders.
+    41→    41→
+    42→    42→Key artifacts:
+    43→    43→- `prisma/schema.prisma`, `prisma/seed.ts`, `src/lib/platform.ts` (server data layer), `src/lib/accent.ts` (accent theming map), `src/components/platform/*` (Providers, platform-data, ResourceCategoryCard, CategoryHub, HomeView, CategoryExplorer, ResourceItemCard, ItemDetailDialog, GlobalSearch, AdminPanel, SiteHeader, SiteFooter, PlatformShell), API routes under `src/app/api/{categories,resources,admin,analytics}`.
+    44→    44→- Icons: `/public/icons/{masterclass,roadmaps,courses,resources,simulators}/icon.jpg`.
+    45→    45→
+    46→    46→Unresolved issues / risks & next-phase priorities:
+    47→    47→- Admin auth is demo-grade (shared password in header, default `devpath-admin`); upgrade to NextAuth credentials provider + session cookies.
+    48→    48→- Route constraint: the sandbox exposes only `/`, so category routes are query-param based (`/?category=masterclass`) while canonical `/masterclass` strings live in the DB `route` field, ready to become real App Router segments when the constraint is lifted.
+    49→    49→- Prisma client logs every query to dev.log (`log: ['query']` in `src/lib/db.ts`) — noisy; consider reducing.
+    50→    50→- Next ideas: item detail pages with progress tracking, roadmap step-graph visualization, simulator embed page, sitemap.xml + per-category OG images, pagination/virtualization for 100+ items, admin bulk actions, rate limiting on public analytics POST.
+    51→    51→
+    52→    52→---
+    53→    53→Task ID: 2
+    54→    54→Agent: Z.ai Code (cron webDevReview round 1)
+    55→    55→Task: Scheduled 15-min review — QA the platform, fix issues, add features (My Library) and styling polish.
+    56→    56→
+    57→    57→Work Log:
+    58→    58→- Read worklog; assessed status: server healthy (all 200s), QA via agent-browser confirmed homepage / category / admin views render with zero console errors — platform stable, so this round focused on NEW FEATURES + STYLING per mandate.
+    59→    59→- Quick fixes:
+    60→    60→  - Prisma client logging reduced from `['query']` to `['warn','error']` (dev.log noise).
+    61→    61→  - Added in-memory sliding-window rate limiter (`checkRateLimit` in `src/lib/platform.ts`) wired into POST /api/analytics — 90 events/min per client key, verified HTTP 429 fires at request #90; cleaned test events afterwards.
+    62→    62→  - `GET /api/resources` now honors a `limit` query param (capped at 200).
+    63→    63→- NEW FEATURE — My Library (personal learning tracker, all client-persisted):
+    64→    64→  - `src/lib/library-store.ts`: zustand + persist("devpath-library") store — saved (bookmarks), completed, recent (max 10) with toggle/push helpers; `useLibraryHydrated()` implemented via `useSyncExternalStore` (server snapshot false / client true) to avoid SSR mismatch AND the new `react-hooks/set-state-in-effect` lint error.
+    65→    65→  - `/?view=library` view (`MyLibraryView.tsx`): stats cards (Saved / In progress / Completed), "Jump back in" recent strip with clear-history, "Saved for later" grid, "Completed" grid, empty state with CTA; items resolved against live catalog via TanStack query.
+    66→    66→  - Item cards: bookmark button (aria-pressed, amber filled state, stops propagation) + completed ✓ indicator; card restructured from `<button>` to `div[role=button]` so the nested bookmark `<button>` is valid HTML.
+    67→    67→  - ItemDetailDialog: "Save for later" / "Mark complete" action buttons with toast feedback + accent states; auto-pushes opened items into `recent`.
+    68→    68→  - SiteHeader: bookmark icon with live saved-count badge (desktop) + "My library" link in mobile sheet and footer.
+    69→    69→  - Explorer toolbar: "Saved ⟨n⟩" filter toggle — filters results client-side; contextual empty state ("Nothing saved here yet").
+    70→    70→  - Page metadata: `/?view=library` and `/?view=admin` get proper titles + noindex robots.
+    71→    71→- NEW FEATURE — Home content sections:
+    72→    72→  - "Trending now" (SSR: sort=popular limit=6) with Flame icon + SectionHeading component (accent bar + icon + trailing meta).
+    73→    73→  - "Jump back in" personalized strip on home from library recents (only renders when history exists).
+    74→    74→- STYLING POLISH:
+    75→    75→  - Category + item cards: diagonal sheen sweep on hover; category cards got top accent hairline.
+    76→    76→  - Hero: ambient `animate-pulse-slow` glows with stagger delay, top gradient hairline, underline accent on "level up".
+    77→    77→  - "New" badge: pulsing dot via `animate-badge-glow` keyframe (genuine CSS, badge text unchanged).
+    78→    78→  - Explorer toolbar: now sticky (top-20, backdrop-blur, shadow) so filters stay reachable while scrolling long grids — verified top:80px after scroll.
+    79→    79→  - globals.css: slender custom scrollbars (webkit + firefox), `prefers-reduced-motion` kill-switch for all animations/transitions.
+    80→    80→  - Dialog header: dot-grid texture overlay.
+    81→    81→
+    82→    82→Stage Summary (verification results):
+    83→    83→- agent-browser end-to-end: trending section renders (SSR items); item dialog → "Save for later" toggles to "Saved" + header badge shows amber "1"; `/?view=library` shows "1 tracked" pill + Jump back in + Saved for later; "Mark complete" → Completed section appears; explorer Saved filter → "11 career paths · 1 shown" with only the bookmarked item; sticky toolbar verified at top:80 after scrolling 900px; mobile 390px — no horizontal overflow, all sections stack.
+    84→    84→- VLM QA scores: homepage 9/10 ("highly polished"), My Library 9/10, mobile sticky toolbar 9/10.
+    85→    85→- ESLint: clean (after switching hydration gate to useSyncExternalStore). Console: zero errors/warnings across all four views. Rate limiter: 429 at request #90 ✓. Analytics test events cleaned from DB.
+    86→    86→
+    87→    87→Key artifacts added this round:
+    88→    88→- `src/lib/library-store.ts`, `src/components/platform/MyLibraryView.tsx`, updated: ResourceItemCard, ItemDetailDialog, CategoryExplorer (saved filter + sticky toolbar + smart empty states), HomeView (trending + jump back in + SectionHeading), SiteHeader (library badge), SiteFooter, PlatformShell, page.tsx (view=library routing, trending SSR, view-specific metadata), platform.ts (rate limiter), db.ts (log level), globals.css (scrollbars, pulse-slow, badge-glow, reduced-motion), ResourceCategoryCard (sheen, hairline, badge pulse).
+    89→    89→
+    90→    90→Unresolved issues / risks & priority recommendations for next phase:
+    91→    91→- Admin auth still demo-grade → NextAuth credentials + session cookies remains the top upgrade.
+    92→    92→- Single-route constraint unchanged (query-param routing; canonical routes in DB ready).
+    93→    93→- Recommended next features: (1) item detail "pages" with rich bodies (markdown) + progress steps; (2) roadmap step-graph visualization; (3) one playable simulator embed (e.g., CSS Flexbox sandbox) to activate the Simulators category; (4) sitemap.xml + OG images; (5) admin bulk publish/unpublish + CSV export; (6) keyboard shortcut help overlay (?).
+    94→    94→- localStorage library is device-local; if cross-device sync is desired later, lift saved/completed into a User model via authenticated API.
+    95→    95→---
+    96→    96→Task ID: 3
+    97→    97→Agent: Z.ai Code (main agent, scheduled dev round)
+    98→    98→Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features).
+    99→    99→
+   100→   100→Work Log:
+   101→   101→- Read worklog; assessed status: dev server healthy, all views 200, zero console errors, VLM homepage QA 9.2/10 — platform stable, so this round delivered the worklog's recommended next features.
+   102→   102→- STATUS ASSESSMENT (pre-work): homepage / simulators / library / admin all render clean; rate limiter verified (429 fires); no bugs found → feature round.
+   103→   103→
+   104→   104→NEW FEATURE 1 — Interactive CSS Flexbox Simulator (activates the Simulators category):
+   105→   105→- Prisma: added `steps String @default("")` (JSON milestones) to ResourceItem; pushed schema; reseeded.
+   106→   106→- Seed: published "CSS Flexbox Simulator" (featured, real description) → hub now shows "1 simulators" alongside the "New" badge; other 3 sims remain drafts. Total published: 98.
+   107→   107→- `src/lib/simulators.ts`: playable-sim registry (slug → sandbox kind) + `simulatorViewHref`.
+   108→   108→- `FlexboxSimulator.tsx` (~700 lines): two modes —
+   109→   109→  - Free play: full control panel (flex-direction, justify-content, align-items, flex-wrap, conditional align-content, gap slider, item count slider), live animated stage with dot grid, generated-CSS panel with per-prop "changed" highlighting + copy-to-clipboard.
+   110→   110→  - Challenges: 6 challenges (dead center / push to end / navbar space-between / column / row-reverse / wrap+gap) with Target-vs-Yours side-by-side stages, per-challenge check validation, hint reveal (AnimatePresence), mismatch feedback toast listing wrong props, auto-advance on solve, trophy progress chip in header.
+   111→   111→- Routing: `/?view=simulator&sim=css-flexbox-simulator` — page.tsx resolves the sim server-side (falls back to hub for unknown/non-playable sims), per-view metadata (noindex), PlatformShell renders FlexboxSimulator.
+   112→   112→- Integration: ItemDetailDialog primary CTA becomes "Launch sandbox" for playable sims (demo toast for unbuilt ones); ResourceItemCard shows a teal Play halo on playable sims; GlobalSearch shows Play icon + "Play" chip and deep-links straight into the sandbox; My Library recent strip links playable sims directly.
+   113→   113→- Analytics: new event types `simulator_view`, `challenge_complete` (had to extend the zod enum in /api/analytics — found via a 400 in dev.log during QA).
+   114→   114→
+   115→   115→NEW FEATURE 2 — Roadmap step-graph with progress tracking:
+   116→   116→- Seed: all 11 roadmaps now carry 8–12 realistic structured steps (title, detail, hours) — e.g. Frontend: 10 steps/~400h.
+   117→   117→- platform.ts: `StepView` type + `parseSteps`; steps flow through ResourceItemView → all APIs.
+   118→   118→- ItemDetailDialog: renders a "Learning path" section — vertical timeline (numbered nodes → check circles, connector line colored per accent when done), live progress bar with aria, "~Nh" total, "Next up" chip, checkable steps persisted to library store (`stepProgress`).
+   119→   119→- MyLibraryView: new "Learning paths in motion" section (progress cards per started roadmap) + stats card changed to "Steps completed" total.
+   120→   120→
+   121→   121→NEW FEATURE 3 — Keyboard shortcuts + help overlay:
+   122→   122→- PlatformShell global keydown handler: ⌘K/Ctrl+K search, `?` help, `1`–`5` category jump (IA order), `l` library, `h` home, `t` theme toggle; suppressed while typing in inputs or when any dialog is open (verified: keys during dialog exit animation are correctly ignored).
+   123→   123→- ShortcutsHelpDialog: styled kbd rows, live category-number mapping, header keyboard button added (hidden on mobile).
+   124→   124→
+   125→   125→NEW FEATURE 4 — Admin bulk actions + CSV export:
+   126→   126→- New API: `POST /api/resources/bulk` (admin key, zod-validated ids ≤200, actions publish/unpublish/feature/unfeature/delete via updateMany/deleteMany).
+   127→   127→- ContentManager: checkbox column + select-all, floating bulk action bar (5 actions + clear), selected-row highlight, per-row state preserved; "Export CSV" button generates proper quoted CSV client-side (verified blob type text/csv).
+   128→   128→
+   129→   129→BUGS FOUND & FIXED DURING QA:
+   130→   130→1. `simProgress` missing from zustand initial state (SSR crash: "Cannot read properties of undefined") — added `simProgress: {}`.
+   131→   131→2. Unstable zustand selectors (`s.simProgress[slug] ?? []` returns fresh [] each call) triggered React 19 useSyncExternalStore infinite-loop guard — now select the stable record reference and derive arrays outside the selector (both FlexboxSimulator + StepGraph).
+   132→   132→3. Stale Prisma client in the running dev server after schema push (server kept the pre-`steps` client in Turbopack's module cache; `touch`-ing files didn't reload node_modules): rewrote `src/lib/db.ts` with a versioned global cache key (prisma-dev-v2) AND performed a controlled dev-server restart (killed tree, relaunched `bun run dev` in background exactly as start.sh does). Steps now flow; counts verified (15/11/44/27/1).
+   133→   133→4. Analytics zod enum rejected new event types (400s) — extended enum + trackEvent type union.
+   134→   134→
+   135→   135→STYLING POLISH:
+   136→   136→- Hero: teal "New: the interactive CSS Flexbox Simulator" spotlight pill (play icon, hover scale/slide, analytics-tracked) — registry-driven so it disappears if the sim is unpublished.
+   137→   137→- Simulator stage compacted (min-h-44/56) so the generated-CSS panel is above the fold (VLM feedback addressed).
+   138→   138→- Step-graph: accent-aware nodes/connector, line-through completed steps, emerald complete toast on full path.
+   139→   139→- Library: roadmap progress cards with accent progress bars + "N steps to go".
+   140→   140→
+   141→   141→Stage Summary (verification results):
+   142→   142→- ESLint clean; dev.log zero runtime errors (all 200s; one expected 400 from malformed analytics POST now fixed).
+   143→   143→- Simulator: view renders 200 with metadata; challenge 1 & 2 solved via real UI clicks — progress persists (2/6), auto-advance to challenge 3, challenge_complete analytics event confirmed in admin API; CSS copy toast; VLM QA: explore 7.5→(post-compaction) challenge mode 9/10, light theme 9/10, mobile 390px challenge mode 8/10 with no horizontal overflow.
+   144→   144→- Roadmap step-graph: deep-link opens dialog with 10 steps, 2/10 done + progress bar 20% after clicking steps, VLM QA 9/10.
+   145→   145→- Keyboard: ? overlay renders (12 rows, 16 kbd), 3 → /?category=courses, h → /, l → /?view=library (all via real key presses).
+   146→   146→- Admin: bulk select-all → unfeature verified against API (featured courses 0), targeted re-feature restored seed state via bulk endpoint; CSV export verified.
+   147→   147→- Hub: "1 simulators" on home card + mobile sheet + footer; total 98 published resources; hero stats dl shows all five categories.
+   148→   148→- Known test-scripting note: raw JS .click() doesn't fire pointer events Radix needs — use agent-browser's click command for Radix controls (documented for future QA).
+   149→   149→
+   150→   150→Key artifacts added/changed this round:
+   151→   151→- NEW: `src/components/platform/FlexboxSimulator.tsx`, `src/components/platform/ShortcutsHelpDialog.tsx`, `src/lib/simulators.ts`, `src/app/api/resources/bulk/route.ts`.
+   152→   152→- UPDATED: `prisma/schema.prisma` (+steps), `prisma/seed.ts` (roadmap steps + published flexbox sim), `src/lib/platform.ts` (StepView/parseSteps), `src/lib/library-store.ts` (stepProgress/simProgress/completeChallenge), `src/lib/db.ts` (versioned client cache), `src/app/page.tsx` (simulator view + metadata), `src/app/api/analytics/route.ts` (event types), `src/components/platform/{PlatformShell,ItemDetailDialog,ResourceItemCard,GlobalSearch,MyLibraryView,HomeView,SiteHeader,AdminPanel}.tsx`.
+   153→   153→
+   154→   154→Unresolved issues / risks & priority recommendations for next phase:
+   155→   155→- Admin auth still demo-grade (shared password + header key) → NextAuth credentials + httpOnly session cookies remains the top upgrade.
+   156→   156→- localStorage library is device-local → lift saved/completed/stepProgress/simProgress behind a User model if cross-device sync is wanted.
+   157→   157→- Single-route constraint unchanged; canonical routes (/masterclass etc.) still DB-stored, query-param routing in-app.
+   158→   158→- Next simulator candidates from the registry pattern: SQL Query Sandbox (real SQLite mini-service or in-browser SQL engine), HTTP Request/Response Lab (request builder + visual exchange timeline). The registry + dialog CTA + search integration make each new sandbox ~1 component away.
+   159→   159→- Roadmap steps are admin-editable only via DB/seed today; an admin steps editor (drag-to-reorder, per-step CRUD) would complete the content lifecycle.
+   160→   160→- Analytics: consider aggregating simulator_view/challenge_complete in the admin analytics tab charts (events are recorded; the tab currently groups by type only).
+   161→   161→- Dev-server note for future agents: after `bun run db:push`, the running server needs its Prisma client reloaded — bump the PRISMA_CACHE_KEY in src/lib/db.ts (and restart if schema types changed) before assuming code bugs.
+   162→   162→
+   163→   163→---
+   164→   164→Task ID: 4
+   165→   165→Agent: Z.ai Code (main agent, scheduled dev round)
+   166→   166→Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features).
+   167→   167→
+   168→   168→Work Log:
+   169→   169→- STATUS ASSESSMENT (pre-work): read worklog; dev server healthy (all 200s). Investigated recurring `POST /api/analytics 400` lines in dev.log — confirmed they were pre-fix artifacts from round 3's QA; direct curl tests of simulator_view/challenge_complete return 200. Cleaned leftover test events (5 deleted). Full QA sweep (homepage / simulators category / simulator / library / admin): all render, ZERO console errors → stable → feature round per mandate.
+   170→   170→- Chose focus from worklog's own next-phase list: the HTTP Request/Response Lab simulator (recommended "request builder + visual exchange timeline"), admin analytics chart upgrade, styling polish.
+   171→   171→
+   172→   172→NEW FEATURE 1 — HTTP Request/Response Lab (2nd playable simulator, activates Simulators to "2 simulators"):
+   173→   173→- `src/lib/simulators.ts`: registry now maps slugs to a SimulatorKind union ("flexbox" | "http"); added simulatorKind() + SPOTLIGHT_SIM constant (hero spotlight is registry-driven now, not hardcoded).
+   174→   174→- `prisma/seed.ts`: HTTP Request/Response Lab published + featured with rich description; applied a targeted DB patch (no full reseed — preserved analytics + view counts); slug `http-request-response-lab`.
+   175→   175→- NEW `src/components/platform/HttpLab.tsx` (~1000 lines): sends REAL same-origin requests to DevPath's own API, so every status code/header/JSON studied is genuine.
+   176→   176→  - Free play: method segmented control (GET emerald / POST amber / PATCH orange / DELETE rose), URL input (Enter sends, same-origin guard with toast), endpoint library presets (8 chips incl. deliberate 400/401/404 teaching presets), collapsible header-row editor (enable toggles + add/remove, Content-Type preset), JSON body textarea with live validity indicator + Format button (POST/PATCH only).
+   177→   177→  - Response viewer: color-coded status line (2xx emerald / 3xx amber / 4xx-5xx rose) with ms + byte size, request echo line, "What this means" teaching callout (left-accent style after VLM feedback) with per-code explanations (200/201/204/400/401/403/404/405/429/500), collapsible response headers, JSON body with line numbers + custom regex syntax highlighting (keys teal / strings emerald / numbers amber / literals rose — React nodes, no innerHTML), copy button.
+   178→   178→  - Exchange timeline: last 30 exchanges, click-to-reselect, clear; each row shows method chip + path + status + ms.
+   179→   179→  - Missions mode: 6 guided missions (first-contact GET 200 → query params → sort+limit → trigger a 400 → 401 without admin key → 404 ghost hunt), auto-checked against the landing exchange, hint reveal (AnimatePresence), auto-advance on solve, trophy progress chip, progress persisted via library-store simProgress.
+   180→   180→  - Analytics: simulator_view on mount, challenge_complete per mission (existing event types — no API changes needed).
+   181→   181→- PlatformShell: dispatches HttpLab vs FlexboxSimulator via PLAYABLE_SIMULATORS kind.
+   182→   182→- HomeView hero spotlight now shows "New: the HTTP Request/Response Lab" via SPOTLIGHT_SIM.
+   183→   183→
+   184→   184→NEW FEATURE 2 — Admin analytics tab upgrade (worklog recommendation):
+   185→   185→- `getAnalyticsSummary` (platform.ts): + daily (7-day calendar buckets), + simulators (per-slug simulator_view + challenge_complete aggregation).
+   186→   186→- AdminPanel AnalyticsTab: 6 stat cards now (Total events / Category views / Item views / Searches / Sim launches / Missions cleared), full-width "Activity — last 7 days" bar chart (today highlighted in solid teal gradient, hover titles, weekday labels), "Simulator engagement" card (per-sim launches/cleared + avg missions-cleared-per-launch metric), recent events now full-width.
+   187→   187→
+   188→   188→BUGS FOUND & FIXED DURING QA:
+   189→   189→1. Simulator engagement card showed "600% of launches cleared at least one mission" — completes/views exceeds 100% because one launch can clear many missions. Reworded to "N missions cleared per launch on average" (honest metric, no cap hack).
+   190→   190→2. (Cosmetic per VLM) status code oversized vs body, teaching box competed with body → status text-3xl→2xl font-extrabold, teaching line became left-accent callout at lower opacity, endpoint-library→headers spacing mt-4→mt-5.
+   191→   191→
+   192→   192→STYLING POLISH:
+   193→   193→- JSON syntax highlighting with line numbers (custom safe tokenizer), method/status color system (no blue anywhere), status-bar hairline on the response card, mission list with check circles + line-through solved titles + active teal state, hint callout in amber.
+   194→   194→
+   195→   195→Stage Summary (verification results — agent-browser end-to-end, all via real UI interactions):
+   196→   196→- Homepage: spotlight shows the HTTP lab; hub/nav/footer all read "2 simulators"; HTTP lab in Editor's picks; 0 console errors after full scroll.
+   197→   197→- HTTP Lab free play: Send → real 200 OK with 47ms/size, JSON highlighted with line numbers, teaching line, timeline #1; "Invalid → 400" preset → 400 Bad Request + "Client error" chip + validation teaching line; timeline accumulates.
+   198→   198→- Missions: solved ALL 6 via real clicks (GET categories → 200; ?q=docker filtered to Docker items; sort=popular&limit=5; POST {} → 400; GET /api/analytics → 401; ghost-town → 404) — 6/6 "All clear!", auto-advance between missions, toasts, trophy chip filled.
+   199→   199→- Integration: simulators category "2 simulators · 2 shown"; item dialog "Launch sandbox" → lab view; ⌘K palette "http" → both results with Play chip → deep-links into the lab; library recents include the HTTP lab.
+   200→   200→- Admin analytics: 6 stat cards (Sim launches 2, Missions cleared 6), 7-day chart renders with "today" bar, simulator engagement lists both sims with per-launch metric, recent events feed live.
+   201→   201→- Mobile 390px: no horizontal overflow (scrollWidth exactly 390).
+   202→   202→- VLM QA: free mode 8.5/10, missions 9/10, mobile 7.5/10 (remaining nitpicks are dev-overlay artifacts + toast caught mid-animation, not UI bugs). Improvements from VLM applied (callout, status size, spacing).
+   203→   203→- ESLint clean; dev.log all 200s (the three 400s are the mission-4 teaching requests — expected); zero console errors across every view.
+   204→   204→
+   205→   205→Key artifacts added/changed this round:
+   206→   206→- NEW: `src/components/platform/HttpLab.tsx`.
+   207→   207→- UPDATED: `src/lib/simulators.ts` (kind union + SPOTLIGHT_SIM), `prisma/seed.ts` (HTTP lab published), `src/lib/platform.ts` (daily + simulators in analytics summary), `src/components/platform/PlatformShell.tsx` (sim dispatch), `src/components/platform/HomeView.tsx` (registry-driven spotlight), `src/components/platform/AdminPanel.tsx` (analytics tab overhaul).
+   208→   208→- QA screenshots: download/qa-httplab-{freemode,missions-complete,mobile,light,final}.png, qa-admin-analytics.png, qa-home-before.png.
+   209→   209→
+   210→   210→Unresolved issues / risks & priority recommendations for next phase:
+   211→   211→- Admin auth still demo-grade (shared password + header key) → NextAuth credentials + httpOnly session cookies remains the top upgrade.
+   212→   212→- localStorage library is device-local → lift saved/completed/stepProgress/simProgress behind a User model if cross-device sync is wanted.
+   213→   213→- Single-route constraint unchanged; canonical routes (/masterclass etc.) still DB-stored, query-param routing in-app.
+   214→   214→- Third simulator candidate: SQL Query Sandbox (in-browser SQL engine or a SQLite mini-service behind the gateway). The registry + "Launch sandbox" CTA + palette integration make each new sandbox ~1 component away.
+   215→   215→- Roadmap steps are admin-editable only via DB/seed; an admin steps editor (per-step CRUD + reorder) would complete the content lifecycle.
+   216→   216→- The HttpLab response viewer truncates non-JSON bodies at 4000 chars (404 HTML pages) — fine for teaching, note if it ever matters.
+   217→   217→- Analytics summary does JS-side day bucketing — fine at demo scale; move to SQL groupBy if event volume grows.
+   218→   218→
+   219→   219→---
+   220→   220→Task ID: 5
+   221→   221→Agent: Z.ai Code (main agent, scheduled dev round)
+   222→   222→Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features). Also re-verified the original spec (upload/prompt.docx) against the live implementation.
+   223→   223→
+   224→   224→Work Log:
+   225→   225→- STATUS ASSESSMENT (pre-work): read worklog; dev server healthy (all 200s, zero runtime errors); QA sweep via agent-browser across home / simulators / both simulators / library / admin: all render, ZERO console errors/warnings, ESLint clean, no viewport overflow → stable → feature round per mandate.
+   226→   226→- SPEC COMPLIANCE re-check (user re-supplied the original prompt as upload/prompt.docx): verified live API data (15 workshops / 11 career paths / 44 mini courses / 27 guides / 3 simulators + "New" badge — DB-derived), ResourceCategoryCard props exactly match the spec list (title, description, count, icon, href, badge, badgeVariant), badge is a genuine shadcn Badge (not baked into image), Prisma Category table is the structured config layer (countLabel/icon/route/badge/badgeVariant/order/enabled/seo all admin-manageable), local icons under /public/icons/{slug}/, next/image with fill+sizes+alt. Full compliance; details in the round report.
+   227→   227→
+   228→   228→SECURITY HARDENING — admin auth (worklog's #1 outstanding upgrade, done pragmatically):
+   229→   229→- src/lib/platform.ts: session-token helpers — createAdminSessionToken() mints `${exp}.${HMAC-SHA256(exp, ADMIN_PASSWORD)}` (8h TTL); verifyAdminSessionToken() does timing-safe comparison + expiry check; isAdminRequest() now accepts EITHER the legacy `x-admin-key` header (programmatic/curl) OR the signed httpOnly `devpath_admin` cookie. ADMIN_COOKIE exported.
+   230→   230→- /api/admin/auth: POST sets the httpOnly SameSite=lax cookie (and NO LONGER returns the password in the body); GET verifies; new DELETE clears the cookie (logout).
+   231→   231→- AdminPanel: AuthGate → POST → cookie; state is a boolean (session restore via GET on mount); logout → DELETE; authedFetch no longer attaches the header (cookie travels automatically); ContentManager/AnalyticsTab refactored to cookie auth. sessionStorage credential REMOVED — verified in-browser: sessionStorage empty after login, cookie invisible to document.cookie.
+   232→   232→- curl matrix verified: wrong pw 401 → correct pw Set-Cookie (HttpOnly, SameSite=lax, Max-Age=28800) → GET authorized:true → admin APIs with cookie only 200 (incl. ?all=1 drafts) → DELETE clears → 401 after logout.
+   233→   233→
+   234→   234→NEW FEATURE 1 — SQL Query Sandbox (3rd playable simulator, activates Simulators to "3 simulators", 100 total published):
+   235→   235→- NEW src/lib/sql-engine.ts (~700 lines, zero dependencies, runs client-side): full tokenizer (strings w/ '' escapes, quoted idents, numbers, -- comments), recursive-descent parser and executor for SELECT [DISTINCT] items FROM table [AS alias] [INNER|LEFT [OUTER] JOIN t ON expr]* [WHERE] [GROUP BY] [HAVING] [ORDER BY expr|n|alias ASC/DESC] [LIMIT n OFFSET m]; expressions: AND/OR/NOT, = != <> < > <= >=, IS [NOT] NULL, [NOT] LIKE, [NOT] IN, [NOT] BETWEEN, + - * /, aggregates COUNT(*)/COUNT(col)/SUM/AVG/MIN/MAX, qualified refs t.col, t.* and *; NULL semantics (NULLs-first-ASC ordering like SQLite), numeric coercion, case-insensitive identifier matching while preserving original spelling for output labels; SqlError carries position + teaching hint; did-you-mean suggestions via Levenshtein for tables AND columns; ambiguity detection ("Qualify it as developers.id").
+   236→   236→- NEW src/lib/sql-dataset.ts: DevPath-themed teaching DB (developers 14×6, courses 16×7, enrollments 28×5 — ids line up so JOINs tell a story), 6 result-shape-verified missions (First contact → Choose columns → WHERE → ORDER BY+LIMIT → GROUP BY COUNT → 3-table JOIN, checks are value-based so any equivalent query passes), 8 one-click presets (each teaches a clause).
+   237→   237→- NEW src/components/platform/SqlLab.tsx (~800 lines): overlay syntax-highlighted editor (transparent textarea over highlighted <pre>, synced line-number gutter + scroll, hidden textarea scrollbar for wrap alignment, ⌘/Ctrl+Enter to run, Tab inserts 2 spaces), schema browser (expandable tables, type chips, click-to-insert queries), results table (sticky header, zebra, NULL italic, rows/cols/ms badges, empty-result teaching state), error panel (message + Line·char position + caret line under the offending text + amber hint + did-you-mean), missions mode (sidebar w/ solved checks, briefing, hint + solution reveal with "Load into editor", auto-check on every run, auto-advance, trophy chip), free-play query presets + recent-queries history (10, click to restore), copy/clear actions.
+   238→   238→- Integration: registry entry "sql-query-sandbox": "sql" + SimulatorKind union; SPOTLIGHT_SIM now the SQL sandbox (hero spotlight pill, registry-driven); PlatformShell dispatches SqlLab; ItemDetailDialog "Launch sandbox" CTA, GlobalSearch Play chip, ResourceItemCard halo, My Library recents all pick it up generically via the registry. All three simulators now push a recent entry on mount (pushRecent added to FlexboxSimulator + HttpLab too — direct sim launches previously missed the recents strip).
+   239→   239→- Seed: SQL Query Sandbox draft published + featured with rich description; applied via targeted DB patch (NO reseed — analytics + view counts preserved). prisma/seed.ts updated to match.
+   240→   240→- Engine validated with a 43-case scratch script (basics, aliases, LIKE/IN/BETWEEN, aggregates, GROUP BY/HAVING, DISTINCT, joins incl. LEFT with NULL padding, positional ORDER BY, comments, keyword case-insensitivity, 9 error cases with hints, all 6 mission solutions) — 43/43 after fixing one real tokenizer bug (identifiers were uppercased, corrupting alias labels) and two wrong test expectations. Scratch script kept OUT of the repo (/home/z/.scratch).
+   241→   241→
+   242→   242→NEW FEATURE 2 — Admin roadmap steps editor (completes the content lifecycle, worklog recommendation):
+   243→   243→- PATCH /api/resources/[id] now accepts `steps` (zod-validated array ≤30 of {title ≤120, detail ≤600, hours 0–2000}); stored as JSON string; response now returns the parsed ResourceItemView (toResourceItemView exported from platform.ts) instead of the raw row.
+   244→   244→- AdminPanel ContentManager: ListOrdered action button on roadmap rows (and rows with steps), StepsEditorDialog with per-step title/detail/hours inputs, move up/down, remove, add step, live "N steps · ≈Nh total" summary, validation gate, Save → PATCH → invalidate. Roadmap rows in the content table now show their step count.
+   245→   245→- End-to-end verified: edited Frontend Developer Roadmap 10→11 steps via the dialog UI (reorder + add + save), API returned 11 steps with the new step last, learner deep-link dialog showed the 11-step learning path (progress "2/11"), then restored to exactly the seed state (10 steps, last "Portfolio projects").
+   246→   246→
+   247→   247→STYLING POLISH:
+   248→   248→- ResourceItemCard: roadmap cards now surface real structure — emerald "N steps · ~Xh" chip (Milestone icon) computed from steps data (verified: Backend roadmap shows "10 steps · ~325h").
+   249→   249→- globals.css: branded ::selection tint (teal/28%), smooth anchor scrolling (both disabled under prefers-reduced-motion).
+   250→   250→- SqlLab VLM-driven refinements (7.5→8.5/10): muted type-badge colors (border/20 bg/[0.06]), bolder schema table names + more list breathing room, Run button shadow/active affordance, editor height 56→48 so results sit above the fold.
+   251→   251→
+   252→   252→Stage Summary (verification results — all via real UI interactions unless noted):
+   253→   253→- Cookie auth: login → console unlocked with EMPTY sessionStorage; httpOnly cookie invisible to JS; logout → gate returns. curl matrix 7/7 (see above).
+   254→   254→- SQL Lab: initial preset runs (14 rows, 1ms); did-you-mean error ("Unknown column 'nam'. Did you mean 'name'? developers: id, name, …"); parse error renders "Line 3 · character 28" + caret line "WHERE role = 'frontend' AND / ^"; ALL 6 missions solved via fill+Run through the UI (trophy 6/6, "All missions cleared", auto-advance observed between missions); GROUP BY+HAVING preset returns 6 topic groups; editor wraps in sync with the highlight layer on a 130-char single-line query (scrollWidth 712 = clientWidth); missions mode + homepage at 390px mobile: scrollWidth exactly 390, no overflow.
+   255→   255→- Hub counts: home/nav/footer all read 3 simulators; hero spotlight shows "New: the SQL Query Sandbox"; 100 published resources total; roadmap step-hour chips render in trending/picks.
+   256→   256→- Library recents include the SQL sandbox (pushRecent); ⌘K palette lists it with Play chip; admin Analytics tab lists sql-query-sandbox in Simulator engagement with launches/cleared events recorded (challenge_complete for all 6 missions).
+   257→   257→- Final sweep across /, /?category=simulators, all three simulator views, /?view=library, /?category=roadmaps: ZERO console errors/warnings. ESLint clean. dev.log all 200s.
+   258→   258→- VLM QA: SqlLab free play 7.5→8.5/10 after fixes; missions mode 8/10 (remaining nitpicks: dev-overlay artifact + a screenshot-caught toast, not app bugs; the "horizontal overflow" claim was disproved by direct DOM measurement).
+   259→   259→- QA-scripting notes for future agents: React controlled textareas need `agent-browser fill`, not raw JS value+input events; Radix Select/tabs need real clicks — use snapshot → `agent-browser click e<ref>`; `agent-browser set viewport W H` (not `viewport`), `device` needs macOS.
+   260→   260→
+   261→   261→Key artifacts added/changed this round:
+   262→   262→- NEW: src/lib/sql-engine.ts, src/lib/sql-dataset.ts, src/components/platform/SqlLab.tsx.
+   263→   263→- UPDATED: src/lib/platform.ts (session tokens + isAdminRequest cookie path + exported toResourceItemView), src/app/api/admin/auth/route.ts (cookie issue/verify/logout, no password in body), src/app/api/resources/[id]/route.ts (steps PATCH + parsed response), src/lib/simulators.ts (sql kind + spotlight), src/components/platform/{PlatformShell,AdminPanel,ResourceItemCard,FlexboxSimulator,HttpLab}.tsx, prisma/seed.ts (published SQL sandbox), src/app/globals.css (selection tint, smooth scroll), /home/z/.scratch/{sql-test.ts,publish-sql-sandbox.ts} (not in repo).
+   264→   264→- QA screenshots: download/qa-sqlab-{first-run,missions-complete,freemode,mobile,final}.png, qa-admin-analytics-sql.png.
+   265→   265→
+   266→   266→Unresolved issues / risks & priority recommendations for next phase:
+   267→   267→- Admin auth is now httpOnly-cookie + HMAC-signed + expiring, but still single-user; NextAuth credentials provider + real User accounts remain the eventual upgrade if multi-user is needed (cross-device library sync would come with it — library is still localStorage/device-local).
+   268→   268→- Single-route sandbox constraint unchanged: canonical routes (/masterclass …) stay DB-stored; in-app navigation uses /?category=slug.
+   269→   269→- Simulators count is now 3/4 published — the 4th draft (Kubernetes Cluster Simulator) has no sandbox yet; a mini-service or in-browser cluster-topology simulator would complete the set.
+   270→   270→- SQL engine scope: no subqueries/CTEs/window functions (deliberate teaching subset); the read-only guard blocks writes by design.
+   271→   271→- Analytics event volume is fine at demo scale; day bucketing is still JS-side.
+   272→   272→- Next ideas: sitemap.xml + per-category OG images; keyboard-shortcut hint on SqlLab ("?" is global already); export mission progress; admin CSV import.
+   273→   273→

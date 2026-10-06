@@ -20,6 +20,15 @@ export interface RecentEntry {
   at: number;
 }
 
+interface CourseProgress {
+  /** Completed lesson orders (1-based) */
+  lessons: number[];
+  /** Best final-assessment score 0–100 (undefined until attempted) */
+  assessmentScore?: number;
+  /** Epoch ms when the final assessment was passed */
+  completedAt?: number;
+}
+
 interface LibraryState {
   saved: string[];
   completed: string[];
@@ -28,6 +37,8 @@ interface LibraryState {
   stepProgress: Record<string, number[]>;
   /** Simulator challenge progress: sim slug → completed challenge ids */
   simProgress: Record<string, string[]>;
+  /** Course learning progress: course slug → lesson/assessment records */
+  courseProgress: Record<string, CourseProgress>;
   toggleSaved: (slug: string) => boolean;
   toggleCompleted: (slug: string) => boolean;
   isSaved: (slug: string) => boolean;
@@ -35,6 +46,10 @@ interface LibraryState {
   toggleStep: (slug: string, index: number) => boolean;
   getStepProgress: (slug: string) => number[];
   completeChallenge: (simSlug: string, challengeId: string) => void;
+  completeLesson: (courseSlug: string, order: number) => void;
+  isLessonDone: (courseSlug: string, order: number) => boolean;
+  getCourseProgress: (courseSlug: string) => CourseProgress;
+  recordAssessment: (courseSlug: string, score: number, passed: boolean) => void;
   pushRecent: (entry: Omit<RecentEntry, "at">) => void;
   clearRecent: () => void;
 }
@@ -49,6 +64,7 @@ export const useLibrary = create<LibraryState>()(
       recent: [],
       stepProgress: {},
       simProgress: {},
+      courseProgress: {},
       toggleSaved: (slug) => {
         const has = get().saved.includes(slug);
         set({
@@ -83,6 +99,43 @@ export const useLibrary = create<LibraryState>()(
         set({
           simProgress: { ...get().simProgress, [simSlug]: [...current, challengeId] },
         });
+      },
+      completeLesson: (courseSlug, order) => {
+        const current = get().courseProgress[courseSlug]?.lessons ?? [];
+        if (current.includes(order)) return;
+        set({
+          courseProgress: {
+            ...get().courseProgress,
+            [courseSlug]: {
+              ...get().courseProgress[courseSlug],
+              lessons: [...current, order],
+            },
+          },
+        });
+      },
+      isLessonDone: (courseSlug, order) =>
+        (get().courseProgress[courseSlug]?.lessons ?? []).includes(order),
+      getCourseProgress: (courseSlug) => get().courseProgress[courseSlug] ?? { lessons: [] },
+      recordAssessment: (courseSlug, score, passed) => {
+        const prev = get().courseProgress[courseSlug] ?? { lessons: [] };
+        const best = Math.max(prev.assessmentScore ?? 0, score);
+        set({
+          courseProgress: {
+            ...get().courseProgress,
+            [courseSlug]: {
+              ...prev,
+              assessmentScore: best,
+              ...(passed ? { completedAt: prev.completedAt ?? Date.now() } : {}),
+            },
+          },
+        });
+        // Passing the assessment also marks the course item completed
+        if (passed) {
+          const completed = get().completed;
+          if (!completed.includes(courseSlug)) {
+            set({ completed: [courseSlug, ...completed] });
+          }
+        }
       },
       pushRecent: (entry) =>
         set({

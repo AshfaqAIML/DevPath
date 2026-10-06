@@ -16,9 +16,11 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  BookOpen,
   Download,
   Eye,
   EyeOff,
+  GraduationCap,
   ListOrdered,
   Loader2,
   Lock,
@@ -524,6 +526,7 @@ function ContentManager({
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = React.useState(false);
   const [stepsItem, setStepsItem] = React.useState<ResourceItemView | null>(null);
+  const [lessonsItem, setLessonsItem] = React.useState<ResourceItemView | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["items", "admin", filter, q],
@@ -762,6 +765,7 @@ function ContentManager({
                 const a = getAccent(item.categoryAccent);
                 const isSel = selected.has(item.id);
                 const canEditSteps = item.steps.length > 0 || item.categorySlug === "roadmaps";
+                const isCourseItem = item.categorySlug === "courses";
                 return (
                   <TableRow key={item.id} className={cn(isSel && "bg-muted/50")}>
                     <TableCell>
@@ -820,6 +824,23 @@ function ContentManager({
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-0.5">
+                        {isCourseItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "size-8",
+                              (item.lessonCount ?? 0) > 0
+                                ? "text-teal-600 hover:text-teal-600"
+                                : "text-muted-foreground"
+                            )}
+                            onClick={() => setLessonsItem(item)}
+                            aria-label={`Manage lessons for ${item.title}`}
+                            title="Manage course lessons"
+                          >
+                            <GraduationCap aria-hidden className="size-4" />
+                          </Button>
+                        )}
                         {canEditSteps && (
                           <Button
                             variant="ghost"
@@ -889,6 +910,16 @@ function ContentManager({
         item={stepsItem}
         onOpenChange={(open) => {
           if (!open) setStepsItem(null);
+        }}
+        authedFetch={authedFetch}
+        invalidate={invalidate}
+        notify={notify}
+      />
+
+      <LessonsEditorDialog
+        item={lessonsItem}
+        onOpenChange={(open) => {
+          if (!open) setLessonsItem(null);
         }}
         authedFetch={authedFetch}
         invalidate={invalidate}
@@ -1478,5 +1509,545 @@ function AnalyticsTab({
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LessonsEditorDialog — manage the real lesson content of a course
+// (add / edit / reorder / publish / delete), including structured JSON
+// editing for blocks, exercise and quiz. This is the content-administration
+// layer: lessons can be edited end-to-end without touching frontend code.
+// ---------------------------------------------------------------------------
+
+type AdminLesson = {
+  id: string;
+  order: number;
+  slug: string;
+  title: string;
+  objective: string;
+  minutes: number;
+  xp: number;
+  quizCount: number;
+  hasExercise: boolean;
+  published: boolean;
+};
+
+type AdminCourse = {
+  courseSlug: string;
+  contentStatus: string;
+  passScore: number;
+  lessonCount: number;
+  totalMinutes: number;
+};
+
+function LessonsEditorDialog({
+  item,
+  onOpenChange,
+  authedFetch,
+  invalidate,
+  notify,
+}: {
+  item: ResourceItemView | null;
+  onOpenChange: (open: boolean) => void;
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  invalidate: () => void;
+  notify: (ok: boolean, action: string) => void;
+}) {
+  const [course, setCourse] = React.useState<AdminCourse | null>(null);
+  const [lessons, setLessons] = React.useState<AdminLesson[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [editingLessonId, setEditingLessonId] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState(false);
+  const open = !!item;
+
+  const load = React.useCallback(async () => {
+    if (!item) return;
+    setLoading(true);
+    try {
+      const res = await authedFetch(`/api/courses/${item.slug}?all=1`);
+      if (res.ok) {
+        const payload = (await res.json()) as { course: AdminCourse & { lessons: AdminLesson[] } };
+        setCourse(payload.course);
+        setLessons(payload.course.lessons ?? []);
+      } else {
+        setCourse(null);
+        setLessons([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [item, authedFetch]);
+
+  React.useEffect(() => {
+    if (item) void load();
+  }, [item, load]);
+
+  const patchLesson = async (id: string, body: Record<string, unknown>, action: string) => {
+    const res = await authedFetch(`/api/lessons/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    notify(res.ok, action);
+    if (res.ok) void load();
+  };
+
+  const deleteLesson = async (lesson: AdminLesson) => {
+    const res = await authedFetch(`/api/lessons/${lesson.id}`, { method: "DELETE" });
+    notify(res.ok, `Delete lesson ${lesson.order}`);
+    if (res.ok) void load();
+  };
+
+  const createLesson = async (title: string) => {
+    if (!item) return;
+    const res = await authedFetch(`/api/courses/${item.slug}/lessons`, {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    });
+    notify(res.ok, `Create lesson “${title}”`);
+    if (res.ok) {
+      setAdding(false);
+      void load();
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl overflow-y-auto p-0 sm:max-h-[85vh]">
+        <div className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap aria-hidden className="size-5 text-teal-500" />
+              Lessons — {item?.title}
+            </DialogTitle>
+            <DialogDescription sr-only>
+              Manage lesson content for this course
+            </DialogDescription>
+            {course ? (
+              <p className="text-sm text-muted-foreground">
+                {course.lessonCount} lessons · {course.totalMinutes} min total · status{" "}
+                <Badge variant="outline" className="ml-1 font-mono text-[10px]">
+                  {course.contentStatus}
+                </Badge>
+              </p>
+            ) : null}
+          </DialogHeader>
+
+          <div className="px-6 pb-6 pt-3">
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 aria-hidden className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : !course ? (
+              <div className="rounded-xl border border-dashed p-6 text-center">
+                <p className="mb-3 text-sm text-muted-foreground">
+                  No course record yet. Create one to start authoring lessons.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!item) return;
+                    const res = await authedFetch(`/api/courses/${item.slug}`, { method: "POST" });
+                    notify(res.ok, "Create course record");
+                    if (res.ok) void load();
+                  }}
+                >
+                  <Plus aria-hidden className="size-4" />
+                  Create course
+                </Button>
+              </div>
+            ) : (
+              <>
+                <ul className="space-y-1.5">
+                  {lessons.map((l, idx) => (
+                    <li
+                      key={l.id}
+                      className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">{l.order}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {l.title}
+                      </span>
+                      <span className="hidden font-mono text-[10px] text-muted-foreground sm:inline">
+                        {l.minutes}m · {l.quizCount}q{l.hasExercise ? " · ex" : ""}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground"
+                        disabled={idx === 0}
+                        onClick={() => void patchLesson(l.id, { move: "up" }, `Move lesson ${l.order} up`)}
+                        aria-label={`Move lesson ${l.order} up`}
+                      >
+                        <ArrowUp aria-hidden className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground"
+                        disabled={idx === lessons.length - 1}
+                        onClick={() => void patchLesson(l.id, { move: "down" }, `Move lesson ${l.order} down`)}
+                        aria-label={`Move lesson ${l.order} down`}
+                      >
+                        <ArrowDown aria-hidden className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "size-7",
+                          l.published ? "text-emerald-600" : "text-muted-foreground"
+                        )}
+                        onClick={() =>
+                          void patchLesson(
+                            l.id,
+                            { published: !l.published },
+                            l.published ? `Unpublish lesson ${l.order}` : `Publish lesson ${l.order}`
+                          )
+                        }
+                        aria-label={l.published ? "Unpublish lesson" : "Publish lesson"}
+                      >
+                        {l.published ? (
+                          <Eye aria-hidden className="size-3.5" />
+                        ) : (
+                          <EyeOff aria-hidden className="size-3.5" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => setEditingLessonId(l.id)}
+                        aria-label={`Edit lesson ${l.order}`}
+                      >
+                        <BookOpen aria-hidden className="size-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete lesson ${l.order}`}
+                          >
+                            <Trash2 aria-hidden className="size-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete “{l.title}”?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              The lesson and its content are removed. Remaining lessons are renumbered.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => void deleteLesson(l)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-4 flex items-center gap-2">
+                  {adding ? (
+                    <AddLessonForm
+                      onSave={(title) => void createLesson(title)}
+                      onCancel={() => setAdding(false)}
+                    />
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+                      <Plus aria-hidden className="size-4" />
+                      Add lesson
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+
+      {item ? (
+        <LessonEditDialog
+          courseId={editingLessonId}
+          courseSlug={item.slug}
+          onOpenChange={(o) => {
+            if (!o) setEditingLessonId(null);
+          }}
+          authedFetch={authedFetch}
+          notify={notify}
+          reload={load}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function AddLessonForm({
+  onSave,
+  onCancel,
+}: {
+  onSave: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = React.useState("");
+  return (
+    <form
+      className="flex w-full items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (title.trim().length >= 2) onSave(title.trim());
+      }}
+    >
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="New lesson title"
+        className="h-8 flex-1 text-sm"
+        autoFocus
+      />
+      <Button type="submit" size="sm" disabled={title.trim().length < 2}>
+        Save
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
+    </form>
+  );
+}
+
+// Nested per-lesson editor: scalar fields + validated JSON for blocks /
+// exercise / quiz — the content-administration primitive.
+function LessonEditDialog({
+  courseId,
+  courseSlug,
+  onOpenChange,
+  authedFetch,
+  notify,
+  reload,
+}: {
+  courseId: string | null;
+  courseSlug: string;
+  onOpenChange: (open: boolean) => void;
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  notify: (ok: boolean, action: string) => void;
+  reload: () => void;
+}) {
+  const [meta, setMeta] = React.useState({
+    title: "",
+    objective: "",
+    why: "",
+    minutes: "15",
+    xp: "50",
+    summary: "",
+    next: "",
+  });
+  const [blocksJson, setBlocksJson] = React.useState("[]");
+  const [exerciseJson, setExerciseJson] = React.useState("");
+  const [quizJson, setQuizJson] = React.useState("[]");
+  const [jsonErrors, setJsonErrors] = React.useState<Record<string, string>>({});
+  const [saving, setSaving] = React.useState(false);
+  const [loadedFor, setLoadedFor] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!courseId) return;
+    if (loadedFor === courseId) return;
+    setLoadedFor(courseId);
+    (async () => {
+      // Fetch the full lesson: order equals position in the course payload
+      const res = await authedFetch(`/api/courses/${courseSlug}?all=1`);
+      if (!res.ok) return;
+      const payload = (await res.json()) as {
+        course: { lessons: AdminLesson[] };
+      };
+      const order = payload.course.lessons.find((l) => l.id === courseId)?.order;
+      if (!order) return;
+      const lessonRes = await authedFetch(
+        `/api/courses/${courseSlug}/lessons/${order}?all=1`
+      );
+      if (!lessonRes.ok) return;
+      const lesson = ((await lessonRes.json()) as { lesson: Record<string, unknown> }).lesson;
+      setMeta({
+        title: String(lesson.title ?? ""),
+        objective: String(lesson.objective ?? ""),
+        why: String(lesson.why ?? ""),
+        minutes: String(lesson.minutes ?? 15),
+        xp: String(lesson.xp ?? 50),
+        summary: String(lesson.summary ?? ""),
+        next: String(lesson.next ?? ""),
+      });
+      setBlocksJson(JSON.stringify(lesson.blocks ?? [], null, 2));
+      setExerciseJson(
+        lesson.exercise ? JSON.stringify(lesson.exercise, null, 2) : ""
+      );
+      setQuizJson(JSON.stringify(lesson.quiz ?? [], null, 2));
+      setJsonErrors({});
+    })();
+  }, [courseId, courseSlug, authedFetch, loadedFor]);
+
+  const validateJson = (raw: string, key: string): unknown | null => {
+    if (!raw.trim()) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      setJsonErrors((prev) => ({ ...prev, [key]: "" }));
+      return parsed;
+    } catch (e) {
+      setJsonErrors((prev) => ({ ...prev, [key]: (e as Error).message }));
+      return undefined; // signal invalid
+    }
+  };
+
+  const save = async () => {
+    if (!courseId || saving) return;
+    setSaving(true);
+    try {
+      const blocks = validateJson(blocksJson, "blocks");
+      if (blocks === undefined) return;
+      const exercise = validateJson(exerciseJson, "exercise");
+      if (exercise === undefined) return;
+      const quiz = validateJson(quizJson, "quiz");
+      if (quiz === undefined) return;
+
+      const body: Record<string, unknown> = {
+        title: meta.title,
+        objective: meta.objective,
+        why: meta.why,
+        minutes: Number(meta.minutes) || 15,
+        xp: Number(meta.xp) || 50,
+        summary: meta.summary,
+        next: meta.next,
+      };
+      if (blocks !== null) body.blocks = blocks;
+      if (exercise !== null) body.exercise = exercise;
+      if (quiz !== null) body.quiz = quiz;
+
+      const res = await authedFetch(`/api/lessons/${courseId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      notify(res.ok, "Save lesson");
+      if (res.ok) {
+        reload();
+        onOpenChange(false);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (
+    label: string,
+    key: keyof typeof meta,
+    placeholder: string,
+    textarea = false
+  ) => (
+    <div className="space-y-1.5">
+      <Label htmlFor={`le-${key}`} className="text-xs">
+        {label}
+      </Label>
+      {textarea ? (
+        <Textarea
+          id={`le-${key}`}
+          value={meta[key]}
+          onChange={(e) => setMeta((m) => ({ ...m, [key]: e.target.value }))}
+          placeholder={placeholder}
+          className="min-h-16 text-sm"
+        />
+      ) : (
+        <Input
+          id={`le-${key}`}
+          value={meta[key]}
+          onChange={(e) => setMeta((m) => ({ ...m, [key]: e.target.value }))}
+          placeholder={placeholder}
+          className="h-9 text-sm"
+        />
+      )}
+    </div>
+  );
+
+  const jsonArea = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    errorKey: string,
+    hint: string
+  ) => (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-mono">{label}</Label>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        className="min-h-32 font-mono text-xs"
+        aria-label={label}
+      />
+      <p className="text-[11px] text-muted-foreground">{hint}</p>
+      {jsonErrors[errorKey] ? (
+        <p className="text-[11px] font-medium text-destructive">
+          Invalid JSON: {jsonErrors[errorKey]}
+        </p>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <Dialog open={!!courseId} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl p-0 sm:max-h-[85vh]">
+        <div className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>Edit lesson</DialogTitle>
+            <DialogDescription sr-only>Edit the lesson content</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 px-6 pb-6 pt-3">
+            {field("Title", "title", "Lesson title")}
+            {field("Learning objective", "objective", "After this lesson you will be able to…", true)}
+            {field("Why this matters", "why", "Real-world motivation", true)}
+            <div className="grid grid-cols-2 gap-3">
+              {field("Minutes", "minutes", "15")}
+              {field("XP", "xp", "50")}
+            </div>
+            {field("Summary", "summary", "Lesson summary", true)}
+            {field("What's next", "next", "Bridge to the next lesson", true)}
+            {jsonArea(
+              "blocks (JSON)",
+              blocksJson,
+              setBlocksJson,
+              "blocks",
+              "ContentBlock[] — {\"t\":\"p\"|\"h\"|\"list\"|\"callout\"|\"code\"|\"table\"|\"diagram\"|\"keytakeaways\"|\"interview\", …}"
+            )}
+            {jsonArea(
+              "exercise (JSON)",
+              exerciseJson,
+              setExerciseJson,
+              "exercise",
+              "{prompt, hints[], solution, why} — empty means no exercise"
+            )}
+            {jsonArea(
+              "quiz (JSON)",
+              quizJson,
+              setQuizJson,
+              "quiz",
+              "QuizQuestion[] — {q, options[], answer, explain, difficulty}"
+            )}
+          </div>
+          <DialogFooter className="px-6 pb-6">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void save()} disabled={saving}>
+              {saving ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Save aria-hidden className="size-4" />
+              )}
+              Save lesson
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

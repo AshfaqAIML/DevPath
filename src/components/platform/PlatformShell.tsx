@@ -19,23 +19,29 @@ import { MyLibraryView } from "./MyLibraryView";
 import { FlexboxSimulator } from "./FlexboxSimulator";
 import { HttpLab } from "./HttpLab";
 import { SqlLab } from "./SqlLab";
+import { CourseView } from "./CourseView";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
 import { categoryHref, trackEvent, useCategories, type CategoriesPayload } from "./platform-data";
 import { PLAYABLE_SIMULATORS } from "@/lib/simulators";
 import type { CategoryView, ResourceItemView } from "@/lib/platform";
+import type { CourseView as CourseViewType } from "@/lib/course-types";
 
 interface PlatformShellProps {
   initialCategories: CategoriesPayload;
   initialItems: ResourceItemView[];
   initialCategorySlug: string | null;
   initialItemSlug?: string;
-  view: "hub" | "admin" | "library" | "simulator";
+  view: "hub" | "admin" | "library" | "simulator" | "course";
   featuredItems: ResourceItemView[];
   trendingItems: ResourceItemView[];
   simulatorItem?: ResourceItemView | null;
   simulatorCategory?: CategoryView | null;
+  courseData?: CourseViewType | null;
+  courseItem?: ResourceItemView | null;
+  courseCategory?: CategoryView | null;
+  courseLessonParam?: string | null;
 }
 
 export function PlatformShell({
@@ -48,6 +54,10 @@ export function PlatformShell({
   trendingItems,
   simulatorItem,
   simulatorCategory,
+  courseData,
+  courseItem,
+  courseCategory,
+  courseLessonParam,
 }: PlatformShellProps) {
   const router = useRouter();
   const { setTheme, theme } = useTheme();
@@ -116,6 +126,15 @@ export function PlatformShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [categoriesData, helpOpen, router, searchOpen, setTheme, theme]);
 
+  // Course view: the lesson route is driven by URL search params inside
+  // CourseView, so shallow navigation between lessons/assessment works.
+  React.useEffect(() => {
+    if (view === "course" && courseItem) {
+      trackEvent("category_view", "courses", null);
+    }
+     
+  }, [view, courseItem?.slug]);
+
   const activeCategory = initialCategorySlug
     ? categoriesData.categories.find((c) => c.slug === initialCategorySlug) ?? null
     : null;
@@ -135,6 +154,14 @@ export function PlatformShell({
             <AdminPanel categoriesData={categoriesData} />
           ) : view === "library" ? (
             <MyLibraryView categoriesData={categoriesData} />
+          ) : view === "course" && courseData && courseItem && courseCategory ? (
+            <CourseView
+              key={courseData.courseSlug}
+              course={courseData}
+              item={courseItem}
+              category={courseCategory}
+              initialLesson={courseLessonParam ?? null}
+            />
           ) : view === "simulator" && simulatorItem && simulatorCategory ? (
             PLAYABLE_SIMULATORS[simulatorItem.slug] === "http" ? (
               <HttpLab item={simulatorItem} category={simulatorCategory} />

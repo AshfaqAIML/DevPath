@@ -1,0 +1,130 @@
+{
+  "title": "TypeScript in a Real Project",
+  "slug": "08-typescript-in-a-real-project",
+  "objective": "After this lesson you will be able to type a fetch/JSON boundary end-to-end with unknown and guards, configure tsconfig like a production project, read compiler errors systematically, and take the final assessment + course project with confidence.",
+  "why": "This is where everything lands. The single most common boundary in web development — HTTP request in, JSON out — is exactly where untyped code rots fastest: the server's shape drifts, the client believes old lies, and the bug surfaces three pages away from the cause. You now own every tool to make that boundary airtight.",
+  "minutes": 20,
+  "xp": 100,
+  "blocks": [
+    { "t": "h", "text": "The boundary problem, stated honestly" },
+    { "t": "p", "text": "Here's the code everyone writes first, and the reason it's a trap:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// ⚠ THE TRAP — looks fine, lies constantly\nasync function getUser(id: number): Promise<User> {\n  const res = await fetch(`/api/users/${id}`);\n  return res.json() as Promise<User>;   // a WISH, not a check\n}\n\n// The cast says \"trust me.\" But fetch can 404 (body: {error}), the server\n// can deploy a rename (email → emailAddress), a proxy can return HTML.\n// Every one of those still compiles — and detonates far away, at the first\n// user.email.toUpperCase() in a component."
+    },
+    { "t": "p", "text": "The cast `as User` is where the type system *ends*. Everything after it is theater: your components are typed, but the typing rests on an unverified guess. The professional pattern inverts it — the boundary returns `unknown`, and proof is required *before* the types apply:" },
+    { "t": "h", "text": "The boundary pattern, end-to-end" },
+    { "t": "p", "text": "Four layers, each one lesson's worth of machinery:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Layer 1 — the shape (Lesson 3)\ninterface User {\n  readonly id: number;\n  email: string;\n  role: \"admin\" | \"user\";\n  displayName?: string;\n}\n\n// Layer 2 — the runtime guard (Lesson 5): proof the compiler can consume\nfunction isUser(value: unknown): value is User {\n  if (typeof value !== \"object\" || value === null) return false;\n  const v = value as Record<string, unknown>;\n  return (\n    typeof v.id === \"number\" &&\n    typeof v.email === \"string\" &&\n    (v.role === \"admin\" || v.role === \"user\") &&\n    (v.displayName === undefined || typeof v.displayName === \"string\")\n  );\n}\n\n// Layer 3 — the typed fetch wrapper (Lessons 4 & 6): never trusts, always checks\nasync function getJson<T>(\n  url: string,\n  guard: (value: unknown) => value is T\n): Promise<T> {\n  const res = await fetch(url);\n  if (!res.ok) {\n    throw new ApiError(res.status, await safeErrorBody(res));\n  }\n  const body: unknown = await res.json();   // unknown at the boundary\n  if (!guard(body)) {\n    throw new Error(`Unexpected payload from ${url}`);\n  }\n  return body;   // T — earned, not wished\n}\n\n// Layer 4 — the call site (finally the easy part)\nconst user = await getJson(\"/api/users/1\", isUser);\nuser.email.toUpperCase();   // ✓ — this line is now genuinely guaranteed"
+    },
+    { "t": "diagram", "caption": "How data earns its type at the boundary", "nodes": ["fetch → response", "res.json() → unknown", "isUser(guard) → runtime proof", "narrowed → User (compile-time)"] },
+    { "t": "callout", "variant": "info", "title": "Why not a schema library?", "text": "In production teams, Zod/Valibot replace layer 2+3 with one declaration (`z.object({...}).parse(body)`) that generates both the runtime check and the User type. That's the right call at scale. This course teaches the manual pattern because it's what those libraries *are* — and because you'll meet it in codebases predating them." },
+    { "t": "p", "text": "Notice the shape of the whole thing: **generics carry the relationship** (guard type ↔ return type), **the guard is the bridge** between runtime and compile time, and `unknown` is the honest material at every seam you don't control. No casts that assert — only proof that narrows." },
+    { "t": "h", "text": "A production tsconfig" },
+    { "t": "p", "text": "Beyond strict: true (Lesson 1), a few flags mark a codebase that's serious about staying clean as it grows:" },
+    {
+      "t": "code",
+      "lang": "json",
+      "code": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"strict\": true,            // the family of checks that matter\n    \"noUncheckedIndexedAccess\": true,  // arr[0] is T | undefined — indexing isn't trusted\n    \"noEmit\": true,            // type-check only; the bundler emits\n    \"moduleResolution\": \"bundler\",     // match your bundler, not 2015 Node\n    \"isolatedModules\": true,   // keep transpileable per-file (esbuild/swc safe)\n    \"skipLibCheck\": true       // don't type-check node_modules (build time!)\n  }\n}"
+    },
+    { "t": "p", "text": "`noUncheckedIndexedAccess` deserves a warning: it turns every `arr[i]` and `dict[key]` into `T | undefined`, which *feels* noisy for a week and then prevents an entire genre of crash. It's the strict-mode mindset applied to indexing. Turn it on in a fresh project, ease it in during a migration." },
+    { "t": "h", "text": "Reading errors like a diagnostician" },
+    { "t": "p", "text": "The skill nobody teaches: a compiler error is a *pointer to the collision*, not the cause. The recurring example — and how to chase it:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// Error: Type 'string | undefined' is not assignable to type 'string'.\n//          ~~~~\nconst email: string = user.displayName;   // ← the error line\n\n// Diagnosis, in order:\n// 1. WHERE did string | undefined come from? displayName?: string — Lesson 3.\n// 2. What's the honest fix at the SOURCE? The data may genuinely be absent.\n// 3. Choose the handling that matches the semantics:\n\nconst a = user.displayName ?? \"(no name)\";     // default\nconst b = user.displayName as string;          // ✗ NEVER — hides the case\nif (user.displayName) { /* narrowed: string */ }  // branch\nconst c = user.displayName!.toUpperCase();      // ! = \"I promise\" — last resort only"
+    },
+    { "t": "p", "text": "The debugging loop, generalized: (1) read the two colliding types in the message; (2) walk *up* the data flow to where the wider type was born; (3) fix at the source — handle, default, guard, or legitimately narrow. The non-null assertion `!` exists, and every serious style guide treats it like a fire alarm: legal, loud, and a sign something's wrong if it rings daily." },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #7", "text": "Fixing the error message instead of the error — slapping `as string` or `!` on the flagged line. You're not fixing; you're sending the bug to run silently. The message told you exactly which impossible case you refused to handle. Handle it." },
+    { "t": "h", "text": "Where your TypeScript journey goes next" },
+    { "t": "list", "ordered": false, "items": [
+      "**Generics in depth** — conditional types, infer, mapped types: the machinery behind Awaited and ReturnType (this course's Lesson 7 was the on-ramp).",
+      "**Zod or Valibot** — schema-first validation that generates types; the production version of Lesson 8's manual boundary.",
+      "**Type your framework** — React: typing props, hooks, context and reducers; Node: typing Express/Fastify handlers and middleware.",
+      "**Declaration files** — writing .d.ts for untyped packages; when @types/* exists, prefer it.",
+      "**Performance & discipline** — project references for monorepos, verbatimModuleSyntax, and lint rules like no-explicit-any to keep the ratchet tight."
+    ]},
+    { "t": "keytakeaways", "items": [
+      "The boundary pattern: fetch → unknown → guard → earned type; casts are wishes, guards are proof",
+      "getJson<T>(url, guard) is the reusable wrapper — generics tie the guard's type to the return",
+      "Production tsconfig: strict, noUncheckedIndexedAccess, noEmit, isolatedModules, skipLibCheck",
+      "Read errors upstream: the flagged line is the collision; the cause lives where the wider type was born",
+      "Next steps: conditional/infer types, Zod, framework typing — the course project below proves you're ready"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Build the boundary for a list endpoint. Given `type Post = { readonly id: number; title: string; tags: string[] }`, write: (1) isPosts(value: unknown): value is Post[] that validates an ARRAY of posts (including that tags is an array of strings), and (2) fetchPosts(url: string): Promise<Post[]> that throws on non-OK HTTP status, parses to unknown, validates with your guard, and returns the earned Post[]. The trap to avoid: Array.isArray checks the outer shape but not the elements.",
+    "hints": [
+      "Start with the outer proof: Array.isArray(value). That narrows value to unknown[] — elements still unknown.",
+      "For each element, reuse a single-post check — write isPost first, then isPosts is one line over .every.",
+      "Promise.reject/throw in the fetch wrapper for !res.ok — and remember res.json() returns any, so receive it into an unknown-typed local before the guard."
+    ],
+    "solution": "interface Post {\n  readonly id: number;\n  title: string;\n  tags: string[];\n}\n\nfunction isPost(value: unknown): value is Post {\n  if (typeof value !== \"object\" || value === null) return false;\n  const v = value as Record<string, unknown>;\n  return (\n    typeof v.id === \"number\" &&\n    typeof v.title === \"string\" &&\n    Array.isArray(v.tags) &&\n    v.tags.every((t) => typeof t === \"string\")\n  );\n}\n\nfunction isPosts(value: unknown): value is Post[] {\n  return Array.isArray(value) && value.every(isPost);\n}\n\nasync function fetchPosts(url: string): Promise<Post[]> {\n  const res = await fetch(url);\n  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);\n  const body: unknown = await res.json();\n  if (!isPosts(body)) throw new Error(`Unexpected posts payload from ${url}`);\n  return body;\n}",
+    "why": "The composition is the lesson: Array.isArray narrows the outer container, .every(isPost) narrows each element, and the guard's predicate return type hands the whole proof to the compiler in one expression. The fetch wrapper follows the four-layer pattern — non-OK throws, JSON lands in unknown, the guard earns Post[], and every downstream line works on verified data. Change the API's shape and your error appears at the exact request that broke, not in a component three pages away.",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "Why is `return res.json() as Promise<User>` called a wish rather than a check?",
+      "options": [
+        "It's slower than a type guard",
+        "The cast disables checking for that value — any mismatch compiles and fails later, far from the cause",
+        "JSON bodies can't be typed",
+        "as is deprecated syntax"
+      ],
+      "answer": 1,
+      "explain": "A cast asserts without verifying. The type system stops at the cast, so a 404 body, a renamed field, or HTML from a proxy all pass — the failure surfaces downstream where it costs the most to diagnose."
+    },
+    {
+      "q": "In the getJson<T>(url, guard) wrapper, what ties the guard's type to the function's return type?",
+      "options": [
+        "A runtime reflection API",
+        "The generic parameter T appears in both the guard's predicate (value is T) and the return type (Promise<T>)",
+        "The fetch API's type declarations",
+        "Nothing — they're independent"
+      ],
+      "answer": 1,
+      "explain": "One type parameter, two positions: the guard proves T, the return promises T. The compiler enforces their connection — you can't pass an isPost guard to a getJson<User> call. That's generics as relationship (Lesson 6) earning trust at the boundary (this lesson)."
+    },
+    {
+      "q": "noUncheckedIndexedAccess: true changes `list[0]` from T to T | undefined. Why enable that?",
+      "options": [
+        "It speeds up compilation",
+        "JavaScript indexing genuinely can miss — the flag makes the type tell that truth",
+        "It's required for strict mode",
+        "It converts arrays to tuples"
+      ],
+      "answer": 1,
+      "explain": "arr[0] on an empty array is undefined at runtime; the honest type says so. The week of irritation you feel adopting it is the compiler surfering crashes you'd otherwise have shipped. Same philosophy as strict null checks, applied to subscripts."
+    },
+    {
+      "q": "Error: 'string | undefined' not assignable to 'string' — which response is the diagnostician's move?",
+      "options": [
+        "Annotate the receiving variable as string | undefined too",
+        "Cast with as string to silence it",
+        "Trace upstream to where the optionality was born, then handle/default/guard at the source",
+        "Disable strictNullChecks"
+      ],
+      "answer": 2,
+      "explain": "The error points at the collision; the cause lives upstream (an optional property, a failed lookup, an array access). Handling it at the source fixes the class of bug; casting fixes the message; widening the receiver just moves the question one line further."
+    },
+    {
+      "q": "What does a validation library like Zod replace from this lesson's manual pattern?",
+      "options": [
+        "fetch itself",
+        "Layers 2+3 — the hand-written guard and wrapper — by generating both the runtime check and the type from one schema",
+        "The need for TypeScript",
+        "tsconfig validation flags"
+      ],
+      "answer": 1,
+      "explain": "A schema declares the shape once; the library derives the runtime parser AND the static type from it (z.infer). You still think in exactly this lesson's terms — unknown in, proof out, earned types downstream — the declaration just gets declarative."
+    }
+  ],
+  "summary": "The fetch/JSON boundary is the proving ground: unknown at every uncontrolled seam, guards as the compiler-trusted bridge, and a generic getJson<T> wrapper making the pattern reusable. Production tsconfig extends strict with noUncheckedIndexedAccess; error reading is upstream diagnosis, never cast-and-forget. From here: conditional types, Zod, framework typing — and the final assessment plus Typed Utility Belt project below.",
+  "next": "That's the course material complete. Take the final assessment (70% to pass, explanations for every question), then build the Typed Utility Belt project to make the skills permanent — and check the interview questions to see how this knowledge reads in a hiring conversation."
+}

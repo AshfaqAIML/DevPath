@@ -1,0 +1,232 @@
+{
+  "courseSlug": "typescript-in-2-hours",
+  "subtitle": "From plain JavaScript to confident, compiled TypeScript in eight focused lessons",
+  "audience": "Developers who already write JavaScript and want type safety without the jargon. You should be comfortable with variables, functions, objects and arrays — no prior TypeScript experience needed. If you know React or Node, the examples will feel right at home.",
+  "outcomes": [
+    "Explain what TypeScript adds to JavaScript and how the compiler turns it back into runnable JS",
+    "Annotate variables, parameters and return types, and know when to let inference do the work instead",
+    "Model object shapes with interfaces and type aliases, including optional and readonly properties",
+    "Type functions precisely — optional, default and rest parameters, callbacks and overloads",
+    "Read union types like a set of possibilities and narrow them with typeof, in and discriminant checks",
+    "Write and correctly use generic functions and generic types instead of reaching for any",
+    "Pick the right built-in utility type (Partial, Pick, Omit, Record, ReturnType…) for refactoring scenarios",
+    "Type a real fetch/JSON boundary with unknown and validate data before trusting it"
+  ],
+  "prereqSlugs": ["javascript-basics-refresher"],
+  "technologies": ["TypeScript 5.x", "Node.js 20+", "tsc", "tsconfig"],
+  "skills": ["static typing", "type inference", "interfaces", "generics", "narrowing", "API boundary typing"],
+  "assessment": [
+    {
+      "q": "What does the TypeScript compiler actually produce as output?",
+      "options": [
+        "A binary that runs on the V8 engine",
+        "Plain JavaScript with the type annotations erased",
+        "Bytecode executed by a TS virtual machine",
+        "A WebAssembly module plus a .d.ts file"
+      ],
+      "answer": 1,
+      "explain": "TypeScript is a compiled-to-JS language: tsc type-checks your code, strips the annotations, and emits standard JavaScript that any browser or runtime can execute. The types exist only at compile time.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "You call a function as greet('Ada', 42). With function greet(name: string) it compiles. Why does TypeScript reject it?",
+      "options": [
+        "Numbers cannot be passed to functions with string parameters",
+        "The function accepts too many arguments — excess arguments are an error in TypeScript",
+        "42 is inferred as any and any is forbidden",
+        "It wouldn't — extra arguments are always allowed"
+      ],
+      "answer": 1,
+      "explain": "Unlike plain JavaScript, which silently ignores extra arguments, TypeScript checks arity. Passing more arguments than the signature declares is an error, which catches refactoring accidents.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Which value can safely be assigned to a variable typed as unknown?",
+      "options": [
+        "Any value — unknown accepts everything",
+        "Only values from JSON.parse",
+        "Only string and number",
+        "Nothing — unknown can never be assigned to"
+      ],
+      "answer": 0,
+      "explain": "unknown is the type-safe sibling of any: you can assign anything TO it, but you must narrow or check it before using it. That asymmetry is exactly what makes it safe at API boundaries.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "interface User { readonly id: number; email: string; role?: string } — which statement is TRUE?",
+      "options": [
+        "role must always be present on every User",
+        "id can be reassigned after creation",
+        "role may be missing or undefined, and id cannot be reassigned",
+        "User is a runtime class with getters"
+      ],
+      "answer": 2,
+      "explain": "? marks a property optional; readonly forbids reassignment after initialization (a compile-time rule — the compiled JS does not freeze anything). Interfaces vanish at runtime.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "What is the practical difference between a union string | number and an intersection string & number?",
+      "options": [
+        "No difference — they are aliases",
+        "A union means the value is one of the members; an intersection means it is all of them at once",
+        "Unions are only for primitives; intersections for objects",
+        "Intersections widen, unions narrow"
+      ],
+      "answer": 1,
+      "explain": "Union = OR (a value that is one of several shapes). Intersection = AND (a value satisfying every member). string & number is effectively never — no value is both — but A & B for objects merges required members.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "In function first<T>(xs: T[]): T, what does T describe?",
+      "options": [
+        "A global type named T",
+        "A type parameter captured per call from the argument, so first(['a']) returns string",
+        "The any type with a different name",
+        "A tuple of unknowns"
+      ],
+      "answer": 1,
+      "explain": "T is a placeholder the compiler fills in at each call site by looking at the actual argument type. That's why first(['a','b']) is typed string while first([1,2]) is typed number — one function, precise types everywhere.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "function parse(raw: string): unknown — why is unknown the right return type instead of any?",
+      "options": [
+        "unknown makes the function faster",
+        "Callers must narrow the result before use, so mistakes surface at compile time instead of production",
+        "any is deprecated in TypeScript 5",
+        "unknown allows returning multiple values"
+      ],
+      "answer": 1,
+      "explain": "An any return type silently infects every caller with no checks. unknown forces callers to prove what the value is (typeof, instanceof, validation) before using it — the bug moves from runtime to compile time.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "type Update = Partial<User> — what does Partial do here?",
+      "options": [
+        "Deletes all properties of User",
+        "Makes every User property optional, ideal for PATCH-style update payloads",
+        "Marks every property readonly",
+        "Converts User into a union of its keys"
+      ],
+      "answer": 1,
+      "explain": "Partial<T> maps every property to optional while keeping the types. It's the standard way to type update objects where callers may send any subset of fields.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Which snippet narrows a variable x: string | number safely to number inside the branch?",
+      "options": [
+        "if (x !== null) { x.toFixed(2) }",
+        "if (typeof x === 'number') { x.toFixed(2) }",
+        "if (typeof x === string) { x.toFixed(2) }",
+        "if (x is number) { x.toFixed(2) }"
+      ],
+      "answer": 1,
+      "explain": "typeof guards are understood by the compiler: inside a typeof x === 'number' branch, x is narrowed to number. 'x is number' is custom-guard syntax needing a function; typeof 'string' is a syntax error.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "A discriminated union has kind: 'circle' | 'square' with different payloads. Which check lets TypeScript narrow the whole object?",
+      "options": [
+        "Checking the object's constructor name",
+        "Switching on the literal kind field — each case narrows to that member's full shape",
+        "Casting the object to any first",
+        "Checking Object.keys(shape).length"
+      ],
+      "answer": 1,
+      "explain": "When every member carries a literal type on the same field, the compiler tracks that field's value and narrows the object type per branch. This is the single most-used pattern for modeling tagged data like API responses and parsed ASTs.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You see Type 'string | undefined' is not assignable to type 'string'. Where is the actual mistake usually located?",
+      "options": [
+        "In the type declaration being too strict",
+        "Earlier — where the value might be undefined and wasn't handled before use",
+        "In tsconfig.json missing a flag",
+        "In Node.js version incompatibility"
+      ],
+      "answer": 1,
+      "explain": "TypeScript errors point at the collision, not the cause. string | undefined means an optional lookup or missing check upstream; fix the source (handle undefined, provide a default, or guard) instead of casting the error away.",
+      "difficulty": "hard"
+    },
+    {
+      "q": "What does keyof User produce?",
+      "options": [
+        "A runtime array of property names",
+        "A union of User's property-name literal types: 'id' | 'email' | ...",
+        "The value type of all properties combined",
+        "A boolean per property"
+      ],
+      "answer": 1,
+      "explain": "keyof T is the union of key literal types. It exists only at compile time and powers safe generic lookups like function get<T, K extends keyof T>(obj: T, key: K): T[K].",
+      "difficulty": "hard"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "Typed Utility Belt",
+    "summary": "Build a small, fully typed utility module that proves every core concept from the course: generics, narrowing, interfaces and safe API boundaries. You'll end with a publishable package you can actually reuse.",
+    "requirements": [
+      "createStore<S>(initial: S) returning { getState, setState(next: Partial<S>): void } — state updates must stay type-safe",
+      "safeJsonParse(raw: string): unknown that never throws and never returns any",
+      "isUser(value: unknown): value is User — a runtime type guard the compiler trusts, validating id (number), email (string), optional role (string)",
+      "pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> — generic subset extraction",
+      "An EventBus<C extends Record<string, unknown>> where on/emit parameter types follow the event name chosen"
+    ],
+    "technical": [
+      "TypeScript 5 in strict mode (strict: true in tsconfig)",
+      "Zero dependencies — type-level and stdlib only",
+      "Every public function fully annotated (no inferred any)",
+      "tsc --noEmit passes with zero errors"
+    ],
+    "architecture": "One module, several focused files: types.ts (shared interfaces like User), guards.ts (unknown validators), store.ts, events.ts, utils.ts, plus index.ts re-exports. Tests import only from index.ts, so the public surface is deliberate — the same discipline real packages use.",
+    "steps": [
+      "Initialize: npm init -y, install typescript as a dev dependency, add tsconfig with strict: true",
+      "Write types.ts first — model User and the store/event interfaces before any implementation",
+      "Implement createStore<S> and verify getState/setState infer S from the initial value you pass",
+      "Implement safeJsonParse + isUser; prove that JSON.parse output flows through unknown → guarded User",
+      "Add pick and the EventBus; make on('login', handler) require exactly the payload type login declares",
+      "Write 8–10 assertions exercising each function (a plain script is fine — this is about types)",
+      "Run tsc --noEmit and fix every error without using any or as unknown as escape hatches"
+    ],
+    "evaluation": [
+      "tsc --noEmit is clean under strict mode",
+      "Calling pick(user, ['email']) returns a type with only email — compiler-enforced",
+      "Passing a wrong payload to bus.emit compiles to an error",
+      "No any anywhere in the public types (unknown at boundaries is expected and encouraged)",
+      "A short README naming which concept each function demonstrates"
+    ],
+    "stretch": [
+      "Add a deepClone<T>(value: T): T that structurally preserves the type",
+      "Type a Result<T, E> discriminated union with ok/err helpers and a map method",
+      "Publish to npm with generated .d.ts files and consume it from a scratch project"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "What is the difference between interface and type in TypeScript, and when do you pick one?",
+      "a": "Both describe object shapes and support composition, but they differ in mechanics: interfaces are open (declaration merging lets you extend an existing interface, which libraries use for module augmentation) and extend other interfaces naturally; type aliases are closed and express unions, intersections, mapped/utility types and conditional types — things interfaces can't. Practical rule: interface for public object contracts you expect others to extend, type for unions, aliases of primitives, and computed/mapped shapes. Interviewers usually want to hear that you know they're ~90% interchangeable and that consistency within a codebase matters more than ideology."
+    },
+    {
+      "q": "Explain any vs unknown and why unknown is preferred at API boundaries.",
+      "a": "any opts a value out of type checking entirely — it disables compile-time safety for that value and silently spreads to everything it touches. unknown keeps the value's type opaque but forces you to narrow it (typeof, instanceof, a type guard, or validation) before use. At an API or JSON boundary you don't control the shape of incoming data, so any would turn every downstream use into an untyped zone; unknown makes the compiler require proof before trusting the data. The pairing is deliberate: parse into unknown, validate with a guard function, then proceed with a precise type."
+    },
+    {
+      "q": "How does TypeScript narrowing work, and which constructs participate?",
+      "a": "The compiler tracks, per control-flow branch, what a value's type has proven to be. Participating constructs: typeof checks, instanceof, truthiness checks (for boolean/null/undefined), in operator for property presence, equality against literal values, custom type guards (x is T), assertion functions, and discriminated unions — switching on a literal field narrows the whole object to the matching member. The mental model: every check adds information, and TypeScript's control-flow analysis carries that information into the branch body. That's why well-typed code needs few casts: the branches do the narrowing."
+    },
+    {
+      "q": "What are generics for? Give a real example where they beat overloads or any.",
+      "a": "Generics let one function or type stay precise about relationships between inputs and outputs. function first<T>(xs: T[]): T returns exactly the element type of whatever array arrives — string for string[], number for number[]. Overloads would need one signature per type and still wouldn't cover custom types; any would throw the information away. The strongest answer shows the relationship idea: function prop<T, K extends keyof T>(obj: T, k: K): T[K] ties the result type to the exact key you passed. Also mention when NOT to use them: a type parameter used only once adds ceremony without precision."
+    },
+    {
+      "q": "A teammate says TypeScript is 'just types on top of JavaScript'. What's wrong with that framing?",
+      "a": "It undersells what the compiler does: TypeScript is a full static analysis engine over your program's control flow. Beyond annotations it performs structural type checking across files, arity checking, null/undefined flow analysis under strict mode, exhaustiveness checking of unions, and inference — most types in a well-written TS file are never written by hand. It also ships a language-service layer powering editor refactorings, auto-imports and rename symbols project-wide. The types are erased at emit, but the development experience is a different discipline from plain JS, not a thin layer."
+    },
+    {
+      "q": "How would you migrate a 50-file JavaScript codebase to TypeScript incrementally?",
+      "a": "Enable TS compilation with allowJs: true and checkJs off, then turn on strict gradually — noImplicitAny last because it generates the most errors. Migrate leaf modules first (utilities, constants) where the blast radius is small, define types for shared data shapes early (one source of truth per entity), and type the API/JSON boundaries with unknown + guards before typing business logic. Rename file-by-file .js → .ts, fixing errors locally rather than in one big-bang PR. A common metric: get tsc --noEmit clean per PR so the ratchet only moves forward."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

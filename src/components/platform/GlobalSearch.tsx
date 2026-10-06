@@ -5,7 +5,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Play, Search } from "lucide-react";
+import { BookOpen, Play, Search } from "lucide-react";
 
 import {
   CommandDialog,
@@ -97,6 +97,8 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
               {catItems.map((i) => {
                 const playable =
                   i.categorySlug === "simulators" && isPlayableSimulator(i.slug);
+                const isCourse =
+                  i.categorySlug === "courses" && (i.lessonCount ?? 0) > 0;
                 return (
                   <CommandItem
                     key={i.id}
@@ -106,13 +108,19 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
                       go(
                         playable
                           ? simulatorViewHref(i.slug)
-                          : `/?category=${c.slug}&item=${i.slug}`
+                          : isCourse
+                            ? `/?course=${i.slug}`
+                            : `/?category=${c.slug}&item=${i.slug}`
                       );
                     }}
                   >
                     {playable ? (
                       <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-teal-500/20 text-teal-600 dark:text-teal-400" aria-hidden>
                         <Play className="size-2 fill-current" />
+                      </span>
+                    ) : isCourse ? (
+                      <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-orange-500/20 text-orange-600 dark:text-orange-400" aria-hidden>
+                        <BookOpen className="size-2" />
                       </span>
                     ) : (
                       <Search aria-hidden className="size-3.5 text-muted-foreground" />
@@ -125,6 +133,11 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
                     {playable && (
                       <span className="ml-auto rounded border border-teal-500/40 bg-teal-500/10 px-1.5 py-px text-[10px] font-semibold text-teal-600 dark:text-teal-300">
                         Play
+                      </span>
+                    )}
+                    {isCourse && (
+                      <span className="ml-auto rounded border border-orange-500/40 bg-orange-500/10 px-1.5 py-px text-[10px] font-semibold text-orange-600 dark:text-orange-300">
+                        {i.lessonCount} lessons
                       </span>
                     )}
                   </CommandItem>

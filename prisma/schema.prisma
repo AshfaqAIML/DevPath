@@ -66,10 +66,80 @@ model ResourceItem {
   updatedAt   DateTime  @updatedAt
 }
 
+// Course-level learning metadata for courses that ship real lesson content.
+// Keyed by the course's ResourceItem slug so catalog + content stay linked
+// without duplicating titles/levels (those live on the ResourceItem).
+model Course {
+  // Matches ResourceItem.slug of a "courses"-category item
+  courseSlug    String   @id
+  subtitle      String   @default("")
+  // "Who this course is for" paragraph
+  audience      String   @default("")
+  // JSON string[] — learning outcomes ("What you'll learn")
+  outcomes      String   @default("[]")
+  // JSON string[] — slugs of prerequisite courses (rendered as links)
+  prereqSlugs   String   @default("[]")
+  // JSON string[] — technologies/tools covered
+  technologies  String   @default("[]")
+  // JSON string[] — skills covered
+  skills        String   @default("[]")
+  // JSON QuizQuestion[] — final assessment
+  assessment    String   @default("[]")
+  // Minimum score (0–100) required to pass the final assessment
+  passScore     Int      @default(70)
+  // JSON project spec (requirements, steps, evaluation criteria) or null
+  project       String?
+  // JSON {q, a}[] — interview preparation Q&A
+  interviewQs   String   @default("[]")
+  version       String   @default("1.0.0")
+  // draft | review | published — only published exposes lessons to learners
+  contentStatus String   @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lessons       Lesson[]
+}
+
+// A single lesson inside a course. Full teaching content is stored as
+// structured JSON blocks (paragraphs, callouts, code, diagrams, quizzes…)
+// rendered by reusable components — never hardcoded in JSX.
+model Lesson {
+  id         String   @id @default(cuid())
+  courseSlug String
+  course     Course   @relation(fields: [courseSlug], references: [courseSlug], onDelete: Cascade)
+  // 1-based display order
+  order      Int
+  slug       String
+  title      String
+  // "After this lesson you will be able to…"
+  objective  String   @default("")
+  // "Why this matters" — real-world motivation
+  why        String   @default("")
+  minutes    Int      @default(15)
+  xp         Int      @default(50)
+  // JSON ContentBlock[] — the lesson body
+  blocks     String   @default("[]")
+  // JSON { prompt, hints[], solution, why } — Try It Yourself exercise
+  exercise   String?
+  // JSON QuizQuestion[] — end-of-lesson quiz
+  quiz       String   @default("[]")
+  summary    String   @default("")
+  // "What's next" — bridge to the following lesson
+  next       String   @default("")
+  published  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([courseSlug, order])
+  @@unique([courseSlug, slug])
+  @@index([courseSlug])
+}
+
 // Lightweight first-party analytics for category / item engagement.
 model AnalyticsEvent {
   id        String   @id @default(cuid())
-  // category_view | card_click | item_view | search
+  // category_view | card_click | item_view | search | lesson_view |
+  // lesson_complete | quiz_attempt | assessment_pass | simulator_view |
+  // challenge_complete
   type      String
   slug      String?
   label     String?

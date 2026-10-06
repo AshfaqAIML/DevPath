@@ -1,0 +1,129 @@
+{
+  "title": "Why TypeScript Exists",
+  "slug": "01-why-typescript",
+  "objective": "After this lesson you will be able to explain what TypeScript adds to JavaScript, run your first compile, and describe exactly what happens to the types when your code ships.",
+  "why": "Every JavaScript bug you've shipped — calling an undefined function, reading a property off null, passing a string where a number was expected — failed at runtime, in front of a user or in production logs. TypeScript moves an entire class of those failures to the moment you compile, before the code ever runs. That's not a nicety; it's the reason teams at scale adopt it.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "The problem TypeScript solves" },
+    { "t": "p", "text": "JavaScript is *dynamically typed*: a variable can hold a string now and a number a millisecond later, and nothing checks what you pass around. That flexibility is wonderful for small scripts and terrible for programs that grow. Consider this innocent-looking code:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function formatPrice(cents) {\n  return `$${(cents / 100).toFixed(2)}`;\n}\n\nconst total = formatPrice(1999);   // \"$19.99\" ✓\nconst bug = formatPrice(\"1999\");   // \"$1999.00\"... wait, \"1999\"/100 = 19.99 → \"$19.99\"? No —\n// \"1999\" / 100 is 19.99 (string coerced), but \"19\" / 100 would be 0.19\n// and \"abc\" / 100 is NaN → \"$NaN\". The bug hides until runtime."
+    },
+    { "t": "p", "text": "Nothing in the code *looks* wrong. The failure only appears when someone calls the function with a string — maybe three months from now, from a different file, after a refactor. TypeScript's entire value proposition is making that mistake impossible to write in the first place:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "function formatPrice(cents: number): string {\n  return `$${(cents / 100).toFixed(2)}`;\n}\n\nformatPrice(\"1999\");\n// Error: Argument of type 'string' is not assignable to parameter of type 'number'.",
+      "highlight": [6, 7]
+    },
+    { "t": "callout", "variant": "tip", "title": "The mental model", "text": "Think of TypeScript as a spell-checker for your program's shape-grammar. It doesn't run your code — it reads it, tracks what every value is, and flags sentences that don't parse. Like spell-check, it's not omniscient (logic bugs still run free), but it eliminates a whole category of typos." },
+    { "t": "h", "text": "TypeScript is JavaScript, plus rules" },
+    { "t": "p", "text": "This is the most important thing to internalize early: **TypeScript is a superset of JavaScript**. Every valid `.js` file is a valid `.ts` file. The language adds a type system on top and removes nothing — no new control flow, no different runtime semantics. Your `map`, `Promise`, `fetch` and DOM APIs all work identically." },
+    { "t": "p", "text": "What changes is the pipeline. JavaScript runs directly in the browser or Node. TypeScript must first pass through the **compiler**, `tsc`, which does two jobs:" },
+    { "t": "diagram", "caption": "The TypeScript compile pipeline", "nodes": ["index.ts (types + logic)", "tsc — type-check every expression", "index.js (plain JavaScript)"] },
+    { "t": "p", "text": "The type-check step produces *errors* when your code contradicts itself. The emit step produces plain JavaScript with every type annotation erased — `function formatPrice(cents: number)` becomes `function formatPrice(cents)`. The output a browser runs contains no trace of TypeScript." },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// What you write (input.ts)\nconst name: string = \"Ada\";\nfunction double(x: number): number { return x * 2; }\n\n// What tsc emits (input.js) — types erased, logic identical\nconst name = \"Ada\";\nfunction double(x) { return x * 2; }"
+    },
+    { "t": "callout", "variant": "info", "title": "Types are compile-time only", "text": "There is no `typeof User` check, no reflection over interfaces, no \"is this a number at runtime\" from the type system itself. If you need runtime checks (validating API input), you write runtime code — Lesson 8 covers exactly how to pair the two." },
+    { "t": "h", "text": "Run your first compile" },
+    { "t": "p", "text": "Set up a scratch project and feel the compiler work:" },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "mkdir ts-playground && cd ts-playground\nnpm init -y\nnpm install --save-dev typescript\nnpx tsc --init            # creates tsconfig.json with sensible defaults"
+    },
+    { "t": "p", "text": "Create `greet.ts` with a deliberate mistake, then compile:" },
+    {
+      "t": "code",
+      "lang": "ts",
+      "code": "// greet.ts\nfunction greet(name: string): string {\n  return `Hello, ${name.toUpperCase()}`;\n}\n\ngreet(\"Ada\");\ngreet(42);        // ← the compiler will reject this line\ngreet();          // ← and this one"
+    },
+    {
+      "t": "code",
+      "lang": "bash",
+      "code": "npx tsc greet.ts\n# error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'.\n# error TS2554: Expected 1 arguments, but got 0.\n# → but greet.js was still emitted (with the types stripped)"
+    },
+    { "t": "p", "text": "Two details worth noticing. First, `tsc` **still emits JavaScript even when it finds errors** — type errors are diagnostics, not build blockers, until you make them blockers (CI runs `tsc --noEmit` and fails the pipeline). Second, notice the error *numbers* (TS2345, TS2554): every TypeScript error has a stable code you can look up, which makes searching for solutions dramatically easier." },
+    { "t": "h", "text": "Meet strict mode" },
+    { "t": "p", "text": "The single highest-leverage line in any `tsconfig.json` is `\"strict\": true`. It turns on a family of checks — most famously `noImplicitAny` and `strictNullChecks` — that make the compiler actually catch the bugs you care about. With strict mode off, TypeScript is a faint echo of itself; every real project you join will have it on, so this course assumes it from the start." },
+    {
+      "t": "code",
+      "lang": "json",
+      "code": "// tsconfig.json (the parts that matter most)\n{\n  \"compilerOptions\": {\n    \"strict\": true,          // noImplicitAny + strictNullChecks + friends\n    \"target\": \"ES2022\",     // which JS version to emit\n    \"outDir\": \"./dist\",     // where compiled JS goes\n    \"noEmit\": true           // type-check only (bundler handles output)\n  }\n}"
+    },
+    { "t": "callout", "variant": "warn", "title": "Common mistake #1", "text": "Reaching for `any` the moment the compiler complains. `any` is a pressure-release valve that switches the type system *off* for that value. It's occasionally the pragmatic call, but as a reflex it deletes TypeScript's value. The next seven lessons exist so you almost never need it." },
+    { "t": "keytakeaways", "items": [
+      "TypeScript is JavaScript plus a static type system — a superset, so every .js file is valid .ts",
+      "The compiler (tsc) type-checks, then emits plain JavaScript with the types erased; types never exist at runtime",
+      "Type errors are diagnostics: tsc still emits output; CI makes them blocking",
+      "strict: true in tsconfig is non-negotiable for real projects — it enables the checks that catch real bugs"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "The snippet below compiles as plain JavaScript and produces `$NaN` at runtime — but only for some inputs. Your task: (1) rewrite the function with TypeScript annotations so the bad call below is a compile error, and (2) explain in one sentence which annotation actually catches the bug.",
+    "hints": [
+      "Think about what the function *needs* to be true about its argument for the math to work — that's the parameter's type.",
+      "The return type is the other half of the contract; the caller expects a formatted string, not NaN soup.",
+      "The parameter annotation `cents: number` is what rejects the string \"1999\" — the call site fails before the function ever runs."
+    ],
+    "solution": "function formatPrice(cents: number): string {\n  return `$${(cents / 100).toFixed(2)}`;\n}\n\nformatPrice(1999);   // OK\nformatPrice(\"1999\"); // Error TS2345: 'string' is not assignable to 'number'",
+    "why": "The bug is a *type* mismatch at the boundary: the function's body is only correct for numbers. Annotating the parameter converts the hidden runtime coercion into a visible compile-time error at the call site — the exact class of bug the whole language exists to catch. The return annotation documents the output contract for callers but isn't what stops this particular bug.",
+    "code": "function formatPrice(cents) {\n  return `$${(cents / 100).toFixed(2)}`;\n}\n\nformatPrice(1999);\nformatPrice(\"1999\"); // ← silently produces garbage for some strings",
+    "lang": "ts"
+  },
+  "quiz": [
+    {
+      "q": "Your teammate compiles a file with 3 type errors and notices a .js file was still produced. Is that a bug?",
+      "options": [
+        "Yes — tsc must refuse to emit on any error",
+        "No — type errors are diagnostics; emission continues by default and CI makes them blocking",
+        "Yes, but only in strict mode",
+        "No, because tsc deletes errors it can't fix"
+      ],
+      "answer": 1,
+      "explain": "This is deliberate design: diagnostics and output are decoupled so you can iterate. Teams enforce correctness with `tsc --noEmit` in CI, which fails the build on any error without emitting anything."
+    },
+    {
+      "q": "Which statement about the types in your .ts files is true at runtime?",
+      "options": [
+        "They're checked by the browser before execution",
+        "They're erased during compilation — the emitted JavaScript contains no types",
+        "They run as assertions after each statement",
+        "They become JSDoc comments in the output"
+      ],
+      "answer": 1,
+      "explain": "TypeScript's types are purely compile-time. The emit step strips every annotation; the JS that runs is indistinguishable from hand-written JS. Any *runtime* guarantee (like validating API input) needs runtime code."
+    },
+    {
+      "q": "What does strict: true change in practice?",
+      "options": [
+        "It makes the compiled output faster",
+        "It enables stricter checking rules (noImplicitAny, strictNullChecks and more) so real bug classes get caught",
+        "It forbids the any keyword entirely",
+        "It enforces code formatting"
+      ],
+      "answer": 1,
+      "explain": "Strict mode is a bundle of compiler flags that turn TypeScript from a suggestion engine into a checker. any remains available as an escape hatch — you'll just (rightly) feel bad using it."
+    },
+    {
+      "q": "You see error TS2345 in your terminal. What is the fastest way to understand it?",
+      "options": [
+        "Reinstall TypeScript — error codes mean a broken install",
+        "Read the message next to the code (it names the types), and search the TS2345 code for documented details",
+        "The code is a line number — jump to line 2345",
+        "Ignore the code; only the file path matters"
+      ],
+      "answer": 1,
+      "explain": "TypeScript error codes are stable identifiers: the human-readable message tells you what collided, and the code makes the error searchable. Learning to read errors is a skill this course builds deliberately."
+    }
+  ],
+  "summary": "TypeScript adds a compile-time type system to JavaScript without changing how the code runs. The compiler (tsc) reads your program, verifies that every value flows where its type allows, then emits plain JavaScript with all annotations erased. Type errors are diagnostics — your CI makes them blocking. strict: true turns on the checking family that makes the whole thing worthwhile, and the reflex to reach for any is the first habit to unlearn.",
+  "next": "You know *why* the compiler exists. Next you'll drive it yourself: annotating variables, understanding when inference already knows the answer, and meeting the two types (any and unknown) that bookend the safety spectrum."
+}

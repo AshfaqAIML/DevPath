@@ -10,6 +10,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  BookOpen,
   Bookmark,
   Check,
   CheckCircle2,
@@ -197,6 +198,13 @@ export function ItemDetailDialog({ item, onOpenChange }: ItemDetailDialogProps) 
                 <Link href={simulatorViewHref(item.slug)} onClick={() => onOpenChange(false)}>
                   <Play aria-hidden className="size-4" />
                   Launch sandbox
+                </Link>
+              </Button>
+            ) : item.lessonCount && item.lessonCount > 0 ? (
+              <Button asChild className="gap-2 sm:flex-1">
+                <Link href={`/?course=${item.slug}`} onClick={() => onOpenChange(false)}>
+                  <BookOpen aria-hidden className="size-4" />
+                  Start course · {item.lessonCount} lessons
                 </Link>
               </Button>
             ) : (
