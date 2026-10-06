@@ -1,0 +1,202 @@
+// Shared platform data layer — server-side access to categories & items.
+// The whole category hub is DB-driven: counts, wording, badges, order,
+// icons and enable-state all come from the Category table.
+import { db } from "@/lib/db";
+import type { Category, ResourceItem } from "@prisma/client";
+
+export type CategoryView = {
+  id: string;
+  slug: string;
+  title: string;
+  tagline: string;
+  description: string;
+  countLabel: string;
+  icon: string;
+  route: string;
+  badge: string | null;
+  badgeVariant: string;
+  accent: string;
+  order: number;
+  enabled: boolean;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  /** Number of PUBLISHED items — the value surfaced in the hub. */
+  count: number;
+  /** Total items including drafts (used by the admin console). */
+  totalItems: number;
+};
+
+export type ResourceItemView = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  level: string;
+  duration: string | null;
+  tags: string[];
+  published: boolean;
+  featured: boolean;
+  views: number;
+  categorySlug: string;
+  categoryTitle: string;
+  categoryIcon: string;
+  categoryAccent: string;
+};
+
+const toCategoryView = (
+  c: Category,
+  count: number,
+  totalItems: number
+): CategoryView => ({
+  id: c.id,
+  slug: c.slug,
+  title: c.title,
+  tagline: c.tagline,
+  description: c.description,
+  countLabel: c.countLabel,
+  icon: c.icon,
+  route: c.route,
+  badge: c.badge,
+  badgeVariant: c.badgeVariant,
+  accent: c.accent,
+  order: c.order,
+  enabled: c.enabled,
+  seoTitle: c.seoTitle,
+  seoDescription: c.seoDescription,
+  count,
+  totalItems,
+});
+
+export async function getCategoriesWithCounts(): Promise<CategoryView[]> {
+  const categories = await db.category.findMany({
+    orderBy: { order: "asc" },
+    include: {
+      _count: { select: { items: true } },
+    },
+  });
+  const publishedCounts = await db.resourceItem.groupBy({
+    by: ["categoryId"],
+    where: { published: true },
+    _count: { _all: true },
+  });
+  const publishedMap = new Map(
+    publishedCounts.map((p) => [p.categoryId, p._count._all])
+  );
+  return categories.map((c) =>
+    toCategoryView(
+      c,
+      publishedMap.get(c.id) ?? 0,
+      (c as Category & { _count?: { items: number } })._count?.items ?? 0
+    )
+  );
+}
+
+const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemView => ({
+  id: i.id,
+  slug: i.slug,
+  title: i.title,
+  description: i.description,
+  level: i.level,
+  duration: i.duration,
+  tags: i.tags ? i.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+  published: i.published,
+  featured: i.featured,
+  views: i.views,
+  categorySlug: c.slug,
+  categoryTitle: c.title,
+  categoryIcon: c.icon,
+  categoryAccent: c.accent,
+});
+
+export async function getItems(opts: {
+  category?: string;
+  q?: string;
+  level?: string;
+  sort?: string;
+  includeDrafts?: boolean;
+  limit?: number;
+}): Promise<ResourceItemView[]> {
+  const where: Record<string, unknown> = {};
+  if (opts.category) {
+    where.category = { slug: opts.category };
+  }
+  if (!opts.includeDrafts) {
+    where.published = true;
+  }
+  if (opts.level && opts.level !== "All") {
+    where.level = opts.level;
+  }
+  if (opts.featured) {
+    where.featured = true;
+  }
+  if (opts.q) {
+    const q = opts.q.toLowerCase();
+    // SQLite LIKE is case-insensitive for ASCII by default
+    where.OR = [
+      { title: { contains: opts.q } },
+      { description: { contains: opts.q } },
+      { tags: { contains: opts.q } },
+    ];
+    void q;
+  }
+  const orderBy: Record<string, string> =
+    opts.sort === "popular"
+      ? { views: "desc" }
+      : opts.sort === "newest"
+        ? { createdAt: "desc" }
+        : opts.sort === "az"
+          ? { title: "asc" }
+          : { featured: "desc" };
+
+  const items = await db.resourceItem.findMany({
+    where,
+    orderBy,
+    include: { category: true },
+    take: opts.limit ?? 200,
+  });
+  return items.map((i) => toResourceItemView(i, i.category));
+}
+
+export async function logAnalyticsEvent(
+  type: string,
+  slug?: string | null,
+  label?: string | null
+) {
+  try {
+    await db.analyticsEvent.create({
+      data: { type, slug: slug ?? null, label: label ?? null },
+    });
+  } catch {
+    // analytics must never break the request path
+  }
+}
+
+export async function getAnalyticsSummary() {
+  const byCategory = await db.analyticsEvent.groupBy({
+    by: ["slug"],
+    where: { type: "category_view" },
+    _count: { _all: true },
+  });
+  const byType = await db.analyticsEvent.groupBy({
+    by: ["type"],
+    _count: { _all: true },
+  });
+  const recent = await db.analyticsEvent.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  const totalEvents = await db.analyticsEvent.count();
+  return {
+    categoryViews: byCategory.map((b) => ({ slug: b.slug, views: b._count._all })),
+    typeCounts: byType.map((b) => ({ type: b.type, count: b._count._all })),
+    recent,
+    totalEvents,
+  };
+}
+
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "devpath-admin";
+
+export function isAdminRequest(req: Request): boolean {
+  const key = req.headers.get("x-admin-key");
+  return !!key && key === ADMIN_PASSWORD;
+}

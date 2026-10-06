@@ -1,0 +1,74 @@
+// Prisma schema — DevPath learning platform
+// The five-category structure (Masterclass, Roadmaps, Courses, Resources,
+// Simulators) is the core information architecture of the platform and is
+// stored as configurable Category records so counts, wording, badges, order,
+// icons and enable-state can all be managed without touching frontend code.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A top-level resource category rendered in the Category Hub.
+model Category {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  title          String
+  // Short line shown on the category card
+  tagline        String         @default("")
+  // Longer copy shown on the category landing view
+  description    String         @default("")
+  // Configurable wording used next to the live count, e.g. "workshops"
+  countLabel     String         @default("items")
+  // Locally managed icon path under /public
+  icon           String         @default("")
+  // Canonical category route (e.g. "/masterclass")
+  route          String         @default("/")
+  // Optional badge, e.g. "New"
+  badge          String?
+  badgeVariant   String         @default("default")
+  // Accent key used for theming: amber | emerald | orange | rose | teal ...
+  accent         String         @default("zinc")
+  order          Int            @default(0)
+  enabled        Boolean        @default(true)
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  items          ResourceItem[]
+}
+
+// A single piece of publishable content inside a category.
+// Counts shown in the hub are derived from published rows only.
+model ResourceItem {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  description String    @default("")
+  // Beginner | Intermediate | Advanced
+  level       String    @default("Beginner")
+  duration    String?
+  tags        String    @default("")
+  published   Boolean   @default(false)
+  featured    Boolean   @default(false)
+  order       Int       @default(0)
+  views       Int       @default(0)
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Lightweight first-party analytics for category / item engagement.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  // category_view | card_click | item_view | search
+  type      String
+  slug      String?
+  label     String?
+  createdAt DateTime @default(now())
+}

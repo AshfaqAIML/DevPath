@@ -1,0 +1,971 @@
+"use client";
+
+// AdminPanel — the platform's content management layer. Categories can be
+// reordered, enabled/disabled, retitled and re-badged; the count wording is
+// editable; items can be created, published/unpublished, featured and
+// deleted; engagement analytics are summarized. Everything here flows
+// through the admin-authenticated API and immediately updates the hub.
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Image from "next/image";
+import { formatDistanceToNow } from "date-fns";
+import {
+  Activity,
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Loader2,
+  Lock,
+  LogOut,
+  MousePointerClick,
+  Plus,
+  Save,
+  Search,
+  Star,
+  Trash2,
+  Eye,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { getAccent } from "@/lib/accent";
+import type { CategoryView, ResourceItemView } from "@/lib/platform";
+import { fetchItems, type CategoriesPayload } from "./platform-data";
+
+type AnalyticsSummary = {
+  categoryViews: { slug: string | null; views: number }[];
+  typeCounts: { type: string; count: number }[];
+  recent: { id: string; type: string; slug: string | null; label: string | null; createdAt: string }[];
+  totalEvents: number;
+};
+
+const ADMIN_KEY_STORAGE = "devpath-admin-key";
+
+// ---------------------------------------------------------------- auth gate
+
+function AuthGate({ onAuthorized }: { onAuthorized: (key: string) => void }) {
+  const { toast } = useToast();
+  const [password, setPassword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) throw new Error("Invalid password");
+      const data = (await res.json()) as { token: string };
+      sessionStorage.setItem(ADMIN_KEY_STORAGE, data.token);
+      onAuthorized(data.token);
+      toast({ title: "Welcome back", description: "Admin console unlocked." });
+    } catch {
+      toast({
+        title: "Authentication failed",
+        description: "That password doesn’t match the admin credential.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-sm py-16">
+      <form
+        onSubmit={submit}
+        className="space-y-5 rounded-2xl border bg-card p-8 shadow-sm"
+      >
+        <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-muted">
+          <Lock aria-hidden className="size-5 text-muted-foreground" />
+        </span>
+        <div className="space-y-1.5 text-center">
+          <h1 className="text-lg font-bold">Admin console</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage categories, content and wording — the hub updates live.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="admin-password">Password</Label>
+          <Input
+            id="admin-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="current-password"
+          />
+        </div>
+        <Button type="submit" className="w-full gap-2" disabled={loading || !password}>
+          {loading && <Loader2 aria-hidden className="size-4 animate-spin" />}
+          Unlock console
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          Demo credential: <code className="font-mono">devpath-admin</code>
+        </p>
+      </form>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------- console root
+
+export function AdminPanel({ categoriesData }: { categoriesData: CategoriesPayload }) {
+  const [adminKey, setAdminKey] = React.useState<string | null>(null);
+  const [checked, setChecked] = React.useState(false);
+
+  React.useEffect(() => {
+    const k = sessionStorage.getItem(ADMIN_KEY_STORAGE);
+    if (k) setAdminKey(k);
+    setChecked(true);
+  }, []);
+
+  if (!checked) {
+    return (
+      <div className="flex justify-center py-24">
+        <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!adminKey) return <AuthGate onAuthorized={setAdminKey} />;
+
+  return (
+    <AdminConsole
+      adminKey={adminKey}
+      categoriesData={categoriesData}
+      onLogout={() => {
+        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        setAdminKey(null);
+      }}
+    />
+  );
+}
+
+function AdminConsole({
+  adminKey,
+  categoriesData,
+  onLogout,
+}: {
+  adminKey: string;
+  categoriesData: CategoriesPayload;
+  onLogout: () => void;
+}) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const authedFetch = React.useCallback(
+    (path: string, init?: RequestInit) =>
+      fetch(path, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+          ...(init?.headers ?? {}),
+        },
+      }),
+    [adminKey]
+  );
+
+  const invalidate = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["categories"] });
+    void queryClient.invalidateQueries({ queryKey: ["items"] });
+  }, [queryClient]);
+
+  const notify = (ok: boolean, action: string) =>
+    toast(
+      ok
+        ? { title: `${action} saved`, description: "The hub and counts updated live." }
+        : {
+            title: `Failed: ${action.toLowerCase()}`,
+            description: "Check the console for details.",
+            variant: "destructive",
+          }
+    );
+
+  return (
+    <div className="space-y-6">
+      {/* Console header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Activity aria-hidden className="size-5" />
+          </span>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight">Admin console</h1>
+            <p className="text-xs text-muted-foreground">
+              Content &amp; configuration management for the category hub
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <Link href="/">
+              <ArrowLeft aria-hidden className="size-4" />
+              Back to platform
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              onLogout();
+              router.push("/");
+            }}
+          >
+            <LogOut aria-hidden className="size-4" />
+            Log out
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="categories">
+        <TabsList className="h-11 rounded-xl p-1">
+          <TabsTrigger value="categories" className="rounded-lg px-4 text-sm">
+            Categories
+          </TabsTrigger>
+          <TabsTrigger value="content" className="rounded-lg px-4 text-sm">
+            Content
+          </TabsTrigger>
+          <TabsTrigger value="analytics" className="rounded-lg px-4 text-sm">
+            Analytics
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="categories" className="mt-6">
+          <CategoryManager
+            categories={categoriesData.categories}
+            authedFetch={authedFetch}
+            invalidate={invalidate}
+            notify={notify}
+          />
+        </TabsContent>
+
+        <TabsContent value="content" className="mt-6">
+          <ContentManager
+            categories={categoriesData.categories}
+            adminKey={adminKey}
+            authedFetch={authedFetch}
+            invalidate={invalidate}
+            notify={notify}
+          />
+        </TabsContent>
+
+        <TabsContent value="analytics" className="mt-6">
+          <AnalyticsTab adminKey={adminKey} categories={categoriesData.categories} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// --------------------------------------------------------- category manager
+
+function CategoryManager({
+  categories,
+  authedFetch,
+  invalidate,
+  notify,
+}: {
+  categories: CategoryView[];
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  invalidate: () => void;
+  notify: (ok: boolean, action: string) => void;
+}) {
+  const patch = async (id: string, data: Record<string, unknown>, action: string) => {
+    const res = await authedFetch(`/api/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    notify(res.ok, action);
+    if (res.ok) invalidate();
+  };
+
+  const move = async (index: number, dir: -1 | 1) => {
+    const a = categories[index];
+    const b = categories[index + dir];
+    if (!a || !b) return;
+    await Promise.all([
+      authedFetch(`/api/categories/${a.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ order: b.order }),
+      }),
+      authedFetch(`/api/categories/${b.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ order: a.order }),
+      }),
+    ]);
+    notify(true, "Reorder");
+    invalidate();
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Reorder, enable/disable, and edit the count wording or badge for each
+        category. Edits apply to the hub immediately — no frontend deploys.
+      </p>
+      <div className="rounded-2xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-20">Order</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead className="w-44">Count label</TableHead>
+              <TableHead className="w-40">Badge</TableHead>
+              <TableHead className="w-28">Live count</TableHead>
+              <TableHead className="w-24">Visible</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categories.map((c, i) => (
+              <CategoryRow
+                key={c.id}
+                category={c}
+                first={i === 0}
+                last={i === categories.length - 1}
+                onMove={(dir) => void move(i, dir)}
+                onPatch={(data, action) => void patch(c.id, data, action)}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function CategoryRow({
+  category: c,
+  first,
+  last,
+  onMove,
+  onPatch,
+}: {
+  category: CategoryView;
+  first: boolean;
+  last: boolean;
+  onMove: (dir: -1 | 1) => void;
+  onPatch: (data: Record<string, unknown>, action: string) => void;
+}) {
+  const [countLabel, setCountLabel] = React.useState(c.countLabel);
+  const [badge, setBadge] = React.useState(c.badge ?? "");
+  React.useEffect(() => {
+    setCountLabel(c.countLabel);
+    setBadge(c.badge ?? "");
+  }, [c.countLabel, c.badge]);
+
+  const a = getAccent(c.accent);
+  const saveCountLabel = () => {
+    if (countLabel !== c.countLabel && countLabel.trim()) {
+      onPatch({ countLabel: countLabel.trim() }, "Count wording");
+    }
+  };
+  const saveBadge = () => {
+    if (badge !== (c.badge ?? "")) {
+      onPatch({ badge: badge.trim() || null }, "Badge");
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 disabled:opacity-30"
+            disabled={first}
+            onClick={() => onMove(-1)}
+            aria-label={`Move ${c.title} up`}
+          >
+            <ArrowUp aria-hidden className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 disabled:opacity-30"
+            disabled={last}
+            onClick={() => onMove(1)}
+            aria-label={`Move ${c.title} down`}
+          >
+            <ArrowDown aria-hidden className="size-3.5" />
+          </Button>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <span className={cn("relative size-9 shrink-0 overflow-hidden rounded-lg ring-1", a.iconWrap)}>
+            <Image src={c.icon} alt="" fill sizes="36px" className="object-cover" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{c.title}</p>
+            <p className="truncate text-xs text-muted-foreground">{c.route}</p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Input
+          value={countLabel}
+          onChange={(e) => setCountLabel(e.target.value)}
+          onBlur={saveCountLabel}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          className="h-8 text-xs"
+          aria-label={`Count label for ${c.title}`}
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={badge}
+          onChange={(e) => setBadge(e.target.value)}
+          onBlur={saveBadge}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          placeholder="—"
+          className="h-8 text-xs"
+          aria-label={`Badge for ${c.title}`}
+        />
+      </TableCell>
+      <TableCell>
+        <span className="text-sm tabular-nums">
+          <span className={cn("font-semibold", a.text)}>{c.count}</span>
+          <span className="text-muted-foreground"> / {c.totalItems}</span>
+        </span>
+      </TableCell>
+      <TableCell>
+        <Switch
+          checked={c.enabled}
+          onCheckedChange={(v) => onPatch({ enabled: v }, v ? "Visibility" : "Visibility")}
+          aria-label={`${c.title} visible in hub`}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// ---------------------------------------------------------- content manager
+
+function ContentManager({
+  categories,
+  adminKey,
+  authedFetch,
+  invalidate,
+  notify,
+}: {
+  categories: CategoryView[];
+  adminKey: string;
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  invalidate: () => void;
+  notify: (ok: boolean, action: string) => void;
+}) {
+  const [filter, setFilter] = React.useState("all");
+  const [q, setQ] = React.useState("");
+  const [addOpen, setAddOpen] = React.useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["items", "admin", filter, q],
+    queryFn: () => fetchItems({ category: filter === "all" ? undefined : filter, q, all: true, adminKey }),
+  });
+
+  const items = data?.items ?? [];
+
+  const patchItem = async (id: string, body: Record<string, unknown>, action: string) => {
+    const res = await authedFetch(`/api/resources/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    notify(res.ok, action);
+    if (res.ok) invalidate();
+  };
+
+  const deleteItem = async (id: string, title: string) => {
+    const res = await authedFetch(`/api/resources/${id}`, { method: "DELETE" });
+    notify(res.ok, `Delete “${title}”`);
+    if (res.ok) invalidate();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-52">
+          <Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search content…"
+            className="h-10 pl-9"
+            aria-label="Search content"
+          />
+        </div>
+        <Select value={filter} onValueChange={setFilter}>
+          <SelectTrigger className="h-10 w-44 rounded-lg" aria-label="Filter by category">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.slug} value={c.slug}>
+                {c.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button className="h-10 gap-2 rounded-lg" onClick={() => setAddOpen(true)}>
+          <Plus aria-hidden className="size-4" />
+          Add content
+        </Button>
+      </div>
+
+      <div className="max-h-[560px] overflow-y-auto rounded-2xl border bg-card">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead className="w-28">Category</TableHead>
+              <TableHead className="w-32">Level</TableHead>
+              <TableHead className="w-24">Published</TableHead>
+              <TableHead className="w-20">Featured</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center">
+                  <Loader2 aria-hidden className="mx-auto size-5 animate-spin text-muted-foreground" />
+                </TableCell>
+              </TableRow>
+            ) : items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  No content matches.
+                </TableCell>
+              </TableRow>
+            ) : (
+              items.map((item) => {
+                const a = getAccent(item.categoryAccent);
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="max-w-72">
+                      <p className="truncate text-sm font-medium">{item.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.duration ?? item.tags.slice(0, 2).join(", ")}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        <span aria-hidden className={cn("size-1.5 rounded-full", a.dot)} />
+                        {item.categoryTitle}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[11px] font-normal">
+                        {item.level}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={item.published}
+                        onCheckedChange={(v) =>
+                          void patchItem(item.id, { published: v }, `Publish “${item.title}”`)
+                        }
+                        aria-label={`Publish ${item.title}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "size-8",
+                          item.featured ? "text-amber-500" : "text-muted-foreground"
+                        )}
+                        onClick={() =>
+                          void patchItem(item.id, { featured: !item.featured }, "Featured")
+                        }
+                        aria-label={`Toggle featured for ${item.title}`}
+                      >
+                        <Star
+                          aria-hidden
+                          className={cn("size-4", item.featured && "fill-amber-500")}
+                        />
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete ${item.title}`}
+                          >
+                            <Trash2 aria-hidden className="size-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete “{item.title}”?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This permanently removes the item and lowers the
+                              category count in the hub.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => void deleteItem(item.id, item.title)}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <AddItemDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        categories={categories}
+        authedFetch={authedFetch}
+        invalidate={invalidate}
+        notify={notify}
+      />
+    </div>
+  );
+}
+
+function AddItemDialog({
+  open,
+  onOpenChange,
+  categories,
+  authedFetch,
+  invalidate,
+  notify,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  categories: CategoryView[];
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  invalidate: () => void;
+  notify: (ok: boolean, action: string) => void;
+}) {
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [categorySlug, setCategorySlug] = React.useState(categories[0]?.slug ?? "");
+  const [level, setLevel] = React.useState("Beginner");
+  const [duration, setDuration] = React.useState("");
+  const [tags, setTags] = React.useState("");
+  const [published, setPublished] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !categorySlug) return;
+    setSaving(true);
+    try {
+      const res = await authedFetch("/api/resources", {
+        method: "POST",
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          categorySlug,
+          level,
+          duration: duration.trim() || undefined,
+          tags: tags.trim(),
+          published,
+        }),
+      });
+      notify(res.ok, `Create “${title.trim()}”`);
+      if (res.ok) {
+        invalidate();
+        onOpenChange(false);
+        setTitle("");
+        setDescription("");
+        setDuration("");
+        setTags("");
+        setPublished(true);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add new content</DialogTitle>
+          <DialogDescription>
+            Publishing immediately updates the live category count in the hub.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-title">Title</Label>
+            <Input
+              id="new-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. WebAssembly Deep Dive"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-desc">Description</Label>
+            <Input
+              id="new-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="One-line description"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={categorySlug} onValueChange={setCategorySlug}>
+                <SelectTrigger aria-label="Category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.slug} value={c.slug}>
+                      {c.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Level</Label>
+              <Select value={level} onValueChange={setLevel}>
+                <SelectTrigger aria-label="Level">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Beginner", "Intermediate", "Advanced"].map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="new-duration">Duration</Label>
+              <Input
+                id="new-duration"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="2h 15m"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-tags">Tags</Label>
+              <Input
+                id="new-tags"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="wasm,systems"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label htmlFor="new-published">Publish immediately</Label>
+              <p className="text-xs text-muted-foreground">
+                Unchecked creates a draft (hidden from the public count).
+              </p>
+            </div>
+            <Switch
+              id="new-published"
+              checked={published}
+              onCheckedChange={setPublished}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="gap-2" disabled={saving || !title.trim()}>
+              {saving ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Save aria-hidden className="size-4" />
+              )}
+              Create
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------- analytics tab
+
+function AnalyticsTab({
+  adminKey,
+  categories,
+}: {
+  adminKey: string;
+  categories: CategoryView[];
+}) {
+  const { data } = useQuery<AnalyticsSummary>({
+    queryKey: ["analytics", adminKey],
+    queryFn: async () => {
+      const res = await fetch("/api/analytics", {
+        headers: { "x-admin-key": adminKey },
+      });
+      if (!res.ok) throw new Error("Failed to load analytics");
+      return res.json();
+    },
+    refetchInterval: 15_000,
+  });
+
+  const typeCount = (type: string) =>
+    data?.typeCounts.find((t) => t.type === type)?.count ?? 0;
+  const maxViews = Math.max(1, ...(data?.categoryViews.map((v) => v.views) ?? [1]));
+
+  const stats = [
+    { label: "Total events", value: data?.totalEvents ?? 0, icon: Activity },
+    { label: "Category views", value: typeCount("category_view"), icon: Eye },
+    { label: "Card clicks", value: typeCount("card_click"), icon: MousePointerClick },
+    { label: "Searches", value: typeCount("search"), icon: Search },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-2xl border bg-card p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {s.label}
+              </p>
+              <s.icon aria-hidden className="size-4 text-muted-foreground" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Views by category */}
+        <div className="rounded-2xl border bg-card p-5">
+          <h3 className="text-sm font-semibold">Category views</h3>
+          <ul className="mt-4 space-y-3">
+            {categories.map((c) => {
+              const views =
+                data?.categoryViews.find((v) => v.slug === c.slug)?.views ?? 0;
+              const a = getAccent(c.accent);
+              return (
+                <li key={c.slug} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span aria-hidden className={cn("size-1.5 rounded-full", a.dot)} />
+                      {c.title}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">{views}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-500", a.dot)}
+                      style={{ width: `${Math.max(2, (views / maxViews) * 100)}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* Recent events */}
+        <div className="rounded-2xl border bg-card p-5">
+          <h3 className="text-sm font-semibold">Recent events</h3>
+          <div className="mt-4 max-h-72 space-y-2.5 overflow-y-auto pr-1">
+            {(data?.recent ?? []).length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No events recorded yet — browse the platform to generate some.
+              </p>
+            ) : (
+              data?.recent.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 text-xs"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {e.type}
+                    </span>
+                    <span className="truncate font-medium">{e.label ?? e.slug ?? "—"}</span>
+                  </span>
+                  <time className="shrink-0 text-muted-foreground" dateTime={e.createdAt}>
+                    {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+                  </time>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
