@@ -1,0 +1,67 @@
+{
+  "title": "Query Clinic: Classic Traps",
+  "slug": "09-query-clinic-traps",
+  "objective": "After this lesson you will be able to diagnose the six classic intermediate failures — GROUP BY/SELECT mismatch, HAVING-vs-WHERE misplacement, NULL ambushes, fanout inflation, accidental cross joins, and ORDER-BY-without-meaning — from symptoms alone, and prescribe the fix.",
+  "why": "Technique without debugging is fragile: every pattern from Chapters 1–8 has a signature failure mode, and production errors arrive as wrong numbers, not error messages. Seniors are distinguished less by the queries they write than by the speed of their diagnosis. This lesson is pure pattern-matching training for that skill.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Trap 1 — SELECT strays outside GROUP BY" },
+    { "t": "p", "text": "Every non-aggregated SELECT column must appear in `GROUP BY` (or be functionally dependent on it). Engines differ in strictness — MySQL may silently pick an arbitrary row's value, PostgreSQL errors — but the *meaning* is broken everywhere: which row's `name` should a per-role group show? If a column isn't grouped and isn't aggregated, the query is asking an unanswerable question." },
+    { "t": "code", "lang": "sql", "code": "-- BROKEN: which name? one row per role cannot show one name\n-- SELECT role, name, COUNT(*) FROM developers GROUP BY role;\n\n-- FIXED: every bare column grouped, the rest aggregated\nSELECT role, COUNT(*) AS devs, AVG(hours_studied) AS avg_hours\nFROM developers GROUP BY role;", "caption": "Grouping contract: bare columns grouped, everything else aggregated" },
+    { "t": "h", "text": "Trap 2 — aggregate filters in WHERE" },
+    { "t": "p", "text": "`WHERE` runs before grouping, so it cannot see aggregates — `WHERE COUNT(*) > 2` is an error in every engine. Row facts go in `WHERE` (filter early, shrink the grouping's work); group facts go in `HAVING`. When a filter mentions an aggregate function, it belongs after GROUP BY, full stop." },
+    { "t": "code", "lang": "sql", "code": "-- Roles with 3+ developers: row filter vs group filter, correctly placed\nSELECT role, COUNT(*) AS devs\nFROM developers\nWHERE country <> 'Japan'\nGROUP BY role\nHAVING COUNT(*) >= 3;", "caption": "WHERE trims rows first, HAVING trims groups after" },
+    { "t": "h", "text": "Trap 3 — NULL ambushes (the roundup)" },
+    { "t": "p", "text": "Three NULL behaviors from three chapters, one root cause — UNKNOWN is neither TRUE nor FALSE. `= NULL` matches nothing (use `IS NULL`); `NOT IN` with a NULL list returns zero rows (filter or use `NOT EXISTS`); `COUNT(column)` skips NULLs while `COUNT(*)` counts rows. The diagnostic: any query touching nullable columns that returns suspiciously few — or zero — rows gets its NULL paths checked first." },
+    { "t": "h", "text": "Trap 4 — fanout flashback" },
+    { "t": "p", "text": "Totals inflate the moment a join multiplies rows (Chapter 5). The clinic drill: when a metric jumps after adding a join, immediately run the pre-join count and the post-join count side by side. If they differ, you are counting matches — switch to `COUNT(DISTINCT key)` for the metric and pre-aggregate for the cure." },
+    { "t": "code", "lang": "sql", "code": "-- Diagnostic pair: run both, compare, then believe neither until they agree\nSELECT COUNT(*) AS developers FROM developers;\nSELECT COUNT(*) AS joined_rows\nFROM developers d JOIN enrollments e ON e.developer_id = d.id;\n-- 14 vs 28: the join fanned out — every downstream COUNT must account for it", "caption": "The two-count drill: pre-join vs post-join row counts" },
+    { "t": "h", "text": "Trap 5 — accidental cross join" },
+    { "t": "p", "text": "A missing or mistyped `ON` condition (or a comma-style `FROM a, b`) pairs *every* row with *every* row: 14 developers × 28 enrollments = 392 rows of nonsense. Symptoms: row counts in the hundreds from tiny tables, and totals that are exact multiples of table sizes. Prevention: never use comma joins, always write ON immediately with the JOIN, and sanity-check row counts after every new join." },
+    { "t": "h", "text": "Trap 6 — ORDER BY theater" },
+    { "t": "p", "text": "Sorting inside CTEs, views, or subqueries is discarded work (Chapters 2, 3, 6) — and a query without any ORDER BY promises nothing about row order (Fundamentals). If a report 'usually comes out sorted', it is accident, not contract: plans change with data size, indexes, and engine versions. Any consumer depending on order must request it at the outermost level." },
+    { "t": "table", "headers": ["Symptom", "Trap", "Prescription"], "rows": [["Arbitrary-looking value in grouped output", "Bare column outside GROUP BY", "Group it or aggregate it"], ["Error near aggregate in WHERE", "Aggregate filter misplaced", "Move to HAVING"], ["Zero rows, nullable columns involved", "NULL ambush (= NULL / NOT IN / COUNT col)", "IS NULL / filter NULLs / NOT EXISTS / COUNT(*)"], ["Totals jump after a join", "Fanout", "COUNT(DISTINCT key); pre-aggregate"], ["Hundreds of rows from tiny tables", "Accidental cross join", "Check every ON; no comma joins"], ["'Usually sorted' report scrambles", "ORDER BY theater / missing", "Outermost ORDER BY, always"]] },
+    { "t": "practice", "query": "SELECT COUNT(*) AS developers FROM developers;", "note": "Run the first half of the two-count drill in the sandbox. Then run the joined version and compute the fanout factor yourself (joined ÷ base). Every future inflated total gets this 30-second test first." },
+    { "t": "keytakeaways", "items": ["Bare SELECT columns must be grouped or aggregated — unanswerable questions get arbitrary answers", "WHERE filters rows before grouping, HAVING filters groups after — aggregates never live in WHERE", "NULL failures share one root (UNKNOWN): check nullable paths first on suspiciously empty results", "New joins demand fresh row counts: fanout and cross joins announce themselves in the numbers", "Sort once, outermost, always — inner ORDER BY is theater and unordered output is accident"]} ],
+  "exercise": {
+    "prompt": "A teammate's 'role leaderboard' is wrong three ways. Buggy query: SELECT role, name, COUNT(*) AS devs FROM developers WHERE COUNT(*) > 1 GROUP BY role ORDER BY devs; (a) Name the three bugs. (b) Write the fixed query plus a two-count fanout check proving the base table has 14 developers. All verification runs in the sandbox.",
+    "hints": [
+      "Bug 1: name is bare but ungrouped (Trap 1). Bug 2: COUNT(*) in WHERE (Trap 2 — belongs in HAVING). Bug 3 is subtler: ORDER BY devs refers to the alias — legal in most engines, so what is actually wrong? Re-read: the query asks per-role counts but shows a name per group… that IS bug 1. The third bug: no ORDER direction specified — DESC needed for a leaderboard, else smallest-first. (Ambiguity intended: defend your third pick.)",
+      "Fixed: SELECT role, COUNT(*) AS devs FROM developers GROUP BY role HAVING COUNT(*) > 1 ORDER BY devs DESC; — drop name (or aggregate it), move the filter, add DESC.",
+      "Fanout check: SELECT COUNT(*) FROM developers; → 14. No join here, but state the habit: re-verify counts whenever the query gains one."
+    ],
+    "solution": "-- Fixed leaderboard (flat — runs in the sandbox)\nSELECT role, COUNT(*) AS devs\nFROM developers\nGROUP BY role\nHAVING COUNT(*) > 1\nORDER BY devs DESC;\n\n-- Base count for the record\nSELECT COUNT(*) AS developers FROM developers;\n-- 14 rows; the fixed query returns only roles with 2+ developers.",
+    "why": "The exercise compresses three chapters of failure modes into one query: grouping contract (Ch.9.1/Fundamentals), WHERE-vs-HAVING staging (Ch.9.2), and presentation intent (DESC for rankings). Acceptable third-bug answers include the missing DESC or the unanswerable name — what matters is naming a defect with its chapter, not guessing mine.",
+    "code": "-- Buggy (do NOT run as-is — read it):\n-- SELECT role, name, COUNT(*) AS devs FROM developers\n-- WHERE COUNT(*) > 1 GROUP BY role ORDER BY devs;\n\n-- Fixed (flat — run here)\nSELECT role, COUNT(*) AS devs\nFROM developers\nGROUP BY role\nHAVING COUNT(*) > 1\nORDER BY devs DESC;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "SELECT role, name, COUNT(*) FROM developers GROUP BY role — what is wrong?",
+      "options": ["Nothing — name shows the most common name automatically", "name is neither grouped nor aggregated: the query asks which of several names one row should show — unanswerable, arbitrary or an error depending on engine", "COUNT needs DISTINCT here", "GROUP BY must list all tables"],
+      "answer": 1,
+      "explain": "One output row per role cannot display many names. Strict engines reject it; lenient ones pick arbitrarily — both tell you the question is malformed. Group the column or aggregate it."
+    },
+    {
+      "q": "WHERE COUNT(*) >= 3 fails in every engine. Why, and where does the condition go?",
+      "options": ["Aggregates are slow in WHERE; add an index", "WHERE executes before grouping, so per-group values don't exist yet — group facts belong in HAVING", "COUNT starts at 0 in WHERE", "It must go in ORDER BY"],
+      "answer": 1,
+      "explain": "Pipeline order is fixed: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY. Each clause sees only what earlier stages produced — aggregates exist from HAVING onward, never in WHERE."
+    },
+    {
+      "q": "A dashboard total doubles after a new join, and joined row count is 2× the base count. Diagnosis and metric-level fix?",
+      "options": ["Cross join — remove the JOIN", "Fanout (2 matches per row on average) — COUNT(DISTINCT key) for the metric, pre-aggregation for the cure", "NULL ambush — add IS NOT NULL", "ORDER BY theater — add DESC"],
+      "answer": 1,
+      "explain": "The 2× ratio is the signature: rows multiplied, entities didn't. DISTINCT-key counting rescues the number; restructuring (aggregate the many-side first) rescues the query."
+    },
+    {
+      "q": "A stakeholder says 'the export is usually sorted by name, but today it scrambled'. Root cause and contract?",
+      "options": ["Data corruption — restore from backup", "No ORDER BY means no order guarantee; today's plan differed (data/index/cache) — any order dependence needs an outermost ORDER BY", "Someone deleted the index", "UNION reorders randomly by design"],
+      "answer": 1,
+      "explain": "Unordered output order is engine accident, stable until anything changes the plan. Reports that depend on sequence must declare it — sort once, outermost, always."
+    }
+  ],
+  "summary": "Six traps, one diagnostic instinct: compare counts, check staging (WHERE vs HAVING), suspect NULLs on empty results, blame fanout on jumped totals, verify every ON, and sort outermost. Debugging speed is the intermediate skill that compounds.",
+  "next": "Diagnosis complete — time to synthesize everything into one real analysis. Next and last: the enrollment-funnel capstone walkthrough, then your final assessment."
+}

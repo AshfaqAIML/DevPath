@@ -1,0 +1,65 @@
+{
+  "title": "Keys, Constraints & Integrity",
+  "slug": "07-keys-constraints-integrity",
+  "objective": "After this lesson you will be able to design keys and constraints (PRIMARY KEY, FOREIGN KEY, UNIQUE, NOT NULL, CHECK), predict what each one rejects, choose cascade behaviors deliberately, and hunt orphan rows in existing data.",
+  "why": "Every join you have written assumes integrity: enrollment rows point at real developers, ids are unique, required fields exist. Without constraints those are hopes, not facts — and hopes rot. Constraints move data rules from application code (where every writer must remember them) into the database (where they are inescapable). Seniors design schemas by constraints first.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Keys: identity and reference" },
+    { "t": "p", "text": "A **PRIMARY KEY** uniquely identifies each row — non-NULL, unique, one per table (single or composite). A **FOREIGN KEY** in a child table references a parent's key, declaring 'every value here must exist over there'. Together they turn the schema diagram into enforced law: the database itself rejects dangling references." },
+    { "t": "code", "lang": "sql", "code": "-- Integrity by construction (real SQLite / PostgreSQL DDL)\nCREATE TABLE developers (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  role TEXT NOT NULL DEFAULT 'frontend',\n  email TEXT UNIQUE,\n  hours_studied INTEGER NOT NULL DEFAULT 0 CHECK (hours_studied >= 0)\n);\n\nCREATE TABLE enrollments (\n  id INTEGER PRIMARY KEY,\n  developer_id INTEGER NOT NULL REFERENCES developers(id)\n    ON DELETE CASCADE,\n  course_id INTEGER NOT NULL,\n  progress INTEGER NOT NULL DEFAULT 0\n    CHECK (progress BETWEEN 0 AND 100),\n  completed INTEGER NOT NULL DEFAULT 0,\n  UNIQUE (developer_id, course_id)\n);", "caption": "Five constraint kinds in two tables: keys, uniqueness, presence, domain, reference" },
+    { "t": "p", "text": "Read each clause as a rejected future: `NOT NULL` rejects missing data (with `DEFAULT` supplying sane values), `UNIQUE` rejects duplicates (singly, or composite like one-enrollment-per-developer-per-course), `CHECK` rejects nonsense (negative hours, progress 140), and the foreign key rejects orphans. Design is the art of listing what must never happen, then writing it down where it cannot be bypassed." },
+    { "t": "h", "text": "What each constraint rejects (learn the error)" },
+    { "t": "p", "text": "Constraints speak through errors — learn to read them. Inserting a duplicate email violates `UNIQUE`; inserting `progress = 140` violates `CHECK`; inserting an enrollment for developer 999 violates the foreign key; inserting a NULL name violates `NOT NULL`. Each error names the constraint: that name is your debugging shortcut, so name constraints explicitly in production DDL (`CONSTRAINT sane_progress CHECK …`) instead of accepting generated names." },
+    { "t": "code", "lang": "sql", "code": "-- Each of these is REJECTED (real SQLite / PostgreSQL) — and should be\n-- 1. duplicate email      → UNIQUE violation\n-- 2. hours_studied = -5   → CHECK violation\n-- 3. developer_id = 999  → FOREIGN KEY violation\n-- 4. name = NULL          → NOT NULL violation\n-- 5. second (dev 3, course 5) row → composite UNIQUE violation", "caption": "Five rejections you want: the database saying no on your behalf" },
+    { "t": "callout", "variant": "info", "title": "Sandbox note", "text": "The sandbox engine runs SELECT only — DDL lives in real SQLite/PostgreSQL. Here you audit integrity with flat SELECT detective queries (below): finding violations in data is the same skill as preventing them with constraints, practiced read-only." },
+    { "t": "h", "text": "Orphan hunts: auditing integrity with SELECT" },
+    { "t": "p", "text": "Inherited a database with no constraints? Hunt the violations before adding them (adding a foreign key over orphaned rows fails!). The pattern is Chapter 1's absence check pointed at integrity: `LEFT JOIN` from child to parent, keep the `NULL`s — every surviving row is a broken promise." },
+    { "t": "code", "lang": "sql", "code": "-- Orphan enrollments: child rows with no living parent\nSELECT e.id, e.developer_id, e.course_id\nFROM enrollments e\nLEFT JOIN developers d ON d.id = e.developer_id\nWHERE d.id IS NULL;\n\n-- Duplicate emails: UNIQUE violations waiting to happen\nSELECT email, COUNT(*) AS n\nFROM developers\nWHERE email IS NOT NULL\nGROUP BY email\nHAVING COUNT(*) > 1;\n\n-- Out-of-domain progress: future CHECK violations\nSELECT id, developer_id, course_id, progress\nFROM enrollments\nWHERE progress < 0 OR progress > 100;", "caption": "Three integrity audits — run all of them in the sandbox" },
+    { "t": "h", "text": "Cascades: choosing deletion behavior" },
+    { "t": "p", "text": "Deleting a parent forces a decision about its children, declared per foreign key: **`ON DELETE CASCADE`** deletes children silently (good for enrollments of a removed developer), **`RESTRICT`** (the default in most engines) refuses deletion while children exist (good for courses with history worth preserving), **`SET NULL`** keeps children but detaches them (needs a nullable column). There is no universally right answer — cascade is convenient and dangerous in exact proportion: one DELETE can empty tables you forgot were related. Default to RESTRICT; choose CASCADE per-relationship with eyes open." },
+    { "t": "table", "headers": ["Behavior", "Effect on children", "Use when"], "rows": [["CASCADE", "Deleted automatically", "Children are meaningless without the parent (enrollments)"], ["RESTRICT (default)", "Deletion refused while children exist", "History must survive (courses, invoices)"], ["SET NULL", "FK set to NULL, rows kept", "Optional relationships (assigned mentor left)"]] },
+    { "t": "practice", "query": "SELECT e.id, e.developer_id, e.course_id FROM enrollments e LEFT JOIN developers d ON d.id = e.developer_id WHERE d.id IS NULL;", "note": "Run this orphan hunt in the sandbox — zero rows means the dataset's integrity holds (the correct answer to an audit is often good news). Then try the duplicate-email and out-of-domain audits from this lesson the same way." },
+    { "t": "keytakeaways", "items": ["PRIMARY KEY identifies, FOREIGN KEY references — together they make joins trustworthy by construction", "UNIQUE rejects duplicates, NOT NULL + DEFAULT reject absence, CHECK rejects nonsense — name constraints explicitly", "Audit before constraining: orphan hunts (LEFT JOIN … IS NULL), duplicate hunts (GROUP BY + HAVING), domain hunts (range WHERE)", "Deletion behavior is a per-relationship decision: CASCADE / RESTRICT / SET NULL — default RESTRICT, choose CASCADE deliberately"]} ],
+  "exercise": {
+    "prompt": "You inherit a production database with NO constraints and must propose them. Write (a) three sandbox audit queries proving current violations-or-cleanliness (orphan enrollments by developer, orphan enrollments by course, duplicate (developer_id, course_id) pairs), and (b) the two CREATE TABLE statements (developers, enrollments) with keys, NOT NULLs, UNIQUE email, CHECKs on hours/progress, and chosen ON DELETE behaviors with one-line justifications.",
+    "hints": [
+      "Audits are flat: LEFT JOIN … IS NULL for both orphan directions; GROUP BY developer_id, course_id HAVING COUNT(*) > 1 for duplicate pairs. Run all three in the sandbox and record the counts (expect clean data — say so explicitly).",
+      "DDL mirrors this lesson's example: INTEGER PRIMARY KEY ids, TEXT NOT NULL names, UNIQUE email, CHECK (hours_studied >= 0), CHECK (progress BETWEEN 0 AND 100), composite UNIQUE(developer_id, course_id).",
+      "Behaviors: enrollments die with their developer (CASCADE); courses resist deletion while enrolled (RESTRICT/omit) — justify each in one line."
+    ],
+    "solution": "-- (a) audits — all return zero rows on the teaching dataset: clean\n-- orphans by developer, orphans by course, duplicate pairs (see lesson)\n\n-- (b) constrained redesign (real SQLite / PostgreSQL)\nCREATE TABLE developers (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  role TEXT NOT NULL DEFAULT 'frontend',\n  email TEXT UNIQUE,\n  hours_studied INTEGER NOT NULL DEFAULT 0 CHECK (hours_studied >= 0)\n);\nCREATE TABLE enrollments (\n  id INTEGER PRIMARY KEY,\n  developer_id INTEGER NOT NULL REFERENCES developers(id) ON DELETE CASCADE,\n  course_id INTEGER NOT NULL,\n  progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),\n  completed INTEGER NOT NULL DEFAULT 0,\n  UNIQUE (developer_id, course_id)\n);\n-- CASCADE on developer: an enrollment without its learner is meaningless.\n-- RESTRICT (default) on courses: history outlives catalog edits.",
+    "why": "The exercise mirrors professional schema work exactly: audit first (constraints over dirty data fail at creation), then encode every invariant the audits checked. The one-line justifications are the deliverable seniors actually review — behavior choices without reasons are how CASCADE accidents happen.",
+    "code": "-- Sandbox audits (flat — run all three here)\nSELECT e.id FROM enrollments e LEFT JOIN developers d ON d.id = e.developer_id WHERE d.id IS NULL;\nSELECT e.id FROM enrollments e LEFT JOIN courses c ON c.id = e.course_id WHERE c.id IS NULL;\nSELECT developer_id, course_id, COUNT(*) AS n FROM enrollments GROUP BY developer_id, course_id HAVING COUNT(*) > 1;\n\n-- Constrained DDL (real SQLite / PostgreSQL — see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Why add a foreign key to a table that application code already 'keeps consistent'?",
+      "options": ["Foreign keys speed up every query", "Code paths multiply and forget; the database rejects violations from every writer — ORM, migration, admin console — inescapably", "Application code cannot check references", "Keys are required for SELECT to work"],
+      "answer": 1,
+      "explain": "Every new writer (bulk import, script, second service) must reimplement checks the database enforces once. Constraints centralize invariants where they cannot be bypassed — that is their entire value proposition."
+    },
+    {
+      "q": "Adding a FOREIGN KEY fails immediately on existing data. Most likely cause?",
+      "options": ["Foreign keys cannot be added after creation", "Orphan rows already exist — the constraint correctly refuses to bless broken data; audit and clean first", "The parent table is too large", "SQLite forbids foreign keys"],
+      "answer": 1,
+      "explain": "Constraint creation validates history, not just futures. The failure is the feature: hunt orphans (LEFT JOIN … IS NULL), fix or remove them, then declare the key. Declaring integrity over violations would be a lie."
+    },
+    {
+      "q": "A course with 200 enrollments is deleted and all enrollment history vanishes. Which behavior caused it, and what should it have been?",
+      "options": ["RESTRICT — should have been CASCADE", "CASCADE on the enrollment FK — history worth preserving should RESTRICT deletion instead", "SET NULL — should have deleted", "UNIQUE — irrelevant here"],
+      "answer": 1,
+      "explain": "CASCADE propagates deletion silently — convenient for dependent rows, catastrophic for history. Courses with enrolled learners should refuse deletion (RESTRICT) until history is archived or reassigned. Deletion behavior is a per-relationship decision, never a default."
+    },
+    {
+      "q": "What does UNIQUE (developer_id, course_id) prevent that two single-column UNIQUEs would not?",
+      "options": ["Nothing — they are equivalent", "It prevents the same pair repeating while still allowing one developer many courses and one course many developers; single-column UNIQUEs would each allow only one row per value", "It speeds up joins", "It allows NULLs"],
+      "answer": 1,
+      "explain": "Composite uniqueness constrains combinations, preserving many-to-many freedom. Single-column UNIQUE on developer_id would cap every learner at one enrollment total — a classic over-constraining mistake."
+    }
+  ],
+  "summary": "Constraints encode what must never happen: keys for identity and reference, UNIQUE for singularity, NOT NULL/DEFAULT for presence, CHECK for domain sense. Audit dirty data before declaring keys, choose deletion behavior per relationship, and let the database say no on your behalf.",
+  "next": "Trustworthy data still needs speed: why some queries fly and others crawl, how to read the plan, and what indexes actually do. Next: indexes and EXPLAIN."
+}

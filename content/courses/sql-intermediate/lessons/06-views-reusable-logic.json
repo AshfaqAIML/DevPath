@@ -1,0 +1,64 @@
+{
+  "title": "Views: Reusable Logic",
+  "slug": "06-views-reusable-logic",
+  "objective": "After this lesson you will be able to encapsulate repeated query logic in CREATE VIEW, decide between views and CTEs, predict what views can and cannot do (no parameters, no indexes of their own, write limits), and manage view lifecycles safely.",
+  "why": "Chapter 2's pipelines are powerful but trapped inside single statements. The moment three reports need the same 'per-course engagement' logic, copy-paste becomes a consistency bug farm. Views store the query in the database under a name — every consumer reads the same definition, and one edit fixes all of them. This is the DRY principle applied to SQL.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "A view is a stored query wearing a table costume" },
+    { "t": "p", "text": "**`CREATE VIEW name AS SELECT …`** saves a query definition in the database. Afterwards `SELECT * FROM name` behaves like a table — but nothing is stored except the text: every access re-runs the underlying query against live data. A view is a lens, not a copy; it can never go stale, and it costs nothing until queried." },
+    { "t": "code", "lang": "sql", "code": "-- The per-course engagement logic, stored once, used everywhere\nCREATE VIEW course_engagement AS\nSELECT c.id AS course_id, c.title, c.topic,\n  COUNT(e.id) AS enrollments,\n  COUNT(CASE WHEN e.completed = 1 THEN 1 END) AS completed,\n  100.0 * COUNT(CASE WHEN e.completed = 1 THEN 1 END)\n    / NULLIF(COUNT(e.id), 0) AS pct_done\nFROM courses c\nLEFT JOIN enrollments e ON e.course_id = c.id\nGROUP BY c.id;\n\n-- Consumers stay trivially simple\nSELECT title, enrollments, pct_done\nFROM course_engagement\nWHERE pct_done < 50\nORDER BY pct_done;", "caption": "CREATE VIEW stores Chapter 4's conditional aggregation behind a name" },
+    { "t": "p", "text": "Notice the view bakes in everything hard — the join, the conditional counts, the NULLIF guard — while consumers ask plain questions. When the engagement definition changes (say, 'completed' gains a progress threshold), exactly one object changes. Compare that to hunting the same CASE through fourteen report queries." },
+    { "t": "callout", "variant": "info", "title": "Sandbox note", "text": "The sandbox engine is a read-only SELECT playground: CREATE VIEW runs in real SQLite/PostgreSQL. Here you verify the view's underlying SELECT (flat, runnable) in the sandbox and create the view itself in a real database — same split as Chapters 1–4." },
+    { "t": "h", "text": "Views vs CTEs: persistence is the difference" },
+    { "t": "p", "text": "A CTE lives for one statement; a view lives until dropped. Choose by reuse horizon: one-off analysis → CTE; logic needed across queries, dashboards, or teammates → view. Views also centralize permission and documentation — the view definition is where the metric's meaning lives, reviewable in version control like any migration." },
+    { "t": "table", "headers": ["Aspect", "CTE (WITH)", "View"], "rows": [["Lifetime", "One statement", "Until DROP VIEW"], ["Parameters", "None — but the outer query filters freely", "None — filter in the outer query"], ["Indexes of its own", "N/A (inlined)", "None — underlying tables' indexes apply"], ["Best for", "Multi-step one-off analysis", "Shared metrics, dashboard sources, access simplification"]] },
+    { "t": "h", "text": "What views cannot do" },
+    { "t": "p", "text": "Three honest limits. **No parameters**: a view can't take arguments — `WHERE` in the outer query does the filtering, and the optimizer generally pushes it down efficiently. **No ORDER BY guarantee**: an ORDER BY inside a view definition is ignored by most engines for outer queries — sort at consumption. **Writes are limited**: simple single-table views may allow INSERT/UPDATE through, but joined or aggregated views (like ours) are read-only — mutations go to base tables, validated by constraints (Chapter 7)." },
+    { "t": "code", "lang": "sql", "code": "-- Filtering a view: the outer WHERE pushes into the definition\nSELECT title, pct_done\nFROM course_engagement\nWHERE topic = 'frontend' AND enrollments >= 2;\n\n-- Evolving a view without breaking consumers (dialects differ!)\n-- PostgreSQL: atomic replace, name never disappears\n-- CREATE OR REPLACE VIEW course_engagement AS <new definition>;\n-- SQLite: no OR REPLACE — drop + recreate inside a transaction\nBEGIN;\nDROP VIEW IF EXISTS course_engagement;\nCREATE VIEW course_engagement AS\nSELECT c.id AS course_id, c.title, c.topic,\n  COUNT(e.id) AS enrollments,\n  COUNT(CASE WHEN e.completed = 1 THEN 1 END) AS completed,\n  100.0 * COUNT(CASE WHEN e.completed = 1 THEN 1 END)\n    / NULLIF(COUNT(e.id), 0) AS pct_done\nFROM courses c\nLEFT JOIN enrollments e ON e.course_id = c.id\nGROUP BY c.id;\nCOMMIT;\n\nDROP VIEW IF EXISTS course_engagement;", "caption": "Consume with WHERE; evolve atomically per dialect; retire with DROP" },
+    { "t": "p", "text": "Atomic evolution keeps the name stable while the definition improves — PostgreSQL does it with CREATE OR REPLACE, SQLite with DROP + CREATE inside a transaction (both shown above) — so dashboards never notice. But renames and dropped columns *do* break consumers, so treat views like APIs: additive changes freely, breaking changes with migration notes. `DROP VIEW IF EXISTS` makes teardown scripts idempotent." },
+    { "t": "callout", "variant": "warn", "title": "Views don't speed things up", "text": "A regular view re-runs its query every access — it organizes logic, it doesn't cache results. (Materialized views do cache, at the cost of staleness and refresh jobs — a SQL Advanced topic.) If a view-backed dashboard is slow, the fix is indexes and query shape (Chapter 8), not more views." },
+    { "t": "practice", "query": "SELECT c.title, COUNT(e.id) AS enrollments FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id GROUP BY c.id;", "note": "Run the view's core SELECT in the sandbox — this flat aggregation is exactly what CREATE VIEW would store. Then write the CREATE VIEW wrapper from this lesson for real SQLite/PostgreSQL." },
+    { "t": "keytakeaways", "items": ["CREATE VIEW stores a query definition, not data — every access re-runs against live rows", "CTEs serve one statement, views serve all future queries — choose by reuse horizon", "Views take no parameters (filter outside), guarantee no order (sort outside), and joined/aggregated views are read-only", "Evolve with CREATE OR REPLACE; treat views like APIs for breaking changes", "Views organize logic, never accelerate it — slowness is fixed with indexes (Chapter 8)"]} ],
+  "exercise": {
+    "prompt": "The support team keeps asking for 'developers who started but never finished anything' (≥1 enrollment, 0 completions). Define it once as a VIEW named stalled_learners (columns: name, started), verify the underlying SELECT in the sandbox, then show two consumer queries: (a) all stalled learners alphabetically, (b) count of stalled learners per role.",
+    "hints": [
+      "The underlying SELECT: developers JOIN enrollments, GROUP BY developer, HAVING COUNT(*) >= 1 AND COUNT(CASE WHEN completed = 1 THEN 1 END) = 0 — or equivalently SUM(completed) = 0. Flat and sandbox-runnable; verify row counts first.",
+      "Wrap it: CREATE VIEW stalled_learners AS <select>. Column names come from the inner SELECT — alias name and started deliberately.",
+      "Consumers: (a) SELECT name, started FROM stalled_learners ORDER BY name; (b) SELECT with a join back to developers for role, GROUP BY role — or store role in the view itself."
+    ],
+    "solution": "CREATE VIEW stalled_learners AS\nSELECT d.name AS name, COUNT(*) AS started\nFROM developers d\nJOIN enrollments e ON e.developer_id = d.id\nGROUP BY d.id\nHAVING COUNT(CASE WHEN e.completed = 1 THEN 1 END) = 0;\n\n-- (a) alphabetical list\nSELECT name, started FROM stalled_learners ORDER BY name;\n\n-- (b) per-role counts (role resolved at consumption)\nSELECT d.role, COUNT(*) AS stalled\nFROM stalled_learners s\nJOIN developers d ON d.name = s.name\nGROUP BY d.role;",
+    "why": "The view captures the business definition ('started, never finished') in exactly one place — support, dashboards, and future lessons all read the same truth. Consumers stay one-liners, and the HAVING-on-conditional-count pattern from Chapters 2+4 does the real work inside.",
+    "code": "-- Sandbox check (flat — run here; SUM(completed) counts completions\n-- because completed is 0/1 — same rows as the CASE form)\nSELECT d.name AS name, COUNT(*) AS started\nFROM developers d\nJOIN enrollments e ON e.developer_id = d.id\nGROUP BY d.id\nHAVING SUM(e.completed) = 0;\n\n-- Real-DB wrapper + consumers in PostgreSQL / SQLite (see solution).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "What does CREATE VIEW store in the database?",
+      "options": ["A frozen copy of the result rows", "Only the query definition — each access re-runs it against live data", "An index over the result", "A cached result refreshed hourly"],
+      "answer": 1,
+      "explain": "Views are lenses, not copies: no data duplication, nothing to go stale, cost paid per access. (Caching is the separate materialized-view feature, with refresh jobs and staleness trade-offs.)"
+    },
+    {
+      "q": "When should logic become a view instead of staying a CTE?",
+      "options": ["When the query is slow — views accelerate execution", "When multiple queries, dashboards, or teammates need the same definition over time", "When the query uses JOIN", "Always — CTEs are deprecated"],
+      "answer": 1,
+      "explain": "The axis is reuse horizon: one statement → CTE; shared, repeated, reviewed logic → view. Performance is not on this axis at all — regular views don't cache."
+    },
+    {
+      "q": "A dashboard sorts wrong although the view definition contains ORDER BY. Why?",
+      "options": ["ORDER BY in views is case-sensitive", "Most engines ignore in-view ORDER BY for outer queries — sort at consumption", "Views cannot be sorted, ever", "The dashboard must use UNION"],
+      "answer": 1,
+      "explain": "A view denotes a set; order is a presentation concern of the consuming query. The engine is entitled to disregard inner ordering, so the only reliable ORDER BY is the outermost one."
+    },
+    {
+      "q": "Which change to course_engagement is safe without warning consumers?",
+      "options": ["Renaming pct_done to rate", "Dropping the topic column", "Adding a new column at the end", "Changing the view into a table"],
+      "answer": 2,
+      "explain": "Views are APIs: additive changes (new trailing columns) don't disturb existing SELECTs, while renames and drops break them. CREATE OR REPLACE makes evolution atomic, and breaking changes deserve migration notes."
+    }
+  ],
+  "summary": "Views persist query logic under a name: define once with CREATE VIEW, consume with plain SELECTs, filter and sort outside, evolve with OR REPLACE. They cure copy-paste metrics but promise no speed — that comes from keys, constraints, and indexes, starting next lesson.",
+  "next": "Reusable logic assumes trustworthy data — but what guarantees an enrollment points at a real developer? Next: keys, constraints, and the integrity rules that make joins meaningful."
+}

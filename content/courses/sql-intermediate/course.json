@@ -8,17 +8,169 @@
     "Restructure nested logic into readable WITH clauses (CTEs), including multi-CTE pipelines",
     "Combine result sets correctly with UNION, UNION ALL, INTERSECT and EXCEPT, including duplicate and ordering semantics",
     "Branch inside queries with CASE expressions for bucketing, conditional aggregation and safe division",
-    "Manipulate text and dates with SUBSTR, LIKE, string concatenation, date arithmetic and EXTRACT-style extraction",
+    "Manipulate text and dates with portable string functions, concatenation, and engine-aware date arithmetic",
     "Encapsulate reusable logic in VIEWs and reason about what views can and cannot do",
-    "Diagnose the classic intermediate traps: NULL in NOT IN, duplicate-row fanout in joins, and misplaced aggregate filters"
+    "Design keys and constraints (PRIMARY KEY, FOREIGN KEY, UNIQUE, NOT NULL, CHECK, cascades) and audit integrity violations",
+    "Read EXPLAIN QUERY PLAN output and choose indexes deliberately, knowing their write-time costs",
+    "Diagnose the classic intermediate traps: NULL ambushes, fanout inflation, misplaced aggregate filters, accidental cross joins"
   ],
   "prereqSlugs": ["sql-fundamentals"],
-  "technologies": ["ANSI SQL", "SQLite 3 (sandbox engine)", "PostgreSQL", "CTEs", "Views"],
-  "skills": ["subqueries", "CTEs", "set operations", "conditional logic", "string and date functions", "views", "query decomposition"],
-  "assessment": [],
+  "technologies": ["ANSI SQL", "SQLite 3 (sandbox engine)", "PostgreSQL", "CTEs", "Views", "Indexes", "EXPLAIN QUERY PLAN"],
+  "skills": ["subqueries", "CTEs", "set operations", "conditional logic", "string and date functions", "views", "constraints and keys", "indexing", "query debugging", "funnel analysis"],
+  "assessment": [
+    {
+      "q": "Where can the scalar subquery (SELECT AVG(hours_studied) FROM developers) be used?",
+      "options": ["Only in the SELECT list", "Anywhere a single value is legal — after =, >, <, or in the SELECT list", "Only inside IN", "Only in FROM"],
+      "answer": 1,
+      "explain": "One row, one column fits any single-value slot. Lists go in IN, tables go in FROM — shape determines slot (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "course_id contains a NULL. What does WHERE id NOT IN (SELECT course_id FROM enrollments) return, and what is the robust fix?",
+      "options": ["All unenrolled courses; no fix needed", "Zero rows always — the NULL poisons the AND chain; filter IS NOT NULL inside or use NOT EXISTS", "An error naming the NULL row", "Only enrolled courses"],
+      "answer": 1,
+      "explain": "x NOT IN (…, NULL) expands to ANDed <> comparisons, and <> NULL is UNKNOWN, failing every row. NOT EXISTS never compares values, so it is NULL-immune (Ch.1).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "WITH a AS (…), b AS (SELECT … FROM a …) — which references are legal?",
+      "options": ["a and b may reference each other freely", "Later CTEs may use earlier ones, never the reverse (except WITH RECURSIVE self-reference)", "Neither may reference the other", "Only the final SELECT may reference CTEs"],
+      "answer": 1,
+      "explain": "CTEs form a forward pipeline: each step sees the steps above it. Self-reference needs explicit recursion (Ch.2).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "A report stacks two 1M-row feeds and needs every row kept. UNION vs UNION ALL?",
+      "options": ["UNION — safer by default", "UNION ALL — UNION would pay a dedup sort over 2M rows for distinctness nobody asked for", "They are identical in cost", "Neither — use a JOIN"],
+      "answer": 1,
+      "explain": "UNION's dedup pass (sort/hash) dominates at scale. Default ALL; demand distinctness explicitly (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Three correct ways to list courses with zero enrollments are:",
+      "options": ["NOT EXISTS, LEFT JOIN … IS NULL, EXCEPT — same rows, three dialects with different performance profiles", "UNION, INTERSECT, EXCEPT only", "Three ways cannot exist for one question", "COUNT(*), COUNT(col), COUNT(DISTINCT col)"],
+      "answer": 0,
+      "explain": "Fluency means reading all dialects; each optimizes differently under indexes. Same rows, different shapes (Ch.1–3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "CASE WHEN hours >= 400 THEN 'steady' WHEN hours >= 800 THEN 'deep' ELSE 'ramping' END labels 912 as?",
+      "options": ["'deep' — best match wins", "'steady' — first match wins, so ranges must be ordered narrowest/highest first", "NULL", "'ramping'"],
+      "answer": 1,
+      "explain": "CASE evaluates top-down, first match wins. Overlapping ranges silently mislabel — order thresholds descending (Ch.4).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Why does COUNT(CASE WHEN e.completed = 1 THEN 1 END) count exactly completed rows?",
+      "options": ["CASE returns 0 otherwise and COUNT skips zeros", "Misses yield NULL (no ELSE) and COUNT ignores NULLs — the conditional-aggregation pairing", "COUNT filters on completed automatically", "It counts all rows; the premise is false"],
+      "answer": 1,
+      "explain": "No-ELSE CASE produces NULL for misses; every aggregate but COUNT(*) skips NULLs. Together: many metrics, one pass (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "After adding a join, totals double while COUNT(DISTINCT key) stays right. Diagnosis and cure?",
+      "options": ["Cross join — delete the JOIN", "Fanout: matches multiplied rows. COUNT(DISTINCT key) rescues the metric; pre-aggregating the many-side cures the query", "NULL ambush", "Missing ORDER BY"],
+      "answer": 1,
+      "explain": "COUNT(*) counts matches post-join; entities need distinct keys. Restructure: aggregate before joining (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Shared dashboard logic used by five reports belongs in…",
+      "options": ["Five copies of a CTE", "A VIEW — CTEs live one statement, views persist until dropped; filter/sort at consumption", "A temporary table per report", "Application string concatenation"],
+      "answer": 1,
+      "explain": "Reuse horizon decides: one statement → CTE; shared over time → view. Views take no parameters and promise no order or speed (Ch.6).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Deleting a course must never silently erase enrollment history. Which FK behavior?",
+      "options": ["ON DELETE CASCADE — convenient", "RESTRICT (refuse while children exist) — history outlives catalog edits; CASCADE fits dependent rows like enrollments-of-a-deleted-developer", "SET NULL on all keys", "No foreign key at all"],
+      "answer": 1,
+      "explain": "Deletion behavior is per-relationship: CASCADE for meaningless-without-parent rows, RESTRICT for history worth preserving (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "A composite index on (course_id, completed) accelerates which filters?",
+      "options": ["WHERE completed = ? alone", "WHERE course_id = ? AND completed = ?; and course_id-alone — left-prefix rule", "ORDER BY anything", "No real filters, only joins"],
+      "answer": 1,
+      "explain": "Composites serve left prefixes: leading column anchors, later columns refine. Second-column-only filters cannot enter (Ch.8).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "WHERE COUNT(*) >= 3 errors in every engine. Why and where does it go?",
+      "options": ["COUNT is banned in filters; use a subquery instead", "WHERE runs before grouping so per-group values don't exist yet — aggregates belong in HAVING", "Needs DISTINCT", "Belongs in ORDER BY"],
+      "answer": 1,
+      "explain": "Pipeline order: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY. Each clause sees only earlier stages' output (Ch.9).",
+      "difficulty": "easy"
+    }
+  ],
   "passScore": 70,
-  "project": null,
-  "interviewQs": [],
-  "version": "0.1.0",
-  "contentStatus": "draft"
+  "project": {
+    "title": "The Completion & Engagement Audit",
+    "summary": "You are the analytics owner for the DevPath catalog. Leadership asks 'where does learning stall, and what do we do about it?' You answer with a staged funnel analysis over developers, courses and enrollments — every number reproducible, every rate defended, every gap paired with a concrete schema or content proposal.",
+    "requirements": [
+      "Query 1 — the funnel: total, completed, advanced (progress 50-99, not completed), started (1-49), untouched (0) enrollments plus the completion rate, in one conditional-aggregation pass",
+      "Query 2 — topic segmentation: per-topic totals, completions and rates (NULLIF-guarded), ordered worst-first, with raw counts beside every rate",
+      "Query 3 — level segmentation: same treatment by course level — does Advanced content stall learners?",
+      "Query 4 — catalog gaps: zero-enrollment courses via any absence dialect, with the columns needed to decide publish-vs-retire",
+      "Query 5 — stalled learners: developers with ≥1 enrollment and 0 completions, with counts",
+      "Query 6 — role comparison: per-role developer counts, average hours (1 decimal) and pace buckets via CASE on the average",
+      "Query 7 — above-average learners: developers beating the global completions average, with differences, most-above-first",
+      "Query 8 — the anomaly: developers whose enrollments are ALL completed — power users, with names"
+    ],
+    "technical": [
+      "Flat exploration queries run in the DevPath SQL Query Sandbox; staged/nested assemblies run in real SQLite or PostgreSQL against the same three-table dataset",
+      "Each query ships with its result, the business question it answers, and one sentence of rationale (why this shape: subquery vs CTE vs set-op vs view)",
+      "Bucket definitions (funnel bands, pace thresholds) are documented once and reused consistently",
+      "Every rate is paired with its denominator; small-sample segments carry explicit caveats"
+    ],
+    "architecture": "Three sections: (1) Executive summary — five bullets, each traceable to a query number, leading with the single worst stall point; (2) The analysis — eight numbered blocks of question → query → result → rationale, ordered funnel → segments → gaps → people; (3) Data quality & proposals — what the schema cannot answer (no timestamps, no revenue), three concrete schema changes with types and justifications, and one content proposal (which course to fix first, backed by numbers).",
+    "steps": [
+      "Explore flat in the sandbox: progress distribution, per-topic totals, orphan/duplicate audits — record ground-truth tables",
+      "Draft each requirement in English first, then translate to SQL — funnel buckets before segments, segments before people",
+      "Stress-test every number: hand-recompute one rate, sum buckets to totals, break one assumption per key query and note the change",
+      "Assemble the document; write the executive summary last, once a number has surprised you",
+      "Write the data-quality section: attempt a trend-over-time question, discover it is impossible, propose the timestamp columns that fix it",
+      "Re-verify: every percentage recomputed, every absence list cross-checked in two dialects"
+    ],
+    "evaluation": [
+      "All eight queries run in their stated engine and answer their question",
+      "Funnel buckets are exclusive and sum to the total; segmented rates carry denominators and caveats",
+      "At least one non-obvious finding with a content or schema action attached",
+      "Absence results verified in two dialects; divisions NULLIF-guarded",
+      "Proposals are specific and typed, not vague 'collect more data'"
+    ],
+    "stretch": [
+      "Add month-over-month framing: given a proposed enrolled_at column, write the trend query you would run next quarter",
+      "Rewrite the funnel as a VIEW plus consumer queries and argue when the view earns its keep",
+      "Benchmark one segment query with EXPLAIN QUERY PLAN before/after an index and report the plan change"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "NOT IN vs NOT EXISTS — when does the distinction matter?",
+      "a": "The moment the subquery list can contain NULL: NOT IN expands to ANDed <> comparisons, and <> NULL is UNKNOWN, so one NULL wipes out every row. NOT EXISTS checks presence per row and never compares values, making it NULL-immune. The professional default for absence checks is NOT EXISTS (or a filtered NOT IN with IS NOT NULL inside). Follow-up strength: mention the LEFT JOIN … IS NULL and EXCEPT dialects and when each reads best."
+    },
+    {
+      "q": "When do you use a CTE versus a subquery versus a view?",
+      "a": "One level of nesting kept local: subquery. Two or more steps, or anything a teammate must review and debug stepwise: CTE — named, ordered, individually runnable. Logic needed across queries, dashboards, or time: view — persisted until dropped. Same computation, three reuse horizons; readability and reviewability drive the choice, never performance (regular views and CTEs promise no caching)."
+    },
+    {
+      "q": "UNION vs UNION ALL — is this just a style choice?",
+      "a": "No, it is semantic and performance-critical: UNION dedupes via a sort/hash over the combined set, UNION ALL stacks untouched. On million-row feeds the dedup pass dominates the plan. Default to UNION ALL; use UNION only when the spec demands distinct rows. Also cover the contract: equal column counts, positionally compatible types, first query names the output, single trailing ORDER BY."
+    },
+    {
+      "q": "Your dashboard total doubles after a join. Walk me through the diagnosis.",
+      "a": "First suspect fanout: run pre-join and post-join COUNT(*) side by side — a 2x ratio means rows multiplied while entities didn't. Metric fix: COUNT(DISTINCT key). Structural fix: pre-aggregate the many-side (CTE/derived table) before joining. Deeper checks: verify the ON condition (missing ON = cross join, exact multiples of table sizes) and confirm which side is many. Never trust a total computed after a join you haven't counted."
+    },
+    {
+      "q": "How do you choose columns and order for a composite index?",
+      "a": "By actual query patterns and the left-prefix rule: (course_id, completed) serves course_id+completed and course_id-alone, never completed-alone — so lead with the most-constrained, most-queried column. Index selective WHEREs, join FKs, and hot ORDER/GROUP keys; skip two-valued flags and hot-write columns. And always EXPLAIN before and after: SCAN→SEARCH is the proof, and unused indexes get dropped because every index taxes writes."
+    },
+    {
+      "q": "CASCADE vs RESTRICT — how do you decide per relationship?",
+      "a": "Ask what the child means without the parent: enrollments of a deleted developer are meaningless → CASCADE. Course history with enrolled learners must survive catalog edits → RESTRICT (refuse until archived/reassigned). Optional links (a departed mentor) → SET NULL with a nullable column. Default RESTRICT; choose CASCADE deliberately per relationship with a one-line justification — silent mass deletion is how CASCADE accidents happen."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
 }

@@ -1,0 +1,64 @@
+{
+  "title": "Capstone Walkthrough: The Enrollment Funnel",
+  "slug": "10-funnel-capstone-walkthrough",
+  "objective": "After this lesson you will be able to decompose a multi-question business analysis into staged queries — funnel stages with conditional aggregation, drop-off with EXCEPT-style reasoning, and segment comparisons — and assemble them into a coherent report, ready for the final assessment and your own project.",
+  "why": "No client ever asks for 'a CTE'. They ask 'where do learners drop off, and which topics hold them?' This lesson converts nine chapters of technique into one analyst workflow: stage the funnel, measure each transition, segment by topic and level, and stress-test your own numbers. It is also a worked example of the thinking your capstone project demands.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The brief: where does learning stall?" },
+    { "t": "p", "text": "Management's question: *'We have enrollments — but where does progress stall, and does topic or level explain it?'* A senior analyst hears three sub-questions: (1) the funnel — how many enrollments sit at each progress stage; (2) the transitions — what fraction advances past halfway; (3) the segments — which topics and levels stall most. Each maps to chapters: conditional aggregation (4), grouping (Fundamentals), absence reasoning (1–3)." },
+    { "t": "h", "text": "Stage 1 — the funnel in one pass" },
+    { "t": "p", "text": "Bucket every enrollment into funnel stages with `CASE`, then aggregate once. Four buckets tell the whole story: untouched (`progress = 0`), started (`1–49`), advanced (`50–99`), and completed (`completed = 1`, checked first since completed rows also carry high progress)." },
+    { "t": "code", "lang": "sql", "code": "-- The whole funnel: one grouped pass, four conditional buckets\nSELECT\n  COUNT(*) AS total,\n  COUNT(CASE WHEN completed = 1 THEN 1 END) AS completed,\n  COUNT(CASE WHEN completed = 0 AND progress >= 50 THEN 1 END) AS advanced,\n  COUNT(CASE WHEN completed = 0 AND progress BETWEEN 1 AND 49 THEN 1 END) AS started,\n  COUNT(CASE WHEN completed = 0 AND progress = 0 THEN 1 END) AS untouched,\n  ROUND(100.0 * COUNT(CASE WHEN completed = 1 THEN 1 END) / COUNT(*), 1) AS pct_completed\nFROM enrollments;", "caption": "Funnel as conditional aggregation — Chapters 2+4 fused (real SQLite/PostgreSQL)" },
+    { "t": "p", "text": "Order the WHENs by exclusivity: `completed = 1` first, because a completed enrollment would otherwise also match the `progress >= 50` bucket (first-match-wins bites here exactly as Chapter 4 warned). Bucket definitions are analysis decisions — document them, because 'advanced means 50+' is a judgment your reader must share." },
+    { "t": "h", "text": "Stage 2 — segment the stall" },
+    { "t": "p", "text": "Global rates hide the story; segments reveal it. Group the same buckets by course topic and by course level: a topic with 10% completion against a 60% average is the headline, and a level pattern (Advanced courses stall?) suggests content difficulty rather than motivation. Same query shape, new GROUP BY — the technique from Fundamentals, now aimed." },
+    { "t": "code", "lang": "sql", "code": "-- Completion by topic: where does the funnel leak?\nSELECT c.topic,\n  COUNT(*) AS total,\n  COUNT(CASE WHEN e.completed = 1 THEN 1 END) AS done,\n  ROUND(100.0 * COUNT(CASE WHEN e.completed = 1 THEN 1 END)\n    / NULLIF(COUNT(*), 0), 1) AS pct_done\nFROM courses c\nLEFT JOIN enrollments e ON e.course_id = c.id\nGROUP BY c.topic\nORDER BY pct_done;", "caption": "Segmented funnel: LEFT JOIN keeps zero-enrollment topics visible (watch for NULL pct)" },
+    { "t": "p", "text": "The `LEFT JOIN` is load-bearing: an `INNER JOIN` would silently drop topics nobody tried — precisely the segments most needing attention. And `NULLIF` guards the division for those empty topics (Chapter 4's guard, now load-bearing). Small-sample caution applies: a topic with 2 enrollments at 0% is noise, not signal — always read rates alongside totals." },
+    { "t": "callout", "variant": "tip", "title": "Stress-test every number", "text": "Before presenting: recompute each rate from its counts by hand, check that bucket counts sum to the total, and deliberately break one assumption (drop the LEFT, remove NULLIF) to see what changes. Numbers that survive sabotage are numbers you can defend." },
+    { "t": "h", "text": "Stage 3 — the absence list and the write-up" },
+    { "t": "p", "text": "Close with Chapter 3's dialect: the zero-enrollment courses (`EXCEPT` / `NOT EXISTS` / flat `LEFT JOIN … IS NULL` for the sandbox) — the catalog gaps. Then write the report analysts actually deliver: five bullets, each traceable to a query number; the queries with results and one-line rationales; and a data-quality section (no timestamps in this schema! — propose the columns that would fix it). That third section is what separates analysts from query-writers." },
+    { "t": "practice", "query": "SELECT progress, COUNT(*) AS n FROM enrollments GROUP BY progress ORDER BY progress;", "note": "Run this funnel raw material in the sandbox — the progress distribution your CASE buckets will summarize. Eyeball where the mass sits before the buckets hide the detail: aggregates summarize, but exploration starts from raw shape." },
+    { "t": "keytakeaways", "items": ["Translate briefs into staged sub-questions: funnel, transitions, segments — then map each to chapters", "Order CASE buckets by exclusivity; document bucket definitions as analysis judgments", "LEFT JOIN keeps empty segments visible; NULLIF guards their divisions; read rates with totals", "Stress-test numbers: hand-recompute, sum buckets to totals, sabotage one assumption", "Deliver question → query → result → rationale, plus a data-quality section — that is the analyst's report"]} ],
+  "exercise": {
+    "prompt": "Mini-capstone rehearsal: (a) in the sandbox, run the flat progress distribution and the per-topic totals; (b) in real SQLite/PostgreSQL, build the 4-bucket funnel query and the topic-segmented query from this lesson; (c) write three finding bullets, each citing its query, including one small-sample caveat. Bring the bullets — they are your assessment warm-up.",
+    "hints": [
+      "Sandbox flats: GROUP BY progress counts; per-topic totals via courses LEFT JOIN enrollments GROUP BY topic. Record both result tables — they are your ground truth.",
+      "Funnel buckets: completed first, then progress bands on the remainder; segmented query adds c.topic to GROUP BY with NULLIF on the rate. Copy the lesson shapes and adapt, don't invent.",
+      "A finding bullet looks like: 'Backend topics complete at X% (n=N) vs Y% overall (Q2) — but with only N enrollments, treat the gap as a lead, not a verdict.'"
+    ],
+    "solution": "-- (a) sandbox ground truth (flat — run here)\n-- progress shape + per-topic totals (see lesson shapes)\n-- (b) funnel + segmented assemblies (real SQLite/PostgreSQL — see lesson)\n-- (c) example bullets: funnel split (Q1 numbers), worst topic with its n (Q2 numbers + caveat), zero-enrollment courses (absence query).",
+    "why": "The exercise rehearses the capstone loop at small scale: explore flat, assemble staged, defend in prose with caveats. The bullets are the skill being graded — queries are evidence, sentences are the product.",
+    "code": "-- Sandbox ground truth (flat — run here)\nSELECT progress, COUNT(*) AS n FROM enrollments GROUP BY progress ORDER BY progress;\nSELECT c.topic, COUNT(e.id) AS total FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id GROUP BY c.topic;\n\n-- Assemblies (real SQLite / PostgreSQL — lesson shapes).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "In the funnel query, why is the completed = 1 bucket checked before progress >= 50?",
+      "options": ["SQL requires completed first syntactically", "CASE is first-match-wins: completed rows also carry high progress and would be swallowed by the band check", "Completed rows must be excluded from totals", "It makes the query run faster"],
+      "answer": 1,
+      "explain": "Bucket exclusivity is a CASE-ordering problem (Chapter 4): overlapping conditions assign rows to the first match. Status flags outrank ranges — check the exceptional condition before the general band."
+    },
+    {
+      "q": "Why LEFT JOIN instead of INNER JOIN in the topic-segmented funnel?",
+      "options": ["LEFT JOIN is faster", "INNER JOIN would drop zero-enrollment topics — the emptiest segments, which most need attention", "INNER JOIN cannot aggregate", "They are equivalent here"],
+      "answer": 1,
+      "explain": "Segment analysis must show the zeros, not just rank the nonzeros. INNER JOIN answers 'among tried topics…'; LEFT JOIN answers the actual question, with NULLIF guarding the empty groups' divisions."
+    },
+    {
+      "q": "A topic shows 0% completion over 2 enrollments. Correct reading?",
+      "options": ["The topic is failing — escalate immediately", "Noise, not signal: cite the rate with its n and treat it as a lead pending more data", "Exclude it from the report", "Recompute — 0% is impossible"],
+      "answer": 1,
+      "explain": "Rates without denominators mislead: 0/2 and 0/2000 demand opposite reactions. Always pair rates with totals — the small-sample caveat is a required sentence in every segmented report."
+    },
+    {
+      "q": "What belongs in the data-quality section of the report?",
+      "options": ["Praise for the schema only", "What the schema cannot answer (e.g. no timestamps → no trends) plus concrete column/table proposals", "The full DDL dump", "Nothing — analysts report numbers, not opinions"],
+      "answer": 1,
+      "explain": "The quality section is what separates analysts from query-writers: name the unanswerable questions your stakeholders will ask next, and propose the typed columns that would answer them."
+    }
+  ],
+  "summary": "Analysis is staged technique in service of a brief: funnel with exclusive CASE buckets, segment with grouping (keeping empties visible), verify with sabotage, and deliver cited bullets plus data-quality proposals. The final assessment tests exactly this loop — and your capstone project performs it at full scale.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then build the capstone — the completion & engagement audit — and close with interview prep."
+}

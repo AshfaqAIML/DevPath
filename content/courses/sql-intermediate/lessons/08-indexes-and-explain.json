@@ -1,0 +1,65 @@
+{
+  "title": "Indexes & EXPLAIN: Why Fast Is Fast",
+  "slug": "08-indexes-and-explain",
+  "objective": "After this lesson you will be able to explain what an index does, read EXPLAIN QUERY PLAN output, predict which queries benefit from indexes, create them deliberately, and name their write-time and space costs.",
+  "why": "Everything so far assumed the database finds rows by magic. At scale it doesn't — it scans. The difference between a 3ms lookup and a 3s full-table scan is usually one index, and choosing it requires reading the plan, not guessing. This lesson turns 'the query is slow' from a shrug into a diagnosis with a specific, verifiable fix.",
+  "minutes": 17,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The problem indexes solve: scanning" },
+    { "t": "p", "text": "Without help, answering `WHERE email = 'x'` means reading **every row** — a full-table scan, cost proportional to table size. An **index** is a separate sorted structure (typically a B-tree) mapping key values to row locations: lookups become logarithmic hops instead of linear trudges. The book analogy is exact — an index is the book's index pages, and a scan is reading cover to cover." },
+    { "t": "diagram", "caption": "Scan vs index lookup", "nodes": ["SCAN: read row 1 → row 2 → … → row N (cost grows with table)", "INDEX: sorted keys → jump to matches (cost grows with log N)", "Trade: writes update the index too; indexes occupy space"] },
+    { "t": "h", "text": "Reading EXPLAIN QUERY PLAN" },
+    { "t": "p", "text": "**`EXPLAIN QUERY PLAN`** shows the strategy before execution — the single most important performance habit. Learn its three words: `SCAN` (reading whole tables — suspicious), `SEARCH … USING INDEX` (targeted lookup — healthy), and `USE TEMP B-TREE` (sorting for ORDER BY/GROUP BY — sometimes necessary, sometimes fixable with a better index)." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite: ask the plan, then read SCAN vs SEARCH\nEXPLAIN QUERY PLAN\nSELECT name FROM developers WHERE country = 'Japan';\n-- Without index: SCAN developers  (~every row read)\n\nCREATE INDEX idx_developers_country ON developers(country);\n\nEXPLAIN QUERY PLAN\nSELECT name FROM developers WHERE country = 'Japan';\n-- With index: SEARCH developers USING INDEX idx_developers_country", "caption": "Before/after: the plan visibly flips from SCAN to SEARCH" },
+    { "t": "p", "text": "The workflow is always plan → change → re-plan: run EXPLAIN, add the index, run EXPLAIN again and confirm SEARCH. Never add indexes by superstition — the plan is the measurement, and unmeasured 'optimizations' are how tables end up with nine overlapping indexes slowing every write." },
+    { "t": "callout", "variant": "info", "title": "Sandbox note", "text": "The sandbox engine executes SELECT without plans or indexes — EXPLAIN and CREATE INDEX run in real SQLite/PostgreSQL. Here you practice the *selectivity reasoning* that precedes indexing (which filters actually narrow rows?) with flat sandbox queries, then apply indexes in a real database." },
+    { "t": "h", "text": "Which indexes earn their keep" },
+    { "t": "p", "text": "Index columns that **filter selectively** (`WHERE email =`, `WHERE course_id =`), **join keys** (foreign keys — unindexed FKs make every join a nested scan), and frequent **ORDER BY/GROUP BY** keys. Skip indexing low-selectivity flags (`completed` with two values — the planner will scan anyway), rarely-queried columns, and anything you update constantly. Composite indexes serve multi-column patterns, but column *order* matters: `(course_id, completed)` helps `WHERE course_id = ? AND completed = ?` and `WHERE course_id = ?` alone — never `WHERE completed = ?` alone." },
+    { "t": "table", "headers": ["Pattern", "Index?", "Why"], "rows": [["WHERE email = 'x' (unique-ish)", "Yes", "Highly selective — SEARCH instead of SCAN"], ["JOIN enrollments e ON e.course_id = …", "Yes, on FKs", "Joins probe the FK per outer row"], ["WHERE completed = 1 (2 values)", "Usually no", "Half the table matches — scanning is honestly fine"], ["ORDER BY hours_studied DESC LIMIT 5", "Often yes", "Sorted index serves top-N without sorting"], ["Constantly-updated counter column", "No", "Every write pays index maintenance for rare reads"]] },
+    { "t": "h", "text": "The price: writes and space" },
+    { "t": "p", "text": "Every index is a second structure to maintain: each INSERT, UPDATE (of indexed columns), and DELETE does extra work per index, and each index consumes disk and cache. Analytics tables (written rarely, read constantly) can carry many; hot transactional tables should carry few. When writes slow down mysteriously, audit index count before blaming hardware — `DROP INDEX` on the unused is a legitimate performance fix." },
+    { "t": "code", "lang": "sql", "code": "-- Real SQLite/PostgreSQL: the full index lifecycle\nCREATE INDEX idx_enrollments_course ON enrollments(course_id);\nCREATE INDEX idx_enrollments_dev ON enrollments(developer_id);\nCREATE UNIQUE INDEX idx_developers_email ON developers(email);\n\n-- Inspect what exists, remove what earns nothing\n-- SQLite:  SELECT name, tbl_name FROM sqlite_master WHERE type = 'index';\n-- Postgres: SELECT indexname FROM pg_indexes WHERE tablename = 'enrollments';\nDROP INDEX IF EXISTS idx_enrollments_dev;", "caption": "Create deliberately, inspect regularly, drop fearlessly" },
+    { "t": "practice", "query": "SELECT name, country FROM developers WHERE country = 'Japan';", "note": "Run this selective filter in the sandbox and note it returns 2 of 14 rows — high selectivity, a textbook index candidate. In real SQLite, EXPLAIN it, add CREATE INDEX … ON developers(country), and watch SCAN become SEARCH." },
+    { "t": "keytakeaways", "items": ["Indexes trade write cost and space for read speed: sorted keys turn SCANs into SEARCHes", "EXPLAIN QUERY PLAN before and after every change — plan, change, re-plan", "Index selective WHEREs, join FKs, and hot ORDER/GROUP keys; skip flags, rare filters, hot-write columns", "Composite order matters: (a, b) serves a+b and a-alone, never b-alone", "Audit indexes like code: unused ones are deleted for performance, not kept for comfort"]} ],
+  "exercise": {
+    "prompt": "The dashboard's slowest query filters enrollments by course_id and joins developers: SELECT d.name, e.progress FROM enrollments e JOIN developers d ON d.id = e.developer_id WHERE e.course_id = 5 ORDER BY e.progress DESC. (a) In the sandbox, run the flat filter SELECT * FROM enrollments WHERE course_id = 5 (adapt: pick any id) and report selectivity. (b) For real SQLite, write the EXPLAIN, the CREATE INDEX statements (with justification per index), and the expected plan change.",
+    "hints": [
+      "Selectivity first: count matching rows vs 28 total in the sandbox. A handful of rows from 28 is selective — the same reasoning scales to millions.",
+      "Two access paths need help: the WHERE on enrollments(course_id) and the join probe into developers(id) — though primary keys are indexed automatically, so only one CREATE INDEX is strictly needed. State that explicitly.",
+      "ORDER BY progress DESC LIMIT… would want a composite (course_id, progress), but keep the recommendation minimal: single-column index first, composite only if the sort still shows TEMP B-TREE."
+    ],
+    "solution": "-- (a) sandbox selectivity probe (flat — runs here)\n-- SELECT * FROM enrollments WHERE course_id = 5;\n-- A few rows of 28: selective → index candidate.\n\n-- (b) real SQLite plan + fix\nEXPLAIN QUERY PLAN\nSELECT d.name, e.progress FROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nWHERE e.course_id = 5 ORDER BY e.progress DESC;\n\nCREATE INDEX idx_enrollments_course ON enrollments(course_id);\n-- developers(id) needs nothing: PRIMARY KEYs are indexed automatically.\n-- Expected: SCAN enrollments → SEARCH enrollments USING INDEX idx_enrollments_course;\n-- join stays a key lookup; re-run EXPLAIN to confirm, and only then\n-- consider (course_id, progress) if ORDER BY still sorts.",
+    "why": "The exercise enforces the professional sequence — measure selectivity, read the plan, index the proven bottleneck, verify — instead of sprinkling indexes. Naming the free primary-key index shows you know what exists before creating anything, and deferring the composite shows restraint: minimal effective indexing.",
+    "code": "-- Sandbox probe (flat — run here, any course id)\nSELECT * FROM enrollments WHERE course_id = 5;\n\n-- Real-DB diagnosis + fix (see solution for EXPLAIN + CREATE INDEX).",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "EXPLAIN QUERY PLAN shows SCAN developers for WHERE country = 'Japan'. After CREATE INDEX … ON developers(country) it shows SEARCH … USING INDEX. What changed?",
+      "options": ["The query now returns different rows", "The engine switched from reading every row to targeted index hops — same rows, logarithmic instead of linear work", "The table was rewritten", "The index cached the result permanently"],
+      "answer": 1,
+      "explain": "Plans change strategy, never results. SCAN cost grows with table size; SEARCH cost grows with log size. Same answer, fundamentally different work — which is why plan-before/after is the whole discipline."
+    },
+    {
+      "q": "Which column should you usually NOT index?",
+      "options": ["email (unique, filtered often)", "enrollments(course_id) (join + filter key)", "completed (two possible values, queried occasionally)", "hours_studied (ORDER BY … LIMIT 5 leaderboard)"],
+      "answer": 2,
+      "explain": "Low-selectivity flags match large fractions of the table, so the planner scans regardless — the index costs writes and space while serving almost no reads. Selectivity, not query frequency alone, earns an index."
+    },
+    {
+      "q": "A composite index on (course_id, completed) helps which filters?",
+      "options": ["WHERE course_id = ? AND completed = ?; and WHERE course_id = ? alone", "WHERE completed = ? alone", "All possible filters on either column", "Only full ORDER BY clauses"],
+      "answer": 0,
+      "explain": "Composite indexes serve left-prefix patterns: the leading column anchors the search, later columns refine it. A filter on only the second column cannot enter the structure — order columns by how queries actually constrain them."
+    },
+    {
+      "q": "Writes to a hot table slowed after 'optimizing' reads with six new indexes. Most likely fix?",
+      "options": ["Add six more indexes to balance the load", "Audit and DROP the unused/low-value indexes — every index taxes each write", "Increase cache size; indexes are free for writes", "Rewrite all queries with UNION"],
+      "answer": 1,
+      "explain": "Each index is maintained per write: six indexes ≈ six extra structures per INSERT/UPDATE/DELETE. Reads got faster, writes paid. The fix is subtraction — keep indexes that serve proven, selective read patterns."
+    }
+  ],
+  "summary": "Scans read everything; indexes hop to matches. EXPLAIN before and after, index selective filters/join keys/sort keys, respect composite order, and pay for indexes with writes knowingly. Speed is measured, never assumed.",
+  "next": "Fast queries can still be wrong queries: the clinic collects every classic intermediate mistake — grouping traps, NULL ambushes, fanout flashbacks — into one diagnostic workout. Next: the query clinic."
+}

@@ -1,0 +1,69 @@
+{
+  "title": "CASE, Text & Dates: Compute Sideways",
+  "slug": "04-case-text-dates-compute-sideways",
+  "objective": "After this lesson you will be able to branch inside the SELECT list with CASE, pivot rows into conditional aggregates, guard division against zero, and reshape text and dates with portable string and date functions.",
+  "why": "Filters choose rows; this lesson computes columns. 'Label every developer beginner/intermediate/advanced by hours', 'completion rate per role in one query', 'first names from full names' — reports are built from computed columns, and every analytics query you will ever read is dense with CASE. It is also the most portable advanced SQL there is: CASE works identically in SQLite, PostgreSQL, MySQL and SQL Server.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "CASE: if-then logic inside a query" },
+    { "t": "p", "text": "**`CASE`** evaluates conditions row by row and returns the first match: `CASE WHEN <cond> THEN <value> … ELSE <fallback> END`. Think of it as a computed column with opinions — the database inspects each row and labels it. The `ELSE` is your safety net: without it, unmatched rows get `NULL`, which is occasionally what you want and usually a bug report." },
+    { "t": "code", "lang": "sql", "code": "-- Bucket developers by study hours, computed per row\nSELECT name, hours_studied,\n  CASE\n    WHEN hours_studied >= 800 THEN 'deep'\n    WHEN hours_studied >= 400 THEN 'steady'\n    ELSE 'ramping'\n  END AS pace\nFROM developers\nORDER BY hours_studied DESC;", "caption": "Searched CASE: first matching WHEN wins, ELSE catches the rest" },
+    { "t": "p", "text": "Order matters: conditions are tested top to bottom and the **first** match wins, so arrange ranges from narrowest to widest (or highest threshold first, as above). Reversed order silently mislabels — `WHEN hours >= 400` placed first would swallow the 800+ group, and no error would ever tell you." },
+    { "t": "callout", "variant": "info", "title": "Where CASE runs here", "text": "The DevPath sandbox teaches flat SELECT (filters, grouping, sorting) — CASE expressions and scalar functions target real PostgreSQL or SQLite. Each CASE in this lesson is paired with flat sandbox queries that preview its buckets, so you verify the logic with one engine and run the full expression with another." },
+    { "t": "h", "text": "Conditional aggregation: many metrics, one pass" },
+    { "t": "p", "text": "Put `CASE` *inside* an aggregate and one grouped query returns many metrics: each aggregate counts only the rows its `WHEN` accepts. This is how dashboards compute 'completions, in-progress, and total per course' without three queries — and it is dramatically cheaper than one query per metric." },
+    { "t": "code", "lang": "sql", "code": "-- One grouped pass: total, completed, and completion rate per course\nSELECT c.title,\n  COUNT(e.id) AS total,\n  COUNT(CASE WHEN e.completed = 1 THEN 1 END) AS done,\n  ROUND(100.0 * COUNT(CASE WHEN e.completed = 1 THEN 1 END) / COUNT(e.id), 1) AS pct_done\nFROM courses c LEFT JOIN enrollments e ON e.course_id = c.id\nGROUP BY c.id\nORDER BY pct_done DESC;", "caption": "Conditional aggregation: CASE filters inside COUNT, rate derived in the same row" },
+    { "t": "p", "text": "Two mechanics do the work. `COUNT` ignores `NULL`s, and a `CASE` without `ELSE` yields `NULL` for non-matches — so `COUNT(CASE WHEN … THEN 1 END)` counts exactly the matching rows. And `100.0 *` (not `100 *`) forces floating-point division: integer `3/4` is `0` in most engines, while `100.0 * 3/4` is `75.0`. Forgetting the decimal point is the classic 'all my rates are zero' bug." },
+    { "t": "callout", "variant": "warn", "title": "Guard every division", "text": "Any rate can divide by zero when a group is empty (a course with no enrollments makes COUNT(e.id) = 0). Wrap denominators with NULLIF: `… / NULLIF(COUNT(e.id), 0)` turns a crash into NULL, which reports honestly render as '—'. Division by zero is never the reader's fault." },
+    { "t": "h", "text": "Text surgery: LIKE plus portable functions" },
+    { "t": "p", "text": "You know `LIKE` from Fundamentals; intermediate work combines it with extraction. The portable core across SQLite and PostgreSQL: `SUBSTR(x, start, len)` slices text (1-based!), `||` concatenates, `UPPER/LOWER` normalize case, `TRIM` strips whitespace, `LENGTH` measures. Dialects diverge on fancier operations — when you need regex or splitting, check your engine's docs rather than guessing." },
+    { "t": "code", "lang": "sql", "code": "-- First names from full names + initials, engine-portable\nSELECT name,\n  SUBSTR(name, 1, INSTR(name, ' ') - 1) AS first_name,\n  UPPER(SUBSTR(name, 1, 1)) || '. ' || SUBSTR(name, INSTR(name, ' ') + 1, 1) || '.' AS initials\nFROM developers;", "caption": "SUBSTR + INSTR + concatenation: parse assumptions made visible" },
+    { "t": "p", "text": "Read the fragility honestly: this assumes exactly one space per name. Real name data violates that constantly (middle names, single names, extra spaces — `TRIM` first, always). Production text parsing belongs closer to application code or dedicated full-text features; SQL string functions are for light reshaping in reports, and every assumption deserves a comment." },
+    { "t": "h", "text": "Dates: store ISO, compute with functions" },
+    { "t": "p", "text": "Sound date handling starts at storage: keep timestamps as ISO-8601 text (`2026-10-06`) or native date types — never as locale formats like `06/10/2026` that sort wrong and parse ambiguously. Then compute: SQLite offers `date()`, `strftime()`, and modifiers (`'+30 days'`); PostgreSQL offers `NOW()`, `AGE()`, `DATE_TRUNC()`, and interval arithmetic (`created + INTERVAL '30 days'`). Same ideas, different spellings — always check which engine you are on." },
+    { "t": "code", "lang": "sql", "code": "-- SQLite flavor: enrollments older than 90 days, bucketed by month\nSELECT strftime('%Y-%m', 'now', '-90 days') AS window_start;\n\n-- PostgreSQL flavor: the same window + month bucketing\nSELECT DATE_TRUNC('month', NOW() - INTERVAL '90 days') AS window_start;", "caption": "Same intent, two dialects — date math is the least portable SQL there is" },
+    { "t": "p", "text": "Our teaching dataset has no timestamp columns (a deliberate Fundamentals simplification), so date practice here is read-and-adapt: study both spellings, then use them on your own tables. The transferable rules are engine-free: store ISO, never compare dates as strings across formats, and bucket with truncation (`DATE_TRUNC` / `strftime`) rather than string slicing." },
+    { "t": "practice", "query": "SELECT name FROM developers WHERE name LIKE 'M%' OR name LIKE '%son';", "note": "Run this LIKE preview in the sandbox — it shows the exact rows a CASE bucket or initials expression would operate on. Then write the CASE version from this lesson for real SQLite/PostgreSQL: the sandbox verifies the set, the real engine computes the column." },
+    { "t": "keytakeaways", "items": ["CASE computes per-row labels: first matching WHEN wins, ELSE is the safety net, order the ranges deliberately", "CASE inside aggregates yields many metrics in one grouped pass; COUNT ignores the NULLs from unmatched WHENs", "Force float division with a decimal (100.0) and guard denominators with NULLIF(…, 0)", "Portable text core: SUBSTR (1-based), ||, UPPER/LOWER, TRIM, LENGTH — comment every parsing assumption", "Dates: store ISO-8601, compute with engine functions, never compare locale formats; date math is the least portable SQL"]} ],
+  "exercise": {
+    "prompt": "The growth team wants a per-role report: role, developer count, average hours (1 decimal), plus a pace label for the role average using the deep/steady/ramping buckets from this lesson (>= 700 deep, >= 400 steady, else ramping). Build it as one grouped query with a CASE on the average. Verify the underlying rows in the sandbox with flat GROUP BY queries, then assemble the full expression for real SQLite/PostgreSQL.",
+    "hints": [
+      "Group developers by role; compute COUNT(*) and AVG(hours_studied) per group. Both are flat and sandbox-runnable — verify those numbers first.",
+      "Wrap the average in CASE: WHEN AVG(hours_studied) >= 700 THEN 'deep' WHEN AVG(hours_studied) >= 400 THEN 'steady' ELSE 'ramping' END. Aggregates are legal inside CASE conditions in a grouped query.",
+      "ROUND the average to 1 decimal in the real-DB version. Roles to expect: frontend, backend, fullstack, devops."
+    ],
+    "solution": "SELECT role,\n  COUNT(*) AS devs,\n  ROUND(AVG(hours_studied), 1) AS avg_hours,\n  CASE\n    WHEN AVG(hours_studied) >= 700 THEN 'deep'\n    WHEN AVG(hours_studied) >= 400 THEN 'steady'\n    ELSE 'ramping'\n  END AS pace\nFROM developers\nGROUP BY role\nORDER BY avg_hours DESC;",
+    "why": "GROUP BY builds one row per role; the aggregates summarize; CASE labels the summary. Putting CASE on the aggregate (not the raw column) is the key move — it classifies groups, and the same pattern labels courses by completion rate or months by revenue in real reports.",
+    "code": "-- Sandbox check (flat — run here): the raw per-role numbers\nSELECT role, COUNT(*) AS devs, AVG(hours_studied) AS avg_hours\nFROM developers GROUP BY role;\n\n-- Full report (real SQLite / PostgreSQL):\nSELECT role,\n  COUNT(*) AS devs,\n  ROUND(AVG(hours_studied), 1) AS avg_hours,\n  CASE\n    WHEN AVG(hours_studied) >= 700 THEN 'deep'\n    WHEN AVG(hours_studied) >= 400 THEN 'steady'\n    ELSE 'ramping'\n  END AS pace\nFROM developers\nGROUP BY role\nORDER BY avg_hours DESC;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "In CASE WHEN hours >= 400 THEN 'steady' WHEN hours >= 800 THEN 'deep' ELSE 'ramping' END, what label does 912 get, and why is it wrong?",
+      "options": ["'deep' — highest match wins automatically", "'steady' — the first matching WHEN wins, and 912 matches >= 400 first; ranges must be ordered narrowest/highest first", "'ramping' — ELSE overrides everything", "NULL — overlapping ranges are an error"],
+      "answer": 1,
+      "explain": "CASE is first-match-wins, evaluated top to bottom. Overlapping ranges silently mislabel with no error — the fix is ordering thresholds descending (800 before 400) so the narrowest group claims its rows first."
+    },
+    {
+      "q": "Why does COUNT(CASE WHEN e.completed = 1 THEN 1 END) count exactly the completed rows?",
+      "options": ["CASE returns 0 for non-matches and COUNT skips zeros", "Unmatched rows yield NULL (no ELSE), and COUNT ignores NULLs", "COUNT automatically filters on completed", "It doesn't — this counts all rows"],
+      "answer": 1,
+      "explain": "The pairing is deliberate: CASE-without-ELSE produces NULL for misses, and every aggregate except COUNT(*) skips NULLs. Together they form conditional aggregation — many metrics in one grouped pass."
+    },
+    {
+      "q": "A completion-rate column shows 0 for every course although completions exist. Most likely cause?",
+      "options": ["Integer division — 100 * 3/4 evaluates as 0 in most engines; use 100.0", "COUNT is broken on joined tables", "Rates must use AVG, never COUNT", "ORDER BY interferes with division"],
+      "answer": 0,
+      "explain": "Integer arithmetic truncates: 3/4 = 0 before the multiplication ever happens. A decimal literal (100.0) promotes the whole expression to floating point. The twin guard is NULLIF on the denominator against empty groups."
+    },
+    {
+      "q": "Which text/date practices are portable across SQLite and PostgreSQL?",
+      "options": ["REGEXP_REPLACE and string splitting — identical everywhere", "SUBSTR (1-based), ||, UPPER/LOWER, TRIM, CASE; date math and fancy parsing differ by engine", "All date functions — SQL standardizes them fully", "None — every function differs"],
+      "answer": 1,
+      "explain": "A small portable core exists (CASE is even cross-vendor beyond these two engines). Date arithmetic and advanced text ops are the least portable SQL — same intent, different spellings — so check engine docs and store ISO-8601 to keep comparisons sane."
+    }
+  ],
+  "summary": "CASE brings branching into the SELECT list: order ranges deliberately, lean on ELSE, and aggregate conditionally to get many metrics per pass. Guard division with decimals and NULLIF. Reshape text with the portable core and comment your assumptions; store dates as ISO and learn your engine's date spellings.",
+  "next": "Computed columns change what rows say — the next lesson changes which rows meet: self-joins, non-equi joins, fanout diagnosis, and the join patterns that separate intermediate queries from confident ones."
+}

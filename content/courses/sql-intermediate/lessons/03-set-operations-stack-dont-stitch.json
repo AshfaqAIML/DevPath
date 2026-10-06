@@ -1,0 +1,71 @@
+{
+  "title": "Set Operations: Stack, Don't Stitch",
+  "slug": "03-set-operations-stack-dont-stitch",
+  "objective": "After this lesson you will be able to combine complete result sets with UNION, UNION ALL, INTERSECT and EXCEPT — predicting duplicate behavior, satisfying column-compatibility rules, and choosing stacking over joining (or vice versa) on purpose.",
+  "why": "Joins stitch tables side by side; sometimes the question needs rows stacked on top of each other instead. 'All distinct countries across developers and…', 'learners in either track', 'courses with no enrollments' — each is two finished queries combined with one keyword. Analysts reach for set operations daily, and interviewers use them to test whether you think in sets or in loops.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Joins go wide, set ops go tall" },
+    { "t": "p", "text": "A **join** adds *columns*: developer rows gain course columns. A **set operation** adds *rows*: one query's rows stacked under another query's rows. The mental trigger is the word *combined lists* — 'names of developers AND course titles in one column', 'ids present in either table'. Whenever each half of the question is already a complete query, stack them instead of stitching tables together." },
+    { "t": "diagram", "caption": "The four stacking operators", "nodes": ["UNION: stack, then remove duplicate rows", "UNION ALL: stack everything, keep duplicates (fast)", "INTERSECT: keep only rows present in BOTH", "EXCEPT: keep rows in the first but NOT the second"] },
+    { "t": "h", "text": "UNION vs UNION ALL: the duplicate decision" },
+    { "t": "p", "text": "**`UNION`** stacks two result sets and removes fully-duplicate rows; **`UNION ALL`** stacks them untouched. The difference is both semantic *and* performance: deduplication requires sorting (or hashing) the combined set, so `UNION ALL` skips real work. Default to `UNION ALL` unless the question explicitly needs distinct rows — and when it does, consider whether the duplicates were even possible before paying for their removal." },
+    { "t": "code", "lang": "sql", "code": "-- One column: every country developers live in, plus every topic courses cover?\n-- (Silly question, perfect shape demo: two finished lists, one stacked column.)\nSELECT country AS label FROM developers\nUNION\nSELECT topic AS label FROM courses\nORDER BY label;", "caption": "UNION: stacked, deduplicated, sorted once at the end" },
+    { "t": "p", "text": "Notice three things. The stacked column takes its **name from the first query** (`label`) — the second query's names are discarded, so alias deliberately in query one. The single `ORDER BY` sits at the **very end** and sees the combined result (sorting inside a branch is meaningless, exactly like the CTE rule from Chapter 2). And duplicates across the two lists — say a country literally named like a topic — collapse into one row." },
+    { "t": "code", "lang": "sql", "code": "-- Same stack, duplicates kept: how many raw entries feed a report?\nSELECT country AS label FROM developers\nUNION ALL\nSELECT topic AS label FROM courses;", "caption": "UNION ALL: no dedup pass, measurably cheaper on big sets" },
+    { "t": "callout", "variant": "warn", "title": "UNION is not free distinctness", "text": "Reaching for UNION 'just to be safe' costs a sort over the combined rows on every execution. On small teaching tables the difference is invisible; on million-row analytics it dominates the query plan. The professional habit: UNION ALL by default, UNION only when the spec says distinct — and Chapter 2's DISTINCT lesson already taught you what dedup costs." },
+    { "t": "h", "text": "The compatibility contract" },
+    { "t": "p", "text": "Stacking has one strict rule: every branch must return the **same number of columns**, with **compatible types in each position**. Names don't need to match (first query wins), but position 1 of query two must make sense stacked under position 1 of query one — you cannot stack a two-column query on a three-column query, and stacking `price` under `title` produces garbage that still runs. The database checks shapes, not meanings: *you* are the type checker for intent." },
+    { "t": "code", "lang": "sql", "code": "-- LEGAL: same count (2), compatible types (TEXT, INTEGER)\nSELECT name, hours_studied FROM developers\nUNION ALL\nSELECT title, hours FROM courses;\n\n-- ILLEGAL: column counts differ (2 vs 1) — parse error\n-- SELECT name, hours_studied FROM developers\n-- UNION ALL\n-- SELECT title FROM courses;", "caption": "Shape compatibility: counts must match, types must align positionally" },
+    { "t": "p", "text": "When branches genuinely differ, pad the short side with `NULL` placeholders and alias everything in the first query — a standard reporting trick for 'one timeline from two event tables' queries. The `NULL` column carries no data but keeps the shapes stackable, and the alias documents what the position means." },
+    { "t": "h", "text": "INTERSECT and EXCEPT: overlap and absence" },
+    { "t": "p", "text": "**`INTERSECT`** keeps only rows appearing in *both* branches; **`EXCEPT`** keeps rows in the first branch that *don't* appear in the second. Both deduplicate like `UNION`. The killer use of `EXCEPT` is the 'what's missing' audit — and notice it answers Chapter 1's zero-enrollment exercise without any join or subquery at all:" },
+    { "t": "code", "lang": "sql", "code": "-- Courses with zero enrollments — the set-operation telling\nSELECT id, title FROM courses\nEXCEPT\nSELECT c.id, c.title\nFROM courses c JOIN enrollments e ON e.course_id = c.id;", "caption": "EXCEPT as an absence audit: all courses minus enrolled courses" },
+    { "t": "p", "text": "Three equivalent answers now exist for one question: `NOT EXISTS` (Chapter 1), `LEFT JOIN … IS NULL` (Chapter 1's sandbox check), and `EXCEPT` (this lesson). Professionals collect all three because different codebases and reviewers prefer different shapes — and because each shape performs differently once indexes enter the picture (SQL Advanced). Same rows, three dialects; fluency means reading all of them." },
+    { "t": "callout", "variant": "info", "title": "SQLite and PostgreSQL agree here", "text": "Set-operation syntax in this lesson is identical in SQLite and PostgreSQL, including EXCEPT (note: MySQL uses different syntax for some of these — one more reason course examples name their engine). Precedence is also shared: INTERSECT binds tighter than UNION/EXCEPT, so parenthesize mixed expressions explicitly." },
+    { "t": "h", "text": "When stacking beats joining" },
+    { "t": "p", "text": "Choose stacking when each side is an independent question whose answers share a shape: activity timelines from two event tables, combined leaderboards, 'in either group' membership. Choose joining when rows must *meet* — attributes from one table qualifying rows of another. The smell test: if you find yourself joining and then struggling to un-duplicate or un-null the result, you probably wanted a stack; if you're unioning and then struggling to align unrelated columns, you probably wanted a join." },
+    { "t": "practice", "query": "SELECT country AS label FROM developers;", "note": "Run this first branch standalone in the sandbox — set-operation branches are flat SELECTs, so each side runs here. Then run SELECT topic AS label FROM courses; and picture the UNION: same single column, stacked. The full UNION/EXCEPT assembly runs in real PostgreSQL or SQLite." },
+    { "t": "keytakeaways", "items": ["Joins add columns, set operations add rows — 'combined lists' means stack", "UNION ALL by default (no dedup cost); UNION only when the spec demands distinct rows", "Branches must match in column count with positionally compatible types; first query names the output", "One ORDER BY at the very end sees the combined set — never sort inside a branch", "INTERSECT is overlap, EXCEPT is absence — the third dialect for 'what's missing' alongside NOT EXISTS and LEFT JOIN … IS NULL"]} ],
+  "exercise": {
+    "prompt": "The newsletter team wants one mailing list: distinct developer names plus distinct course titles in a single alphabetized label column — no duplicates, A to Z. Write the stacked query. Then write its UNION ALL twin and, in one sentence each, say (1) when the UNION version is correct and (2) what the ALL twin would be used to measure instead.",
+    "hints": [
+      "Each branch is a flat single-column SELECT with the same alias: SELECT name AS label FROM developers and SELECT title AS label FROM courses. The stack plus one trailing ORDER BY label finishes it.",
+      "UNION removes duplicates across the whole stack; UNION ALL keeps every row from both sides. The spec says 'no duplicates' — that word picks your operator.",
+      "The ALL twin counts raw entries (2 × sides minus nothing) — useful for volume auditing ('how many labels did we ingest?'), while UNION answers the membership question ('which distinct labels exist?')."
+    ],
+    "solution": "-- Membership answer: distinct labels, A to Z\nSELECT name AS label FROM developers\nUNION\nSELECT title AS label FROM courses\nORDER BY label;\n\n-- Volume twin: every raw entry kept\nSELECT name AS label FROM developers\nUNION ALL\nSELECT title AS label FROM courses;",
+    "why": "The word 'distinct' in the spec maps directly to UNION's dedup semantics, and 'alphabetized' maps to the single trailing ORDER BY. Keeping both twins side by side teaches the chapter's core judgment call: same shape, different questions — membership versus volume — answered by one keyword.",
+    "code": "-- Sandbox pieces (flat — run each branch here):\nSELECT name AS label FROM developers;\nSELECT title AS label FROM courses;\n\n-- Full assemblies (real PostgreSQL / SQLite):\n-- Membership: distinct labels, A to Z\nSELECT name AS label FROM developers\nUNION\nSELECT title AS label FROM courses\nORDER BY label;\n\n-- Volume twin: every raw entry kept\nSELECT name AS label FROM developers\nUNION ALL\nSELECT title AS label FROM courses;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "When should you choose UNION ALL over UNION?",
+      "options": ["Always — they are synonyms", "By default, unless the spec needs distinct rows — ALL skips the dedup sort and keeps every row", "Only when both branches come from the same table", "Never — ALL is deprecated"],
+      "answer": 1,
+      "explain": "UNION pays for a dedup pass (sort/hash) over the combined rows. If duplicates are impossible or harmless, that work is pure waste. UNION ALL is the honest default; UNION is for when distinctness is specified."
+    },
+    {
+      "q": "SELECT name, hours_studied FROM developers UNION ALL SELECT title FROM courses — what happens?",
+      "options": ["Runs fine, padding the missing column automatically", "Parse error: branch column counts differ (2 vs 1)", "Runs and drops the extra column silently", "Returns only the first branch"],
+      "answer": 1,
+      "explain": "The compatibility contract is strict on counts: every branch must return the same number of columns. Mismatches fail at parse time. The standard fix is padding the short side with NULL placeholders."
+    },
+    {
+      "q": "In SELECT country AS label FROM developers UNION SELECT topic AS label FROM courses, what is the output column called, and where can ORDER BY go?",
+      "options": ["label; ORDER BY only at the very end over the combined set", "topic; ORDER BY inside each branch", "label; ORDER BY inside the first branch only", "Both names are kept as two columns"],
+      "answer": 0,
+      "explain": "First query names the output; later names are discarded. And a set has no order until presentation, so sorting belongs once at the end — the same rule as Chapter 2's CTEs."
+    },
+    {
+      "q": "Three equivalent ways to find courses with zero enrollments are NOT EXISTS, LEFT JOIN … IS NULL, and EXCEPT. Why learn all three?",
+      "options": ["They return different rows — you need all three for full coverage", "Same rows, three dialects: codebases and reviewers differ, and each shape optimizes differently once indexes exist", "Two of them are deprecated", "Only EXCEPT is standard SQL"],
+      "answer": 1,
+      "explain": "Fluency means reading every dialect you will meet in real code. The shapes also have genuinely different performance profiles under indexes (SQL Advanced), so the 'best' one depends on context you will learn to measure."
+    }
+  ],
+  "summary": "Set operations stack finished queries: UNION ALL keeps everything (default it), UNION dedupes at a sorting cost, INTERSECT keeps overlap, EXCEPT keeps absence. Branches must match in count with compatible types, the first query names the columns, and one ORDER BY at the end sorts the combined set. You now own three dialects for 'what's missing' — NOT EXISTS, LEFT JOIN … IS NULL, EXCEPT.",
+  "next": "You can combine rows vertically — but real reports also compute sideways: conditional buckets, safe division, and text/date surgery inside the SELECT list. Next: CASE expressions plus string and date functions."
+}

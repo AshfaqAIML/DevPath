@@ -1,0 +1,68 @@
+{
+  "title": "Advanced Join Patterns",
+  "slug": "05-advanced-join-patterns",
+  "objective": "After this lesson you will be able to join a table to itself, join on ranges instead of equality, predict and diagnose row fanout, and choose the correct join shape for multi-path questions — all in flat, sandbox-runnable SQL.",
+  "why": "INNER and LEFT JOIN (Fundamentals) cover the happy path. Real schemas ask harder questions: 'developers in the same country' (a table meeting itself), 'courses priced within a band of each other', 'why did my 14 developers become 28 rows'. This lesson is the difference between knowing join syntax and reasoning about what joins do to row counts — the skill interviewers probe first.",
+  "minutes": 17,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Self-joins: a table meeting itself" },
+    { "t": "p", "text": "A **self-join** joins a table to itself under two different aliases — conceptually two copies side by side. The trigger phrase is *pairs within one table*: developers sharing a country, courses in the same topic, employees and their managers. Aliases aren't cosmetic here; they are how the engine tells the two copies apart." },
+    { "t": "code", "lang": "sql", "code": "-- Pairs of developers from the same country (each pair once, nobody paired with themselves)\nSELECT a.name AS dev_a, b.name AS dev_b, a.country\nFROM developers a\nJOIN developers b\n  ON a.country = b.country\n AND a.id < b.id\nORDER BY a.country;", "caption": "Self-join: two aliases, equality on the shared trait, inequality to dedupe pairs" },
+    { "t": "p", "text": "The `a.id < b.id` condition does two jobs: it excludes self-pairs (nobody with themselves) and it collapses mirror duplicates (Maya–Jonas and Jonas–Maya become one row). Without it you get every pair twice plus identity rows — the most common self-join bug, and it looks correct until you count." },
+    { "t": "h", "text": "Non-equi joins: matching on ranges" },
+    { "t": "p", "text": "Join conditions don't have to be equality — any predicate works, including ranges. The classic is **banding**: match each row to the bracket it falls in (hours → pace bands, prices → tiers). Write the bands as a small inline table of values and join with `BETWEEN`." },
+    { "t": "code", "lang": "sql", "code": "-- Band each developer into a pace tier via a range join\nSELECT d.name, d.hours_studied, bands.pace\nFROM developers d\nJOIN (\n  SELECT 'ramping' AS pace, 0 AS lo, 399 AS hi\n  UNION ALL SELECT 'steady', 400, 799\n  UNION ALL SELECT 'deep', 800, 999999\n) AS bands\n  ON d.hours_studied BETWEEN bands.lo AND bands.hi\nORDER BY d.hours_studied DESC;", "caption": "Non-equi join in real PostgreSQL/SQLite — bands as data, matched by range" },
+    { "t": "p", "text": "This is Chapter 4's bucketing expressed relationally: bands live in rows instead of WHEN clauses, so adding a tier means inserting a row, not editing logic. (The branch table uses UNION ALL stacking from Chapter 3 — the chapters compose deliberately.) Prefer bands-as-data when thresholds change often or are user-configured; prefer CASE when they are fixed analytics definitions." },
+    { "t": "callout", "variant": "info", "title": "Sandbox note", "text": "The sandbox engine runs flat SELECT with JOIN, WHERE, GROUP BY and ORDER BY. Self-joins and the flat pieces of this lesson run there; UNION ALL-stacked branch tables and other multi-statement shapes target real SQLite/PostgreSQL. Verify each half in the sandbox, assemble in a real database." },
+    { "t": "h", "text": "Fanout: why 14 developers became 28 rows" },
+    { "t": "p", "text": "**Fanout** is row multiplication: when the right side matches a left row N times, that left row appears N times. One developer with 3 enrollments contributes 3 joined rows — so `COUNT(*)` after a join counts *matches*, not developers. Every 'my totals doubled overnight' bug is fanout, and the diagnosis is always the same: aggregate *before* joining, or count distinct keys." },
+    { "t": "code", "lang": "sql", "code": "-- WRONG question, honest answer: counts enrollments, not developers\nSELECT COUNT(*) FROM developers d\nJOIN enrollments e ON e.developer_id = d.id;\n\n-- RIGHT: distinct keys survive fanout\nSELECT COUNT(DISTINCT d.id) FROM developers d\nJOIN enrollments e ON e.developer_id = d.id;", "caption": "Fanout diagnosis: COUNT(*) counts matches, COUNT(DISTINCT key) counts entities" },
+    { "t": "p", "text": "The deeper fix is ordering operations: pre-aggregate the many-side in a CTE or derived table (Chapters 1–2), *then* join one-row-per-key. `COUNT(DISTINCT)` rescues a metric; restructuring rescues the query. When totals look inflated, your first suspect is always an unexamined join." },
+    { "t": "table", "headers": ["Symptom", "Cause", "Fix"], "rows": [["Counts doubled after adding a join", "Right side matches multiple times (fanout)", "COUNT(DISTINCT key), or aggregate before joining"], ["Pairs appear twice + self-pairs", "Self-join without a.id < b.id", "Add the strict inequality on the key"], ["Bands mislabel edge values", "BETWEEN is inclusive on both ends; overlapping bands", "Make bands adjacent non-overlapping; test boundary rows"], ["Disappearing rows after INNER JOIN", "No match on the right side discards the row", "LEFT JOIN + IS NULL check, or confirm absence is intended"]] },
+    { "t": "h", "text": "Multi-path joins: two roads to the same table" },
+    { "t": "p", "text": "Some questions join the same table twice along different paths — enrollments once for completions, courses once for titles, developers once for names. Each join needs its own alias and its own ON clause; each answers a different relationship. Read multi-join queries as a chain of relationships ('developer → their enrollments → each enrollment's course'), and verify each link's cardinality before trusting the totals." },
+    { "t": "code", "lang": "sql", "code": "-- Full learning story per enrollment: who, what, how far — one row per enrollment\nSELECT d.name AS learner, c.title AS course, e.progress,\n       CASE WHEN e.completed = 1 THEN 'done' ELSE 'in progress' END AS status\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c ON c.id = e.course_id\nORDER BY e.progress DESC\nLIMIT 10;", "caption": "Multi-path join for real SQLite/PostgreSQL (CASE labels the status)" },
+    { "t": "practice", "query": "SELECT a.name AS dev_a, b.name AS dev_b, a.country FROM developers a JOIN developers b ON a.country = b.country AND a.id < b.id ORDER BY a.country;", "note": "Run this self-join in the sandbox — flat joins run here. Count the pairs, then remove the AND a.id < b.id clause and re-run: watch mirrors and self-pairs appear. That contrast is the lesson." },
+    { "t": "keytakeaways", "items": ["Self-join with two aliases for within-table pairs; a.id < b.id kills mirrors and self-pairs", "Non-equi joins match on ranges — bands-as-data beats CASE when thresholds change", "Fanout multiplies rows per match: COUNT(*) counts matches, COUNT(DISTINCT key) counts entities, pre-aggregation fixes the query", "Multi-path joins chain relationships — verify each link's cardinality before trusting totals", "Flat join pieces run in the sandbox; stacked/CTE assemblies target real SQLite/PostgreSQL"]} ],
+  "exercise": {
+    "prompt": "Find 'study buddies': pairs of developers at the SAME level with hours_studied within 100 of each other (excluding self-pairs and mirrors). Return dev_a, dev_b, level, and the hour gap, closest pairs first. Build and verify it in the sandbox, then in one sentence say which join features make this impossible with a single-table WHERE.",
+    "hints": [
+      "Self-join developers AS a and developers AS b. Same level is equality (a.level = b.level); closeness is a range on a computed difference.",
+      "Gap = ABS(a.hours_studied - b.hours_studied) — sandbox check: does the engine accept ABS? If not, use the two-sided form a.hours_studied - b.hours_studied BETWEEN -100 AND 100.",
+      "Dedupe with a.id < b.id, filter gap <= 100, ORDER BY the gap ascending."
+    ],
+    "solution": "SELECT a.name AS dev_a, b.name AS dev_b, a.level,\n  ABS(a.hours_studied - b.hours_studied) AS gap\nFROM developers a\nJOIN developers b\n  ON a.level = b.level\n AND a.id < b.id\nWHERE ABS(a.hours_studied - b.hours_studied) <= 100\nORDER BY gap;",
+    "why": "Three join features combine: equality (same level), computed range (closeness), and key inequality (dedupe). A single-table WHERE can filter rows but cannot pair them — pairing needs two row variables, which only a self-join provides. The one-sentence answer: WHERE sees one row at a time, so cross-row relationships require the table to meet itself.",
+    "code": "-- Sandbox version (verify here): two-sided range avoids ABS\nSELECT a.name AS dev_a, b.name AS dev_b, a.level,\n  (a.hours_studied - b.hours_studied) AS gap\nFROM developers a\nJOIN developers b\n  ON a.level = b.level\n AND a.id < b.id\nWHERE (a.hours_studied - b.hours_studied) BETWEEN -100 AND 100\nORDER BY gap;\n\n-- Real-DB version with ABS (cleaner, same rows up to sign):\nSELECT a.name AS dev_a, b.name AS dev_b, a.level,\n  ABS(a.hours_studied - b.hours_studied) AS gap\nFROM developers a\nJOIN developers b\n  ON a.level = b.level\n AND a.id < b.id\nWHERE ABS(a.hours_studied - b.hours_studied) <= 100\nORDER BY gap;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "A self-join of developers on country without any id condition returns mirrors and self-pairs. What does AND a.id < b.id achieve?",
+      "options": ["It speeds up the query via the primary key", "It keeps each unordered pair exactly once and excludes identity pairs", "It restricts results to adjacent ids", "It converts the join to a LEFT JOIN"],
+      "answer": 1,
+      "explain": "For any two distinct rows exactly one ordering satisfies id_a < id_b, so each pair survives once; a row never satisfies id < id against itself. Ordering by an uncorrelated unique key is the standard pair-dedupe."
+    },
+    {
+      "q": "After adding a join, COUNT(*) doubles but COUNT(DISTINCT d.id) stays correct. Diagnosis?",
+      "options": ["The database double-counts joined queries by design", "Fanout: right-side rows match multiple times, so COUNT(*) counts matches, not entities", "DISTINCT is required on all joined queries", "The ON condition is missing"],
+      "answer": 1,
+      "explain": "Each left row repeats per right-side match. COUNT(*) tallies the repetitions; COUNT(DISTINCT key) tallies entities. The structural cure is aggregating the many-side before joining."
+    },
+    {
+      "q": "When should bands live in rows (range join) instead of WHEN clauses (CASE)?",
+      "options": ["Never — CASE is always superior", "When thresholds change often or are user-configured: adding a tier becomes a data edit, not a logic edit", "Only in PostgreSQL", "When there are more than 100 rows"],
+      "answer": 1,
+      "explain": "Data-driven bands are maintainable by non-SQL edits and auditable as rows. Fixed analytic definitions belong in CASE. Same buckets, different change dynamics — choose by who changes them and how often."
+    },
+    {
+      "q": "Why can't a single-table WHERE find 'developers within 100 hours of each other'?",
+      "options": ["WHERE cannot use arithmetic", "WHERE evaluates one row at a time — cross-row comparison needs two row variables, i.e. a self-join", "BETWEEN only works on dates", "It can — the premise is false"],
+      "answer": 1,
+      "explain": "WHERE filters rows independently; 'within X of each other' relates pairs. The self-join introduces the second row variable (a and b) that makes the relationship expressible."
+    }
+  ],
+  "summary": "Self-joins pair rows within one table (dedupe with key inequality), non-equi joins match ranges (bands-as-data for changing thresholds), fanout explains every mysteriously doubled total, and multi-path joins chain relationships link by link. Verify joins in the sandbox; assemble stacks in a real database.",
+  "next": "Joined rows answer questions — but reusable logic needs a home. Next: views, the persistent named queries that turn Chapter 2's pipelines into database objects."
+}
