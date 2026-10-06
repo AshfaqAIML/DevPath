@@ -1,159 +1,194 @@
-# DevPath — Developer Learning Platform
+# DevPath — Masterclass → Roadmaps → Courses → Resources → Simulators
 
-> Masterclass → Roadmaps → Courses → Resources → Simulators.
-> One cohesive system for learning modern software development.
+> A full-stack developer learning platform where **every published course teaches
+> real skills end-to-end**: read the lesson, run the code live in an embedded
+> simulator, solve the exercise with progressive hints, prove it in the quiz,
+> pass the final assessment, ship the capstone project.
 
-DevPath is a full-stack learning platform for developers: deep masterclasses, career
-roadmaps, focused mini-courses with real lessons (not placeholders), practical
-reference guides, and **interactive in-browser simulators** (SQL, JavaScript, Git,
-HTTP, Flexbox). Learners read lessons, run live examples, solve exercises with
-progressive hints, take quizzes, pass final assessments, and complete capstone
-projects — with progress, XP, and analytics tracked throughout.
+![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
+![React 19](https://img.shields.io/badge/React-19-61DAFB)
+![TypeScript 5 strict](https://img.shields.io/badge/TypeScript-5_strict-3178C6)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-4-06B6D4)
+![Prisma 6 + SQLite](https://img.shields.io/badge/Prisma_6-SQLite-2D3748)
+![recharts](https://img.shields.io/badge/charts-recharts-FF6384)
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4)
-![Prisma](https://img.shields.io/badge/Prisma-6-2D3748)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57)
+---
 
-## ✨ Features
+## 1. What DevPath actually is
 
-- **📚 Real course content** — every published course ships full lessons: objectives,
-  explanations, runnable code, diagrams, exercises with hints + solutions, quizzes
-  with explanations, summaries, a final assessment, a capstone project, and
-  interview Q&A.
-- **🧪 Interactive simulators** — SQL Query Sandbox, JavaScript Playground,
-  Git History Playground (live commit DAG), HTTP Lab, Flexbox Simulator.
-  Lesson `practice` blocks deep-link straight into the right simulator.
-- **🗺️ Career roadmaps & tracks** — Frontend, Backend, Data, DA/DS, AI, SDET, Tools;
-  prerequisite chains in `docs/LEARNING_PATHS.md`.
-- **🔍 Instant search** — ⌘K command palette across courses, lessons, and simulators.
-- **📊 Analytics dashboards** — learner progress/XP/streaks plus an admin console
-  with KPIs, engagement charts, top content, and a learning funnel
-  (`GET /api/analytics?view=dashboard&range=7d|30d|90d`).
-- **🛠️ Admin console** — edit courses, lessons, quizzes, publishing state, and
-  catalog metadata without touching code.
-- **🌙 Dark-mode-first design** — flawless light mode, Space Grotesk display type,
-  glassmorphism chrome, Framer Motion micro-interactions.
-
-## 🧱 How content works (course-first engine)
+Most tutorial sites are catalogs of descriptions. DevPath is a **course-first
+learning engine**:
 
 ```
 Course → Curriculum (Lessons) → Exercise → Hints → Solution → Quiz
        → Final Assessment → Capstone Project → Interview Q&A
 ```
 
-- Versioned source of truth: `content/courses/<slug>/course.json` + `lessons/*.json`
-- Synced into the DB with `bun content/seed-courses.ts` (idempotent upserts;
-  catalog entries in `ResourceItem` are never touched)
-- `lessonCount`, `totalMinutes`, `xpTotal` are **always calculated** from lesson
-  records — never maintained by hand
-- Live records remain editable via the admin Lessons editor
+Proof, not promises — shipped content in this repo right now:
 
-## 🛠️ Tech stack
+| Course (`content/courses/<slug>`) | Depth |
+|---|---|
+| `sql-fundamentals` | **10 lessons**, 49 lesson quiz questions, 12-question final assessment, Engagement-Report capstone, interview Q&A — every query runs live in the SQL Query Sandbox via `practice`-block deep-links |
+| `typescript-in-2-hours` | **8 lessons**, 39 quiz questions, 12-question assessment, capstone project, interview Q&A |
+| `javascript-basics-refresher` | **8 lessons**, 218 content blocks, 40 quiz questions, 12-question assessment, DevPath Study Pipeline capstone, 6 `js-playground` practice deep-links |
+| `git-for-beginners-visual-learning` | **10 lessons**, 250 blocks, 30 diagrams, 40 quiz questions, 12-question assessment, Git Journal capstone, 8 practice blocks deep-linked into the Git History Playground |
+| `sql-intermediate` | In progress (`draft`) — Ch.1 *Subqueries: Think in Two Steps* authored; prereq: `sql-fundamentals` |
 
-| Layer      | Choice                                              |
-| ---------- | --------------------------------------------------- |
-| Framework  | Next.js 16 App Router, React 19, TypeScript strict  |
-| Styling    | Tailwind CSS v4, shadcn/ui (Radix), next-themes     |
-| Charts     | recharts (`src/components/charts/*` primitives)     |
-| Motion     | Framer Motion (reduced-motion aware)                |
-| Data       | Prisma 6 + SQLite, TanStack Query, zustand stores   |
-| Validation | Zod on all API inputs                               |
+The catalog holds **85 published courses (+1 draft)** across 7 learning tracks
+(Frontend 21 · Backend 27 · Data 7 · DA/DS 3 · AI 9 · SDET 7 · Tools 11) —
+see [`docs/COURSE_CATALOG_AUDIT.md`](docs/COURSE_CATALOG_AUDIT.md) for the full
+truth table and [`docs/LEARNING_PATHS.md`](docs/LEARNING_PATHS.md) for the
+prerequisite graph (`Course.prereqSlugs` renders as links on every course page).
 
-## 🚀 Quickstart
+---
 
-Prerequisites: [Bun](https://bun.sh) 1.2+.
+## 2. The five content categories
+
+| Category | Route data | What lives there |
+|---|---|---|
+| Masterclass | `?category=masterclass` | Long-form deep dives (systems design, TS patterns, React at scale…) |
+| Roadmaps | `?category=roadmaps` | Step-by-step career paths with hour estimates |
+| Courses | `?category=courses` | Mini-courses above — the heart of the platform |
+| Resources | `?category=resources` | Cheatsheets & references (SQL, Git, HTTP codes, regex…) |
+| Simulators | `?view=simulator&sim=<slug>` | Playable sandboxes below |
+
+## 3. Playable simulators (all in-browser, zero setup)
+
+| Simulator | Slug | What it does |
+|---|---|---|
+| SQL Query Sandbox | `sql-query-sandbox` | Real query engine against a developers/courses/enrollments dataset; lessons deep-link queries with `?q=` pre-fill |
+| JavaScript Playground | `js-playground` | Editor + console + examples; receives `?q=` snippets from JS course practice blocks |
+| Git History Playground | `git-history-playground` | Scripted git terminal rendering a **live commit DAG** + classic ASCII `log --graph` |
+| HTTP Request Lab | `http-request-response-lab` | Request builder + response inspector + status-code reference |
+| Flexbox Simulator | `css-flexbox-simulator` | Visual controls + live preview + generated CSS |
+
+The lesson renderer routes any `practice` block to its simulator through the
+registry in `src/lib/simulators.ts` (`PLAYABLE_SIMULATORS`).
+
+---
+
+## 4. How a lesson is built (real format, from this repo)
+
+Content is **structured data, never JSX**. Example — a quiz question inside
+`content/courses/sql-fundamentals/lessons/01-tables-rows-first-query.json`:
+
+```json
+{
+  "q": "Why do experienced developers avoid SELECT * in application code?",
+  "options": ["* queries are not allowed over network connections",
+              "It ships unnecessary data, hides intent, and breaks silently when the table's column set changes",
+              "The planner refuses to use indexes for *",
+              "It returns rows in an undefined order"],
+  "answer": 1,
+  "explain": "Naming columns is a contract: your code keeps working no matter what columns get added later…"
+}
+```
+
+Every lesson JSON carries: `title, slug, objective, why, minutes, xp`,
+`blocks[]` (`h, p, list, callout, code, table, diagram, keytakeaways,
+interview, practice`), one `exercise` (`prompt + hints[3] + solution + why`),
+`quiz[]`, `summary`, `next`. Every course JSON carries: `subtitle, audience,
+outcomes[], prereqSlugs[], technologies[], skills[], assessment[],
+passScore (70), project, interviewQs[], version, contentStatus
+(draft|review|published)`.
+
+`lessonCount`, `totalMinutes`, `xpTotal` are **computed from lesson rows** —
+the codebase never stores them by hand.
+
+---
+
+## 5. Architecture
+
+```mermaid
+flowchart LR
+    JSON["content/courses/*/course.json<br/>lessons/*.json (source of truth)"]
+    SEED["bun content/seed-courses.ts<br/>(idempotent upserts)"]
+    DB[("SQLite + Prisma<br/>Course / Lesson / ResourceItem<br/>Category / AnalyticsEvent")]
+    API["Next.js API routes<br/>/api/courses, /lessons,<br/>/resources, /analytics"]
+    UI["App Router UI<br/>CourseView, LessonBlocks,<br/>simulators, admin console"]
+
+    JSON --> SEED --> DB --> API --> UI
+    UI -- "lesson_view, quiz_attempt,<br/>assessment_pass…" --> DB
+    DB -- "dashboard aggregations<br/>(KPIs, funnels, series)" --> UI
+```
+
+**Key files**
+
+- `src/lib/courses.ts` — server data layer + defensive JSON parsing
+- `src/components/platform/lesson/LessonBlocks.tsx` — block → component renderer
+- `src/components/charts/*` — `ChartCard, StatKpi, ProgressRing, ActivityHeatmap…`
+- `src/lib/platform.ts` — catalog queries, rate limiting, `getAnalyticsSummary()`, `getAnalyticsDashboard(range)`
+- `src/lib/library-store.ts` — zustand-persisted learner library (saved, completions, lesson/assessment records, streaks)
+
+**API surface** (`src/app/api`)
+
+| Route | Purpose |
+|---|---|
+| `GET /api/categories`, `GET /api/categories/[id]` | Hub + explorer data |
+| `GET /api/resources`, `/[id]`, `/bulk` | Catalog CRUD (admin-gated writes) |
+| `GET /api/courses/[slug]` | Course meta + computed totals + lesson list |
+| `GET /api/courses/[slug]/lessons`, `/lessons/[order]` | Lesson bodies, quizzes, exercises |
+| `POST /api/analytics` | Rate-limited event intake (public) |
+| `GET /api/analytics` | Legacy summary (admin) |
+| `GET /api/analytics?view=dashboard&range=7d\|30d\|90d` | KPIs + deltas + sparklines, engagement series, top courses/simulators, funnel (admin) |
+
+Tracked event types: `category_view, card_click, item_view, search,
+simulator_view, challenge_complete, sandbox_deep_link, lesson_view,
+lesson_complete, quiz_attempt, assessment_pass`.
+
+---
+
+## 6. Quickstart
+
+Requires **[Bun](https://bun.sh) 1.2+** (package manager + runtime).
 
 ```bash
-# 1. Install
 bun install
 
-# 2. Configure — create a `.env` file:
-# DATABASE_URL="file:./db/dev.db"
-# ADMIN_PASSWORD="choose-a-strong-password"
+# create .env:
+#   DATABASE_URL="file:./db/dev.db"
+#   ADMIN_PASSWORD="choose-a-strong-password"
 
-# 3. Database + catalog seed
-bunx prisma db push
-bun prisma/seed.ts          # categories, catalog items, roadmaps, simulators
+bunx prisma db push          # create SQLite schema
+bun prisma/seed.ts           # categories, catalog, roadmaps, simulators
+bun content/seed-courses.ts  # course JSON → DB (re-run after any content edit)
 
-# 4. Course content seed (repeat any time content/*.json changes)
-bun content/seed-courses.ts
-
-# 5. Run
-bun run dev                 # http://localhost:3000
+bun run dev                  # http://localhost:3000
 ```
 
 Production:
 
 ```bash
-bun run build
-bun run start
+bun run build && bun run start
 ```
 
-## 📁 Project structure
+Quality gates (all must pass): `bunx tsc --noEmit` · `bun run lint` ·
+`bunx next build`. First-party analytics never break the request path, and
+admin writes are gated by `x-admin-key` or the signed `devpath_admin` cookie.
 
-```
-content/courses/<slug>/   versioned course.json + lessons/*.json (source of truth)
-content/seed-courses.ts   idempotent content → DB sync
-prisma/seed.ts            catalog, roadmaps, simulators, tracks
-src/app/                 routes: home, explorer, course, lesson, library, admin + /api
-src/components/charts/   ChartCard, StatKpi, ProgressRing, ActivityHeatmap, …
-src/components/platform/ HomeView, CourseView, lesson renderer, simulators, admin
-src/components/lesson/   exercise / quiz / block UI
-src/lib/                 courses, platform, tracks, simulators, analytics, stores
-docs/                    catalog audit, learning paths, overhaul prompt
-```
+---
 
-## ✍️ Authoring a course
+## 7. Authoring a new course (one chapter at a time)
 
-1. Add `content/courses/<your-slug>/course.json` (subtitle, audience, outcomes,
-   `prereqSlugs`, technologies, skills, assessment, project, interview Q&A).
-2. Add `lessons/01-*.json … N-*.json` — objective, why, blocks, exercise
-   (prompt + 3 hints + solution + why), quiz (4+ questions with explanations),
-   summary, next.
-3. `bun content/seed-courses.ts` and open `/?course=<your-slug>`.
-4. Keep `contentStatus: "draft"` until the course passes the checklist in
-   `docs/WEBSITE_OVERHAUL_PROMPT.md` §8 spirit: no placeholders, code verified,
-   quizzes explained, assessment + project included.
+1. Scaffold `content/courses/<slug>/course.json` with `contentStatus: "draft"`.
+2. Write **one lesson JSON at a time** — 800–2,500 words of blocks, one
+   meaningful exercise with 3 hints, 3–5 explained quiz questions.
+3. Run `bun content/seed-courses.ts`, open `/?course=<slug>&lesson=1`, read it
+   like a learner.
+4. Finish with: full assessment (10–20 questions), capstone project spec,
+   interview Q&A — then flip to `"published"`.
 
-Block types the renderer supports: `h, p, list, callout, code, table, diagram,
-keytakeaways, interview, practice`.
+Conventions: `feat(content): …` for course work, `feat(ui): …` for interface,
+`chore(config): …` for tooling; content and UI stay in separate commits.
 
-## 📈 Analytics events
+---
 
-First-party, rate-limited `POST /api/analytics` with types:
-`category_view, card_click, item_view, search, simulator_view,
-challenge_complete, sandbox_deep_link, lesson_view, lesson_complete,
-quiz_attempt, assessment_pass`. Aggregations feed both the learner dashboard
-and the admin console.
+## 8. Docs & roadmap
 
-## 🔑 Admin access
+- [`docs/COURSE_CATALOG_AUDIT.md`](docs/COURSE_CATALOG_AUDIT.md) — 85-course truth table, coverage priorities
+- [`docs/LEARNING_PATHS.md`](docs/LEARNING_PATHS.md) — prerequisite graph, take-order paths
+- [`docs/WEBSITE_OVERHAUL_PROMPT.md`](docs/WEBSITE_OVERHAUL_PROMPT.md) — the visual/design master spec (tokens → charts → pages → dashboards)
 
-Open the admin console in the app and sign in with `ADMIN_PASSWORD`
-(header `x-admin-key` also works for API access).
-
-## 📜 Available scripts
-
-| Command                  | What it does                              |
-| ------------------------ | ----------------------------------------- |
-| `bun run dev`            | Dev server on :3000                       |
-| `bun run build` / `start`| Production build / serve                  |
-| `bun run lint`           | ESLint                                    |
-| `bunx tsc --noEmit`      | Typecheck                                 |
-| `bunx prisma db push`    | Sync schema to SQLite                     |
-| `bun prisma/seed.ts`     | Seed catalog content                      |
-| `bun content/seed-courses.ts` | Sync course JSON into the DB         |
-
-## 📖 Docs
-
-- `docs/COURSE_CATALOG_AUDIT.md` — full 85-course catalog truth table
-- `docs/LEARNING_PATHS.md` — prerequisite graph & recommended order
-- `docs/WEBSITE_OVERHAUL_PROMPT.md` — visual/design master spec
-
-## 🤝 Contributing
-
-1. Create a feature branch from `main`.
-2. Keep content and UI changes in separate commits (content = `feat(content): …`).
-3. Verify `bunx tsc --noEmit`, `bun run lint`, and `bunx next build` before pushing.
-4. Never commit `.env`, `*.db`, or local tool artifacts (already git-ignored).
+**Now building, in order:** `sql-intermediate` chapters → Home + Courses
+explorer visual overhaul → Course detail + Lesson view restyle → My Library
+learner dashboard → Admin analytics charts → simulator landing polish.
