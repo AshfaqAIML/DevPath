@@ -16,7 +16,7 @@
 | # | Badge | How | Status | Next action |
 |---|---|---|---|---|
 | 1 | ⚡ **Quickdraw** (one-time) | Close an issue/PR **within 5 min** of opening it | ⬜ | Open issue → close it immediately on github.com (60-second job, see recipe) |
-| 2 | 🤝 **Pair Extraordinaire** (1/10/24/48) | Merge a PR containing a commit with a `Co-authored-by: NAME <email>` trailer | ⬜ | Next feature branch: commit with trailer → open PR → merge (needs a real collaborator) |
+| 2 | 🤝 **Pair Extraordinaire** (1/10/24/48) | Merge a PR containing a commit with a `Co-authored-by: NAME <email>` trailer | ⬜ | Strategy 2026-10-06: owner has **two GitHub accounts** — second account acts as co-author. Next feature branch gets the trailer → PR → merge. (Still need: 2nd account username + email) |
 | 3 | ❤️ **Heart On Your Sleeve** | React with ❤️ to anything on GitHub | ⬜ | ❤️-react a release, discussion, or comment (10 seconds) |
 | 4 | ⭐ **Starstruck** (16/128/512/4096) | Own a repo with 16+ stars (base) | ⬜ | Polish DevPath surface: topics, About blurb, social preview; share link |
 | 5 | 🌍 **Open Sourcerer** | Get PRs merged in **>1 public repo** | ⬜ | 1 small PR to any other public repo (typo fix / docs counts) |
