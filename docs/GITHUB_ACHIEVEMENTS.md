@@ -20,7 +20,7 @@ earliest-allowed — slipping later is always fine, earlier is not.
 
 | Date (earliest) | Badge | Action |
 |---|---|---|
-| 2026-10-06 | — | No new badges (YOLO/Pull Shark era; trackers + docs commits only) |
+| 2026-10-06 | ⚡ Quickdraw | ✅ EARNED 2026-10-06 (opened + closed same-day) |
 | 2026-10-10 (+4d) | ⚡ Quickdraw | Open + immediately close one issue |
 | 2026-10-28 (+18d) | ❤️ Heart On Your Sleeve | ❤️-react one comment/release |
 | 2026-11-20 (+23d) | 🤝 Pair Extraordinaire (base) | Merge co-authored PR (needs 2nd-account details first) |
