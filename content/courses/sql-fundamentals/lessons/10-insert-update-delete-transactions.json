@@ -1,0 +1,152 @@
+{
+  "title": "Beyond SELECT: INSERT, UPDATE, DELETE & Transactions",
+  "slug": "10-insert-update-delete-transactions",
+  "objective": "After this lesson you will be able to write INSERT, UPDATE and DELETE statements with the WHERE-first safety discipline, wrap multi-step changes in transactions with BEGIN / COMMIT / ROLLBACK, and explain ACID — the four guarantees that make databases trustworthy under failure.",
+  "why": "Every query so far has been read-only — and the sandbox is deliberately read-only too, because the moment you can *change* data, a whole risk class opens up: UPDATE without a WHERE clause rewrites every row; DELETE without one empties the table; a crash mid-way through a multi-step change leaves data half-migrated. The professional response isn't fear, it's discipline: write the WHERE before the SET, preview the blast radius, and wrap mutations in transactions so they're reversible until you commit. These are the operations behind every API write, every seed script, and every 2 a.m. incident where the question is 'can we undo it?' — and the answer is 'yes, because they ran it in a transaction'.",
+  "minutes": 21,
+  "xp": 85,
+  "blocks": [
+    { "t": "h", "text": "The read-only sandbox and why this lesson still runs" },
+    { "t": "p", "text": "The DevPath SQL Query Sandbox executes SELECT only — by design, so a teaching playground can't lose its own data. This lesson's statements are real, standard SQL that runs in any engine (SQLite, PostgreSQL, MySQL); you'll read them, write them, and reason about their effects, and the exercises check your reasoning rather than execution. That's honest about how mutation should be *approached* anyway: the discipline starts before the first statement runs — preview, scope, wrap." },
+    { "t": "h", "text": "INSERT: rows are born" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Full form: name the columns you're supplying (always do this)\nINSERT INTO developers (name, role, level, country, hours_studied)\nVALUES ('Ravi Patel', 'backend', 'Beginner', 'India', 0);\n\n-- Multi-row insert: one statement, several rows\nINSERT INTO courses (title, topic, level, hours, price, published)\nVALUES\n  ('GraphQL in Production', 'backend',   'Intermediate', 12, 49, 1),\n  ('Bash for DevOps',       'tools',     'Beginner',      5,  0, 1);",
+      "caption": "id and defaults fill themselves: the PK auto-assigns, hours_studied takes DEFAULT 0"
+    },
+    { "t": "p", "text": "The one habit that separates professionals: **always name the columns** in the INSERT list. `INSERT INTO developers VALUES (...)` positional form silently depends on the table's column order — add a column later and every such insert either errors or, worse, puts data in the wrong slot. Named columns make the statement self-documenting and immune to column additions. The id was omitted deliberately: the primary key auto-assigns (Lesson 9's INTEGER PRIMARY KEY), and constraints do their jobs — NOT NULL columns you skip cause a rejection, DEFAULT columns fill themselves (note the second insert omits nothing, but Ravi's insert leaned on hours_studied's DEFAULT 0)." },
+    { "t": "h", "text": "UPDATE: the clause that demands a WHERE" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Scoped: promote exactly one developer (the WHERE targets her id)\nUPDATE developers\nSET level = 'Advanced'\nWHERE id = 3;   -- Priya Sharma\n\n-- Multi-column: promotion with the hours to prove it\nUPDATE developers\nSET level = 'Advanced', hours_studied = hours_studied + 50\nWHERE name = 'Liam Murphy';\n\n-- ⚠ The disaster: no WHERE — EVERY row matches\nUPDATE developers\nSET level = 'Advanced';   -- 14 promotions nobody earned",
+      "highlight": [16, 17]
+    },
+    { "t": "p", "text": "UPDATE rewrites matching rows' values, and **matching means WHERE — no WHERE means every row qualifies**. The set clause can be literal or an expression over the row's own values (`hours_studied + 50` reads the current row). The safety ritual that makes this boring instead of terrifying: (1) write the WHERE first, from the business sentence; (2) preview it — run the same condition as a SELECT and eyeball exactly the rows that will change; (3) run the UPDATE and check the reported row count against the preview; (4) wrap it in a transaction (below) so a surprise is a ROLLBACK, not a restore-from-backup." },
+    {
+      "t": "callout",
+      "variant": "danger",
+      "title": "The one-liner that has ended careers",
+      "text": "DELETE FROM users; and UPDATE users SET role = 'admin'; — both valid, both instant, both unbounded. WHERE is not optional syntax; it is the difference between 'retire this record' and 'retire the table'. The realistic defenses, in layers: the WHERE-first habit, the SELECT preview, the transaction wrap — and at the platform level, DELETE rate alerts and backups that have actually been restore-tested. When a migration script contains an unbounded mutation, the code review must catch it; that's not paranoia, that's the job."
+    },
+    { "t": "h", "text": "DELETE: rows retire (tables survive)" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Retire the abandoned enrollment (progress never moved)\nDELETE FROM enrollments\nWHERE progress = 0 AND completed = 0;\n\n-- In this dataset: no rows match (lowest in-flight progress is 30) —\n-- a DELETE matching zero rows is valid and silently does nothing.\n\n-- Deleting a developer who still has enrollments? The FK blocks it\n-- (or cascades, if the table declared ON DELETE CASCADE):\nDELETE FROM developers WHERE id = 1;   -- Maya's 3 enrollments object"
+    },
+    { "t": "p", "text": "DELETE removes rows; the table, its schema, and its constraints remain (dropping the whole structure is a different statement — DROP TABLE, the true point of no return). Note the two quiet behaviors: a DELETE whose WHERE matches nothing is legal and changes nothing (your first instinct after running one should be to check the affected-row count), and Lesson 9's foreign keys constrain deletes — the engine refuses to orphan Maya's enrollments, or cascades them away if that's what the schema declared. **DELETE vs TRUNCATE**: TRUNCATE empties a table wholesale in one shot — faster, but it cannot carry a WHERE, so it belongs in test setups and bulk reloads, never near data anyone wants." },
+    { "t": "h", "text": "Transactions: the all-or-nothing wrapper" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "BEGIN TRANSACTION;\n\nUPDATE enrollments SET completed = 1, progress = 100\nWHERE developer_id = 7 AND course_id = 12;\n\nUPDATE developers SET hours_studied = hours_studied + 10\nWHERE id = 7;\n\n-- Inspect: did both do what you expected?\n-- Yes → COMMIT TRANSACTION;   (changes become permanent & visible)\n-- No  → ROLLBACK TRANSACTION; (both changes vanish, as if never run)",
+      "caption": "Two updates that must succeed together — the transaction makes that a law, not a hope"
+    },
+    { "t": "p", "text": "A **transaction** groups statements into one atomic unit: until COMMIT, its changes are staged where other connections can't see them; ROLLBACK discards them entirely. The example's two updates are a business invariant — 'completing a course' and 'crediting the study hours' must happen together; without the wrapper, a crash between the two statements leaves Amara with a completion and no credit (or the reverse). With it, the crash leaves *neither*: clean, consistent, retryable. That guarantee has a name and three siblings — the **ACID** contract:" },
+    { "t": "table", "headers": ["Letter", "Guarantee", "What it means when things go wrong"], "rows": [
+      ["Atomicity", "All or nothing", "A crash mid-transaction leaves zero of its effects applied"],
+      ["Consistency", "Constraints hold", "No statement sequence can land the data in a state the schema forbids"],
+      ["Isolation", "Concurrent ≠ entangled", "Two transactions acting simultaneously behave as if one ran after the other"],
+      ["Durability", "Committed = survives", "After COMMIT returns, a power cut doesn't lose the change"]
+    ] },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Auto-commit: the invisible default",
+      "text": "In most interactive tools every statement runs in its own implicit transaction — auto-commit. That's why SELECTs never need BEGIN. The moment statements must agree with each other, you say BEGIN yourself and auto-commit waits. One more real-world nuance: transactions are not a free 'undo buffer' for unbounded time — long-running transactions hold locks and block other writers, so the pattern is short transactions, quick decisions: BEGIN, mutate, verify, COMMIT/ROLLBACK. In application code the same wrapper appears as BEGIN/COMMIT calls or an ORM's transaction() helper — same semantics, different spelling."
+    },
+    { "t": "h", "text": "The mutation checklist" },
+    { "t": "list", "ordered": true, "items": [
+      "**Translate the business sentence into a WHERE clause first.** 'Retire the test enrollments under 30% progress' → WHERE progress < 30 AND completed = 0. If the sentence has no scope, the *sentence* is broken — fix that before the SQL.",
+      "**Preview the blast radius.** Run the identical WHERE as SELECT COUNT(*) (and eyeball a few rows). Zero rows when you expected hundreds means your condition is wrong *before* it becomes a silent no-op in production.",
+      "**Wrap in BEGIN.** Run the mutation(s), verify the affected-row count and spot-check the data, then COMMIT — or ROLLBACK and be grateful.",
+      "**For bulk work: batch.** A million-row UPDATE in one transaction is one giant lock; in batches of a few thousand (page through by id), it's a series of small, survivable steps — a mistake costs one batch, not the table.",
+      "**Have the reversal plan.** A backup that's been restore-tested, or the inverse mutation written and ready. 'We can restore' you've verified is a plan; 'we have backups' is a hope."
+    ] },
+    {
+      "t": "practice",
+      "query": "SELECT id, developer_id, course_id, progress, completed\nFROM enrollments\nWHERE progress < 30 AND completed = 0;",
+      "note": "The preview step of 'retire abandoned enrollments': this SELECT is exactly the rows the DELETE would remove — Aisha's 30%-progress enrollment is the only one under 30, and the condition as written (< 30) excludes it. Previewing catches boundary mistakes before they mutate."
+    },
+    { "t": "keytakeaways", "items": [
+      "INSERT with named columns is self-documenting and immune to column-order changes; PKs auto-assign, constraints and defaults do their jobs",
+      "UPDATE and DELETE are unbounded without WHERE — write the WHERE first, preview it as a SELECT, then mutate",
+      "A DELETE matching zero rows is legal and silent — always check the affected-row count",
+      "Transactions (BEGIN / COMMIT / ROLLBACK) make multi-statement changes atomic and reversible until commit — short and deliberate, never long-running",
+      "ACID — atomicity, consistency, isolation, durability — is the contract that makes databases trustworthy under crashes and concurrency"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "A bug report lands: 'Amara Okafor (id 7) finished Git Branching Workflows (course 12) but the platform shows 90%.' Write the two statements that fix the *data* (mark her enrollment completed with progress 100, and credit her developer record's hours_studied by the course's remaining 10% — the course is 5 hours, so 10% is 0.5 hours; hours_studied is INTEGER, so decide honestly what to do about the fraction). Then write the full safe sequence: BEGIN, both updates, the verification SELECTs you'd run before COMMIT, and the ROLLBACK trigger condition. State the expected affected-row count of each statement (this is the reasoning exercise the read-only sandbox can grade).",
+    "hints": [
+      "Enrollment lookup: WHERE developer_id = 7 AND course_id = 12 — the pair identifies the row (its natural key); UPDATE enrollments SET completed = 1, progress = 100 with that WHERE. Expected affected rows: 1.",
+      "The hours credit: UPDATE developers SET hours_studied = hours_studied + ??? WHERE id = 7. The honest fraction decision: 0.5 hours can't be stored in an INTEGER column — options are +0 (under-credit, defensible: 'integer hours only'), +1 (over-credit), or a schema change to REAL (out of scope for a data fix). Pick one and say why — the *decision* is the exercise, and 'the column's type constrains what fixes are possible' is the Lesson 9 tie-in.",
+      "Verification before COMMIT: SELECT progress, completed FROM enrollments WHERE developer_id = 7 AND course_id = 12 (expect 100, 1) and SELECT hours_studied FROM developers WHERE id = 7 (expect 224 + your decision). ROLLBACK if either is wrong — or if either UPDATE reports a row count other than 1."
+    ],
+    "solution": "BEGIN TRANSACTION;\n\nUPDATE enrollments\nSET completed = 1, progress = 100\nWHERE developer_id = 7 AND course_id = 12;   -- 1 row affected\n\nUPDATE developers\nSET hours_studied = hours_studied + 1        -- +0 or +1; 0.5 impossible in INTEGER\nWHERE id = 7;                                -- 1 row affected\n\n-- Verification (before deciding COMMIT vs ROLLBACK):\nSELECT progress, completed\nFROM enrollments WHERE developer_id = 7 AND course_id = 12;  -- expect 100, 1\nSELECT hours_studied FROM developers WHERE id = 7;           -- expect 225 (or 224)\n\nCOMMIT TRANSACTION;\n-- ROLLBACK instead if: any affected-row count ≠ 1,\n-- or either verification SELECT shows unexpected values.",
+    "why": "Every layer of the course lands in one small fix: the natural key (developer, course) targets exactly one enrollment; the WHERE-first discipline scopes both updates; the transaction makes 'mark complete' and 'credit hours' atomic — a crash between them can't leave Amara half-fixed; the verification SELECTs are the preview habit applied to mutation; and the hours fraction forces a real schema-informed decision (INTEGER column → credit whole hours and document the policy, because silent rounding is how reports drift from reality). Expected counts: 1 row per UPDATE, matching the preview — any other number means your WHERE found something you didn't intend, and that's precisely when you ROLLBACK.",
+    "code": "-- Read me as a plan (the sandbox is read-only by design)\nBEGIN TRANSACTION;\nUPDATE enrollments SET completed = 1, progress = 100\nWHERE developer_id = 7 AND course_id = 12;\nUPDATE developers SET hours_studied = hours_studied + 1\nWHERE id = 7;\nCOMMIT;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "UPDATE developers SET level = 'Intermediate'; — how many rows change?",
+      "options": [
+        "None — UPDATE requires a WHERE clause to parse",
+        "All 14 — no WHERE means every row matches; the 6 already-Intermediate rows are 'updated' to the same value",
+        "One random row — UPDATE picks the first match",
+        "Only the Beginners — the engine infers the intended scope"
+      ],
+      "answer": 1,
+      "explain": "Unbounded is unambiguous: without WHERE, the condition is effectively 'true for every row'. The engine will not infer your intent, hesitate, or warn — 14 rows change, and the 6 that were already Intermediate are rewritten with identical values (which still fires triggers and can matter for replication). WHERE-first, preview, transaction."
+    },
+    {
+      "q": "Your migration runs BEGIN; UPDATE A; UPDATE B; — then the server loses power. On restart, what is the state?",
+      "options": [
+        "Both updates survived — the BEGIN reserved their permanence",
+        "Neither — the transaction never committed, so atomicity requires the whole unit to vanish",
+        "Only UPDATE A survived — first come, first durable",
+        "The database is corrupted and needs restoring"
+      ],
+      "answer": 1,
+      "explain": "Atomicity: an uncommitted transaction's effects are rolled back automatically at recovery. That's the guarantee that makes multi-statement invariants safe — 'complete the enrollment AND credit the hours' either both happened or neither did. Durability only switches on at COMMIT; that's precisely the division of labor between the A and the D."
+    },
+    {
+      "q": "INSERT INTO enrollments VALUES (29, 99, 1, 50, 0); fails with a foreign-key violation. Why, and what's the professional fix?",
+      "options": [
+        "Progress 50 is invalid — must be 0 or 100",
+        "developer_id 99 references no developer — the FK constraint rejects dangling references; insert the developer first (or fix the id), because the constraint is protecting your data's integrity, not obstructing you",
+        "The table is full at 28 rows",
+        "VALUES requires column names"
+      ],
+      "answer": 1,
+      "explain": "Lesson 9's declared FK, enforced at write time: the engine refuses to store an enrollment for a developer who doesn't exist — otherwise Lesson 8's joins would start NULL-padding against your will. The fix is to make the referenced row real first, in the same transaction if the two inserts belong together."
+    },
+    {
+      "q": "Why is DELETE FROM enrollments WHERE progress < 30 AND completed = 0; safe to be 'wrong' about row count, in a way the unbounded version never is?",
+      "options": [
+        "It isn't — all DELETES are equally dangerous",
+        "It's scoped: worst case it removes exactly the rows its WHERE describes (previewable as a SELECT), while the unbounded version's blast radius is the whole table",
+        "Because DELETE with WHERE runs slower, giving you time to cancel",
+        "Because progress can't go below 30"
+      ],
+      "answer": 1,
+      "explain": "Scoped mutations are previewable mutations: the identical WHERE in a SELECT shows you exactly the victims before any harm. That's the entire safety model — not that scoped statements can't be wrong, but that their wrongness is bounded by a condition you can read and test. The unbounded form has no boundary to inspect."
+    },
+    {
+      "q": "A teammate wraps a 3-hour bulk migration in a single transaction ('so it's all-or-nothing!'). What's the actual trade-off they've signed up for?",
+      "options": [
+        "None — longer transactions are strictly safer",
+        "Long transactions hold locks and block concurrent writers for the duration; the batched alternative (short transactions over id ranges) trades 'all-or-nothing' for 'survivable partial progress' — usually the right trade for bulk work",
+        "The transaction will auto-commit at some timeout anyway",
+        "ACID guarantees expire after one hour"
+      ],
+      "answer": 1,
+      "explain": "Atomicity and availability pull against each other: the bigger the unit, the longer the locks, the more everything else waits. Migration practice lands on batches — each one atomic, each one small, progress resumable — with the migration's own bookkeeping (a 'done up to id X' marker) providing the restart logic. 'All-or-nothing for three hours' usually means 'nothing else can write for three hours'."
+    }
+  ],
+  "summary": "Mutation is where SQL stops being a reporting language and becomes the system of record's gatekeeper: INSERT with named columns, UPDATE and DELETE under a WHERE you wrote first and previewed as a SELECT, and transactions — BEGIN, verify, COMMIT or ROLLBACK — making multi-step changes atomic and mistakes survivable. ACID names the guarantees (atomic, consistent, isolated, durable) that let databases hold the truth while everything around them crashes. You have now covered the full arc: reading (projection, filtering, sorting), summarizing (aggregates, grouping), combining (joins), designing (keys, constraints, normalization), and writing safely. The final assessment is next — then the capstone.",
+  "next": "Ten lessons, one pipeline, one sandbox's worth of muscle memory. The final assessment checks the whole arc with twelve questions at a 70% bar — then the Engagement Report capstone turns you from someone who can run queries into someone who can answer questions. Take your time, and when a question surprises you, revisit the lesson it came from: surprise is just the feeling of a mental model updating."
+}

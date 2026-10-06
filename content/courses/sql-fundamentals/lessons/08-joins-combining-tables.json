@@ -1,0 +1,142 @@
+{
+  "title": "JOINs: Combining Tables",
+  "slug": "08-joins-combining-tables",
+  "objective": "After this lesson you will be able to join two and three tables with INNER JOIN (with table aliases), predict when a join multiplies rows, use LEFT JOIN to find unmatched rows, and explain why well-designed databases force you to join — on purpose.",
+  "why": "This is the lesson the whole course has been aimed at. The dataset's central question — 'who completed which course?' — is literally unanswerable from any single table: enrollments holds the relationship but only as numbers. Joins turn those numbers into answers, and they are the #1 differentiator between developers who can and can't work with real databases. Master this and the analytics queries of the capstone project become translation exercises; skip it and every multi-table question needs someone else's help. Also: the sandbox's final mission is a three-table join — this lesson is its walkthrough.",
+  "minutes": 22,
+  "xp": 90,
+  "blocks": [
+    { "t": "h", "text": "Why the data is split in the first place" },
+    { "t": "p", "text": "Look at the `enrollments` table: `id, developer_id, course_id, progress, completed` — no names, no titles, just numbers referencing rows in other tables. This isn't an inconvenience; it's **the** design decision of relational databases (Lesson 9 makes it formal). If enrollment rows stored 'Priya Sharma' and 'TypeScript Fundamentals' as text, renaming Priya would mean editing every enrollment she's ever had, missing one would corrupt the data, and the database couldn't help you enforce anything. Splitting facts across tables and referencing them by key keeps each fact in exactly one place — and joins are the price you happily pay for that integrity." },
+    { "t": "diagram", "caption": "The relationship the numbers encode", "nodes": ["developers (14 rows)", "id 3 = Priya Sharma", "enrollments (28 rows)", "developer_id 3, course_id 1, progress 100", "courses (16 rows)", "id 1 = TypeScript Fundamentals"] },
+    { "t": "h", "text": "INNER JOIN: match rows on a condition" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Who is enrolled in what? The two-table join:\nSELECT d.name, e.progress, e.completed\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id;",
+      "caption": "28 rows — every enrollment now carries its developer's name"
+    },
+    { "t": "p", "text": "Anatomy first. `FROM enrollments e` gives the table a one-letter **alias** (Lesson 2's renaming, now doing real work) so every column reference can say *which* table it means: `e.progress` is enrollments' progress, `d.id` is developers' id. `JOIN developers d ON d.id = e.developer_id` is the contract: for each enrollment row, find the developer row whose id equals that enrollment's developer_id, and **emit one combined row**. The ON clause is a condition evaluated per pair — and it's almost always an equality between a **primary key** on one side (`d.id`) and a **foreign key** on the other (`e.developer_id`)." },
+    { "t": "p", "text": "INNER JOIN keeps only rows where the ON condition matched on both sides — unmatched rows on either side vanish. Here every enrollment finds its developer (the data is consistent — that's the foreign key doing its job), so all 28 rows survive. The keyword INNER is optional (`JOIN` alone means INNER); write it when the inner-ness is load-bearing for the reader." },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "The row-multiplication surprise",
+      "text": "Join output size is 'left rows × matching right rows per left row'. One enrollment matches exactly one developer — 28 in, 28 out. But join on something non-unique and the count explodes: join developers to developers ON country and Japan's pair (Kenji, Yuki) matches each other — 14 rows in, 16 out (the two Japanese devs each match 2). A report that 'suddenly has more rows than the table' is almost always a join on a non-key. When in doubt: compare COUNT(*) before and after."
+    },
+    { "t": "h", "text": "The three-table join — the platform's central question" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Who COMPLETED which COURSE? Names, titles, and the filter:\nSELECT d.name, c.title\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c     ON c.id = e.course_id\nWHERE e.completed = 1;",
+      "caption": "20 rows — every completion with human-readable names on both ends"
+    },
+    { "t": "p", "text": "Chaining joins composes: the first join produces enrollment+developer rows; the second joins *that* intermediate table to courses on `c.id = e.course_id`. Three tables, one pipeline — and every clause you already know applies to the joined result: WHERE filters combined rows, ORDER BY sorts them, GROUP BY buckets them (the capstone's 'completions per developer' query is this join plus COUNT and GROUP BY d.name). Run this exact query in the sandbox — it is mission six's solution, and now you can *read* it rather than recall it: start at enrollments (the fact table), pull in the two dimension tables by key, filter the fact." },
+    {
+      "t": "practice",
+      "query": "SELECT d.name, c.title, c.topic\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c ON c.id = e.course_id\nWHERE e.completed = 1 AND c.topic = 'frontend'",
+      "note": "Completions of frontend courses: 8 rows. The breakdown: 2 React Hooks (Maya, Elena), 2 CSS Layout (Liam, Marcus), 2 TypeScript Fundamentals (Priya, Amara), 1 Tailwind (Maya), 1 Accessibility (Diego) — notice Maya Chen completed both React Hooks AND Tailwind."
+    },
+    { "t": "h", "text": "LEFT JOIN: keep the unmatched" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Which courses has NOBODY enrolled in?\nSELECT c.title, c.published\nFROM courses c\nLEFT JOIN enrollments e ON e.course_id = c.id\nWHERE e.id IS NULL;",
+      "caption": "2 rows: Rust for JavaScript Devs (unpublished), Security Essentials (unpublished) — the catalog's dark corners"
+    },
+    { "t": "p", "text": "LEFT JOIN keeps **every row from the left table**, and when no right-side row matches, it emits the left row anyway with **every right-side column set to NULL** — the join 'manufactures' NULLs where the match is missing. That manufactured NULL is a *signal*: `WHERE e.id IS NULL` filters to exactly the unmatched left rows, answering 'which courses have zero enrollments' in one query. This pattern — LEFT JOIN + IS NULL on the right's key — is called an **anti-join**, and it's the professional answer to every 'show me what's missing' question: customers without orders, users without a profile, courses without enrollments. Notice it's also Lesson 3's NULL logic finally earning its keep: IS NULL is the *only* test that matches those padded rows." },
+    { "t": "p", "text": "Contrast the two joins' philosophies: INNER JOIN answers 'what relationships exist?' (and hides everything else); LEFT JOIN answers 'what about the left side — including its missing relationships?' Which table is 'left' matters completely: `courses LEFT JOIN enrollments` keeps all 16 courses; `enrollments LEFT JOIN courses` would keep all 28 enrollments (and find enrollments pointing at missing courses — a data-quality probe!). RIGHT JOIN exists (mirror image) and FULL OUTER JOIN keeps both sides — but in practice most teams write LEFT-only and order their tables accordingly, because reading one direction consistently is easier for the whole team." },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "The join-writing habit",
+      "text": "1. Start FROM the table whose rows you want one output row per (the fact table for 'list every X', the dimension for 'find missing X'). 2. JOIN each table you need, aliasing d/e/c-style. 3. State every ON as key-equality with the columns' full names. 4. Add WHERE/ORDER/LIMIT on the *combined* rows. If a query feels tangled, it's usually step 1 that's wrong — you started from the wrong table."
+    },
+    { "t": "h", "text": "Joins meet GROUP BY" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- The completions leaderboard: joins + grouping\nSELECT d.name, COUNT(*) AS courses_completed\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nWHERE e.completed = 1\nGROUP BY d.name\nORDER BY courses_completed DESC, d.name ASC\nLIMIT 3;",
+      "caption": "Elena Novak 3, Priya Sharma 3 — then a tie broken alphabetically, Maya Chen 2"
+    },
+    { "t": "p", "text": "This is the capstone's Query 2 in miniature and the shape of most real analytics SQL: **join to attach labels, then group to count**. Note the grouping key is `d.name` — a column from the *joined* table, which is fine (it's a column of the combined rows). The subtle production version would group by `d.id` and select `d.name` — id is the unique key so the grouping is exact even if two developers share a name; grouping by name would merge them. A detail today, a dashboard-correctness bug at work — the habit of grouping by the key is free to start now." },
+    { "t": "keytakeaways", "items": [
+      "Joins combine rows from tables whose relationship is stored as key references; ON states the match condition — almost always key equality (PK = FK)",
+      "Table aliases (e, d, c) qualify every column so both sides' columns stay unambiguous",
+      "INNER JOIN keeps matched pairs only; output size = left rows × matches per row — joining on non-keys multiplies rows",
+      "LEFT JOIN keeps every left row, NULL-padding the right side — LEFT JOIN + WHERE right.key IS NULL (anti-join) finds unmatched rows: the missing-enrollments/missing-orders pattern",
+      "Join first, then aggregate: GROUP BY a column from the joined table — and prefer grouping by the unique key, selecting the label"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Operations asks the opposite of the leaderboard: 'Who has work in flight, and on what?' — the in-progress enrollments (completed = 0) with developer name, course title, and progress, sorted by progress descending, top 5. Then the twist that makes this exercise: also determine (one query, anti-join) which developers have NO work in flight and NO completions either — developers absent from enrollments entirely. Expected: 8 rows for the first query (top 5 shown after sorting: 90, 72, 64, 60, 55), and a possibly surprising answer for the second — check the data before you predict.",
+    "hints": [
+      "First query: the three-table INNER JOIN from this lesson with WHERE e.completed = 0, ORDER BY e.progress DESC, LIMIT 5. Progress values in flight: 90, 72, 64, 60, 55, 45, 38, 30.",
+      "Second query: developers LEFT JOIN enrollments ON e.developer_id = d.id WHERE e.id IS NULL — keep developers, find those with no matching enrollment.",
+      "Every developer id 1–14 appears in enrollments EXCEPT... run the anti-join: 0 rows. Everyone has at least one enrollment! That's a data insight, not a dead end — the answer to 'who is absent?' is 'nobody'; report that honestly, and note which developer has zero *completions* — Yuki Sato, whose two enrollments are both in flight (90% Git Branching, 60% TypeScript Fundamentals)."
+    ],
+    "solution": "-- Part 1: in-flight work, most advanced first\nSELECT d.name, c.title, e.progress\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c     ON c.id = e.course_id\nWHERE e.completed = 0\nORDER BY e.progress DESC\nLIMIT 5;\n\n-- Part 2: developers with no enrollments at all (anti-join)\nSELECT d.name\nFROM developers d\nLEFT JOIN enrollments e ON e.developer_id = d.id\nWHERE e.id IS NULL;\n-- → 0 rows: every developer is enrolled in something.",
+    "why": "Part 1 is the workhorse pattern — join for labels, WHERE for the fact, sort and trim. The top 5: Yuki Sato 90% (Git Branching Workflows), Maya Chen 72% (Performance Profiling), Kenji Tanaka 64% (Postgres Indexing), Yuki Sato 60% (TypeScript Fundamentals), Liam Murphy 55% (Tailwind in Production). Part 2 is the anti-join returning zero rows — and that's the exercise's real lesson: a well-run platform has no idle developers, and 'empty result' is a *finding*, not a failure. The query is still correct and still cheap; verifying coverage with an anti-join is a standard data-quality probe (it would instantly catch a developer created but never enrolled — an onboarding bug). Bonus observation: Yuki Sato's two enrollments are both in flight — zero completions, 90% and 60% progress — the classic 'active newcomer' signature.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT d.name, c.title, e.progress\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c     ON c.id = e.course_id\nWHERE e.completed = 0\nORDER BY e.progress DESC\nLIMIT 5;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "What does the ON clause of JOIN developers d ON d.id = e.developer_id specify?",
+      "options": [
+        "The order in which rows are returned",
+        "The match condition: an enrollment row combines with the developer row whose id equals its developer_id",
+        "A rename of developers to d",
+        "That developer_id must be unique"
+      ],
+      "answer": 1,
+      "explain": "ON is the pairing rule evaluated for potential row combinations — nearly always key equality, PK on one side, FK on the other. It is NOT a filter of the result (that's WHERE's job, and the distinction matters: a condition in ON vs WHERE changes results only for outer joins)."
+    },
+    {
+      "q": "JOIN developers d2 ON d2.country = d.country (developers to itself) returns more rows than the table has. Why?",
+      "options": [
+        "Self-joins always double the row count",
+        "The ON key isn't unique per row — country repeats, so each developer matches every same-country developer: Japan's pair matches each other and themselves",
+        "The engine adds a NULL row per developer",
+        "Country comparisons are case-insensitive"
+      ],
+      "answer": 1,
+      "explain": "Row multiplication: output rows = sum over left rows of (matching right rows). On a unique key that's 1 per row; on country it's the country's developer count per developer. It's the signature symptom of joining on a non-key — and the reason COUNT(*) sanity checks belong in every join's first run."
+    },
+    {
+      "q": "Which query finds courses with zero enrollments?",
+      "options": [
+        "SELECT title FROM courses WHERE course_id IS NULL",
+        "SELECT c.title FROM courses c JOIN enrollments e ON e.course_id = c.id WHERE e.course_id IS NULL",
+        "SELECT c.title FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id WHERE e.id IS NULL",
+        "SELECT title FROM courses GROUP BY title HAVING COUNT(*) = 0"
+      ],
+      "answer": 2,
+      "explain": "The anti-join: LEFT JOIN preserves all courses, NULL-pads the enrollments side when no match, and WHERE e.id IS NULL keeps exactly the padded (unmatched) rows. Option 3-style queries return the right answer here (Rust for JavaScript Devs, Security Essentials). Option 4 is impossible — GROUP BY produces one row per existing group; groups with zero rows never appear."
+    },
+    {
+      "q": "You switch a query from JOIN courses to LEFT JOIN courses and the row count grows from 20 to 22. What were the 2 extra rows?",
+      "options": [
+        "Duplicate completions caused by the join direction",
+        "Left-side rows with no course match, NULL-padded — in this dataset, enrollments all match courses, so more likely you changed which table is left: 22 = the 20 completions PLUS 2 rows only LEFT preserves",
+        "LEFT JOIN adds a summary row",
+        "The engine included draft rows it shouldn't have"
+      ],
+      "answer": 1,
+      "explain": "The general law: LEFT JOIN's row count ≥ INNER JOIN's (it's INNER's rows + unmatched left rows). If the count grew, some left rows had no match and appeared NULL-padded. Diagnose by inspecting which columns are NULL in the extras — the NULL side tells you which relationship is missing. (If enrollments is the left table and every enrollment matches a course, a count change means you actually swapped table order — always check what's 'left'.)"
+    },
+    {
+      "q": "Why does SELECT d.name, COUNT(*) FROM enrollments e JOIN developers d ON d.id = e.developer_id GROUP BY d.name prefer grouping by d.name only as a shortcut, while production code groups by d.id?",
+      "options": [
+        "d.name is faster to compute",
+        "Two developers with the same name would be merged into one group under d.name; d.id is unique per developer, so grouping is exact — the name is just the label you select",
+        "GROUP BY requires text columns",
+        "d.id cannot appear in GROUP BY"
+      ],
+      "answer": 1,
+      "explain": "The grouping key defines the buckets: two 'Alex Rivera's are one bucket by name, two by id. Grouping by the unique key and selecting the human label is the production discipline — on this 14-developer teaching set names happen to be unique, which is exactly why bad habits feel safe in demos and bite in production."
+    }
+  ],
+  "summary": "Joins convert key references into combined rows: INNER JOIN emits matched pairs (row count = left rows × matches — beware non-key joins multiplying rows), and chained joins compose three-table answers like 'who completed which course' — the sandbox's final mission, now readable rather than memorized. LEFT JOIN preserves every left row with NULL padding, and LEFT JOIN + IS NULL (the anti-join) answers every 'what's missing' question. Join for labels, then group by the key and aggregate: that pipeline is the analytics half of the capstone. What remains is the design half — how to build tables worth joining.",
+  "next": "You've spent eight lessons *reading* tables someone else designed. Now design them yourself: primary keys that give rows identity, foreign keys that make relationships enforceable, column types that keep data honest, and the normalization logic that decides what goes in which table — so that the joins of Lesson 8 are pleasant rather than painful."
+}

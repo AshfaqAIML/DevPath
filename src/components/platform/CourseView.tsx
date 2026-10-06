@@ -13,14 +13,14 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Clock, Compass,
-  Flag, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
+  Database, Flag, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
 } from "lucide-react";
 
 import type { CourseView as Course, LessonView } from "@/lib/course-types";
 import type { ResourceItemView, CategoryView } from "@/lib/platform";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import { trackEvent } from "./platform-data";
-import { LessonBlocks, renderInline, InterviewQuestion } from "./lesson/LessonBlocks";
+import { LessonBlocks, renderInline, InterviewQuestion, practiceHref } from "./lesson/LessonBlocks";
 import { QuizCard } from "./lesson/QuizCard";
 import { ExerciseCard } from "./lesson/ExerciseCard";
 import { getAccent } from "@/lib/accent";
@@ -215,7 +215,7 @@ export function CourseView({ course, item, category, initialLesson }: CourseView
               <Compass className="h-3.5 w-3.5" aria-hidden="true" />
               Curriculum
             </p>
-            <ol className="space-y-1">
+            <ol className="space-y-1.5">
               {course.lessons.map((l) => {
                 const isCurrent = tab === l.order;
                 const isDone = completedLessons.includes(l.order);
@@ -223,27 +223,36 @@ export function CourseView({ course, item, category, initialLesson }: CourseView
                   <li key={l.id}>
                     <Link
                       href={lessonHref(course.courseSlug, l.order)}
-                      className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${
+                      className={`group/cur flex items-start gap-2.5 rounded-lg px-2.5 py-2.5 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${
                         isCurrent
-                          ? `${accent.text} font-semibold ${course.lessonCount ? "" : ""} bg-accent/10`
-                          : "text-foreground/80 hover:bg-muted/70"
+                          ? `${accent.text} font-semibold bg-accent/10`
+                          : "text-foreground/85 hover:bg-muted/80 hover:text-foreground"
                       }`}
                       aria-current={isCurrent ? "page" : undefined}
                     >
                       <span
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-semibold ${
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-semibold transition-colors ${
                           isDone
                             ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                             : isCurrent
                               ? `border-current ${accent.text}`
-                              : "border-border text-muted-foreground"
+                              : "border-border text-muted-foreground group-hover/cur:border-muted-foreground/70 group-hover/cur:text-foreground/70"
                         }`}
                         aria-hidden="true"
                       >
                         {isDone ? <Check className="h-3 w-3" /> : l.order}
                       </span>
                       <span className="flex-1 leading-snug">{l.title}</span>
-                      <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground sm:inline">
+                      {l.hasPractice ? (
+                        <span
+                          className="mt-0.5 shrink-0 text-teal-500/70"
+                          title="Live sandbox practice in this lesson"
+                          aria-label="Includes live sandbox practice"
+                        >
+                          <Database className="h-3 w-3" aria-hidden="true" />
+                        </span>
+                      ) : null}
+                      <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground/80 sm:inline">
                         {l.minutes}m
                       </span>
                     </Link>
@@ -416,6 +425,38 @@ function CourseOverview({
         ) : null}
       </div>
 
+      {/* Live sandbox pairing — data-driven: rendered when any lesson carries
+          a practice deep-link block (SQL course ↔ SQL Query Sandbox). */}
+      {course.lessons.some((l) => l.hasPractice) ? (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.07] via-transparent to-transparent p-5"
+          aria-labelledby="sandbox-pairing-title"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 id="sandbox-pairing-title" className="mb-1.5 flex items-center gap-2 text-base font-semibold text-foreground">
+                <Database className="h-4 w-4 text-teal-500" aria-hidden="true" />
+                Live sandbox practice
+              </h2>
+              <p className="text-sm leading-relaxed text-foreground/85">
+                This course pairs with the SQL Query Sandbox: lessons hand you runnable queries
+                that open straight in a live editor — run them, tweak them, break them on purpose.
+              </p>
+            </div>
+            <Link
+              href={practiceHref("SELECT name, role, hours_studied\nFROM developers\nORDER BY hours_studied DESC\nLIMIT 5;")}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition-transform hover:scale-[1.02] hover:bg-teal-500 active:scale-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
+            >
+              <Database className="h-4 w-4" aria-hidden="true" />
+              Open the sandbox
+            </Link>
+          </div>
+        </motion.section>
+      ) : null}
+
       {/* Final assessment + project teaser */}
       <div className="grid gap-6 md:grid-cols-2">
         <section className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.06] to-transparent p-5">
@@ -473,6 +514,43 @@ function CourseOverview({
 
 // ---------------------------------------------------------------------------
 
+/** Thin scroll-progress bar for lesson reading (fixed at the viewport top). */
+function ReadingProgress({ articleRef }: { articleRef: React.RefObject<HTMLElement | null> }) {
+  const [progress, setProgress] = React.useState(0);
+  React.useEffect(() => {
+    const onScroll = () => {
+      const el = articleRef.current;
+      if (!el) return;
+      const start = el.offsetTop - 120;
+      const span = Math.max(1, el.offsetHeight - window.innerHeight / 3);
+      const p = Math.min(1, Math.max(0, (window.scrollY - start) / span));
+      setProgress(p);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [articleRef]);
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-0 top-0 z-40 h-0.5"
+      role="progressbar"
+      aria-label="Lesson reading progress"
+      aria-valuenow={Math.round(progress * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className="h-full bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400 transition-[width] duration-150"
+        style={{ width: `${progress * 100}%` }}
+      />
+    </div>
+  );
+}
+
 function LessonPane({
   course,
   order,
@@ -496,9 +574,14 @@ function LessonPane({
     trackEvent("lesson_view", course.courseSlug, `lesson-${order}`);
   }, [course.courseSlug, order]);
 
+  const articleRef = React.useRef<HTMLElement | null>(null);
   const lesson = data?.lesson;
   const isDone = completedLessons.includes(order);
   const hasNext = order < course.lessonCount;
+  const practiceCount = React.useMemo(
+    () => lesson?.blocks.filter((b) => b.t === "practice").length ?? 0,
+    [lesson]
+  );
 
   if (isLoading) {
     return (
@@ -530,13 +613,16 @@ function LessonPane({
   }
 
   return (
-    <motion.article
-      key={order}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className="max-w-[46rem]"
-    >
+    <>
+      <ReadingProgress articleRef={articleRef} />
+      <motion.article
+        key={order}
+        ref={articleRef}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="max-w-[46rem]"
+      >
       {/* Lesson header */}
       <header className="mb-6">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
@@ -551,6 +637,12 @@ function LessonPane({
             <Zap className="h-3 w-3" aria-hidden="true" />
             {lesson.xp} XP
           </span>
+          {practiceCount > 0 ? (
+            <span className="flex items-center gap-1 rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 font-medium text-teal-600 dark:text-teal-400">
+              <Database className="h-3 w-3" aria-hidden="true" />
+              {practiceCount} sandbox {practiceCount === 1 ? "exercise" : "exercises"}
+            </span>
+          ) : null}
           {isDone ? (
             <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" aria-hidden="true" />
@@ -572,7 +664,7 @@ function LessonPane({
           </div>
         ) : null}
         {lesson.why ? (
-          <div className="mt-3 px-4 text-sm leading-relaxed text-muted-foreground">
+          <div className="mt-3 border-l-2 border-border/70 pl-4 text-sm leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground/80">Why this matters — </span>
             {renderInline(lesson.why, "why")}
           </div>
@@ -681,6 +773,7 @@ function LessonPane({
         </div>
       </footer>
     </motion.article>
+    </>
   );
 }
 

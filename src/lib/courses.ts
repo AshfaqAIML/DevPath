@@ -55,7 +55,8 @@ export type ContentBlock =
   | { t: "table"; headers: string[]; rows: string[][] }
   | { t: "diagram"; caption?: string; nodes: string[] }
   | { t: "keytakeaways"; title?: string; items: string[] }
-  | { t: "interview"; q: string; a: string };
+  | { t: "interview"; q: string; a: string }
+  | { t: "practice"; query: string; note?: string; title?: string };
 
 // ---------------------------------------------------------------------------
 // View types returned by the APIs
@@ -71,6 +72,8 @@ export type LessonSummary = {
   published: boolean;
   quizCount: number;
   hasExercise: boolean;
+  /** True when any block is a live-sandbox practice deep-link. */
+  hasPractice: boolean;
 };
 
 export type LessonView = LessonSummary & {
@@ -174,6 +177,11 @@ export function parseBlocks(raw: string): ContentBlock[] {
   );
 }
 
+/** Does this lesson contain a live-sandbox practice block? */
+function hasPracticeBlock(raw: string): boolean {
+  return parseBlocks(raw).some((b) => b.t === "practice");
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 
@@ -225,6 +233,7 @@ export async function getCourse(
         published: l.published,
         quizCount,
         hasExercise: parseExercise(l.exercise) !== null,
+        hasPractice: hasPracticeBlock(l.blocks),
       };
     });
 
@@ -283,6 +292,7 @@ export async function getLesson(
     published: lesson.published,
     quizCount: parseQuiz(lesson.quiz).length,
     hasExercise: parseExercise(lesson.exercise) !== null,
+    hasPractice: hasPracticeBlock(lesson.blocks),
     blocks: parseBlocks(lesson.blocks),
     exercise: parseExercise(lesson.exercise),
     quiz: parseQuiz(lesson.quiz),

@@ -9,6 +9,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -430,6 +431,7 @@ let historyId = 0;
 export function SqlLab({ item, category }: SqlLabProps) {
   const { toast } = useToast();
   const hydrated = useLibraryHydrated();
+  const searchParams = useSearchParams();
   // Select the stable record reference; derive the array outside the selector.
   const simProgressMap = useLibrary((s) => s.simProgress);
   const completeChallenge = useLibrary((s) => s.completeChallenge);
@@ -464,6 +466,24 @@ export function SqlLab({ item, category }: SqlLabProps) {
       categoryAccent: category.accent,
     });
   }, [item, category, pushRecent]);
+
+  // Deep-link support: /?view=simulator&sim=sql-query-sandbox&q=<query> pre-fills
+  // the editor — practice cards in SQL course lessons link here with a lesson
+  // query. Applied once per mount so later edits are never overwritten.
+  const appliedDeepLink = React.useRef(false);
+  React.useEffect(() => {
+    if (appliedDeepLink.current) return;
+    const q = searchParams.get("q");
+    if (q && q.trim().length > 0) {
+      appliedDeepLink.current = true;
+      setSql(q);
+      trackEvent("sandbox_deep_link", item.slug, "lesson-practice");
+      toast({
+        title: "Query loaded from lesson",
+        description: "It's in the editor — press ⌘/Ctrl+Enter (or Run) to execute it.",
+      });
+    }
+  }, [searchParams, toast, item.slug]);
 
   const runQuery = React.useCallback(() => {
     const t0 = performance.now();

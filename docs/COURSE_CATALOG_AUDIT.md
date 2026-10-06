@@ -8,10 +8,14 @@ content is independently authored; no proprietary text, examples, quizzes or bra
 
 - **44 published courses** (+1 draft: Zig Fundamentals) in the `courses` category.
 - Level split: 22 Beginner / 11 Intermediate / 11 Advanced (seed cycles levels).
-- Course content status: **1 of 44 has complete lesson content today** (`typescript-in-2-hours`,
-  8 lessons + final assessment + capstone project). The remaining 43 are catalog entries
-  awaiting content — the content engine (`Course`/`Lesson` models + APIs + renderer) is built
-  and each new course is ~1 content file away.
+- Course content status: **2 of 44 have complete lesson content today**
+  (`typescript-in-2-hours`, 8 lessons + final assessment + capstone project;
+  `sql-fundamentals`, 10 lessons + 12-question assessment + capstone project +
+  49 lesson quiz questions, 192 minutes, 765 XP — every example query runs in
+  the SQL Query Sandbox via the `practice` block deep-links). The remaining 42
+  are catalog entries awaiting content — the content engine
+  (`Course`/`Lesson` models + APIs + renderer) is built and each new course is
+  ~1 content file away.
 
 ## Domain grouping (from the discovered catalog)
 
@@ -51,7 +55,7 @@ content is independently authored; no proprietary text, examples, quizzes or bra
 18 | Express API Quickstart | Intermediate | 8 | Node.js Fundamentals | catalog only
 19 | REST API Design Basics | Intermediate | 8 | Express API Quickstart | catalog only
 20 | GraphQL Basics | Intermediate | 7 | REST API Design Basics | catalog only
-21 | SQL Fundamentals | Intermediate | 10 | — | catalog only
+21 | **SQL Fundamentals** | Intermediate | **10** | — | **COMPLETE — 10 lessons, 49 quiz questions, 12-question assessment, Engagement Report capstone, interview Q&A, sandbox practice deep-links**
 22 | PostgreSQL Quickstart | Beginner | 7 | SQL Fundamentals | catalog only
 23 | MongoDB in 2 Hours | Beginner | 7 | — | catalog only
 24 | Prisma ORM Crash Course | Advanced | 8 | SQL Fundamentals, Node.js | catalog only
@@ -84,9 +88,11 @@ broader 10–14). Counts are planned — final counts match actual authored cont
 
 1. **JavaScript Basics Refresher** — direct prerequisite of the completed TypeScript course;
    the highest-traffic gap (search "javascript" lands on it today with catalog-level depth).
-2. **SQL Fundamentals** — pairs with the live SQL Query Sandbox simulator (cross-category
-   reinforcement; lesson exercises can point at the sandbox).
-3. **Git & GitHub Foundations** — #1 featured course in the category, universal need.
-4. **Docker Foundations** — second featured course; pairs with Docker Compose.
-5. Then breadth: React Hooks → Node.js Fundamentals → CSS Flexbox (pairs with the Flexbox
+2. **Git & GitHub Foundations** — #1 featured course in the category, universal need.
+3. **Docker Foundations** — second featured course; pairs with Docker Compose.
+4. Then breadth: React Hooks → Node.js Fundamentals → CSS Flexbox (pairs with the Flexbox
    simulator) → REST API Design (pairs with the HTTP Lab simulator).
+
+Completed content: TypeScript in 2 Hours (✅ course 1), SQL Fundamentals (✅ course 2 —
+pairs with the SQL Query Sandbox; its lessons deep-link practice queries into the sandbox
+with `?q=` pre-fill).

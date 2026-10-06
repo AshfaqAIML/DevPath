@@ -1,0 +1,148 @@
+{
+  "title": "LIKE, IN & BETWEEN: The Ergonomic Filters",
+  "slug": "04-like-in-between",
+  "objective": "After this lesson you will be able to match text patterns with LIKE wildcards, test membership against a list with IN, and express inclusive ranges with BETWEEN — plus negate all three correctly and know their portability quirks.",
+  "why": "Lesson 3's exercise made you write hours_studied >= 400 AND hours_studied <= 700 and role != 'backend' by hand — honest work, but SQL grew dedicated syntax for exactly these shapes because they appear in every real query ever written. LIKE answers 'starts with…', 'contains…', 'exactly five letters…'. IN replaces OR chains that all test the same column. BETWEEN compresses paired bounds. Knowing them is not optional polish: un-grouped OR chains and hand-rolled ranges are where the precedence bugs of Lesson 3 breed.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "LIKE: two wildcards, a whole pattern language" },
+    { "t": "p", "text": "WHERE col LIKE 'pattern' matches text against a template containing exactly two wildcard characters: `%` (any run of characters, including none) and `_` (exactly one character). Everything else in the pattern matches itself. The four shapes you'll use constantly:" },
+    {
+      "t": "table",
+      "headers": ["Pattern", "Meaning", "Example match in developers"],
+      "rows": [
+        ["'M%'", "starts with M", "Maya Chen, Marcus Johnson"],
+        ["'%an%'", "contains 'an'", "Jonas Weber, Kenji Tanaka, Liam Murphy..."],
+        ["'_a%'", "second character is 'a'", "Maya Chen, Marcus Johnson, Nadia Petrova..."],
+        ["'Tan%'", "starts with Tan", "Kenji Tanaka"]
+      ]
+    },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Courses whose title contains 's' somewhere\nSELECT title, topic\nFROM courses\nWHERE title LIKE '%s%';\n\n-- Titles whose second letter is 'e'\nSELECT title\nFROM courses\nWHERE title LIKE '_e%'\nORDER BY title;",
+      "caption": "The second query returns 4 courses: Performance Profiling, React Hooks Deep Dive, Security Essentials, Testing with Vitest"
+    },
+    { "t": "p", "text": "Count the wildcard letters carefully — it's the whole game. `'%a%'` needs an `a` *anywhere*; `'a%'` demands it *first*; `'_a%'` demands it *second*. And the per-query gotcha: **LIKE is case-insensitive in SQLite, MySQL and this sandbox; case-sensitive in PostgreSQL** (by default). `'M%'` matches 'Maya' in both engines; `'%maya%'` matches 'Maya Chen' here (verified: 1 row) but matches nothing in stock PostgreSQL. Know your engine — or write patterns that don't depend on case." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Escaping: matching a literal % or _",
+      "text": "If titles can contain underscores (user_handles, file_names), a pattern like 'a_%' can't tell wildcard from letter. The escape hatch is ESCAPE: WHERE handle LIKE 'a\\_%' ESCAPE '\\' — the backslash makes the next character literal. The escape character is your choice ('!' and '#' are common). You'll rarely need it, and the one day you do, you'll be the only person on the team who knows why the report suddenly matched everything."
+    },
+    { "t": "h", "text": "IN: membership in a list" },
+    { "t": "p", "text": "Testing one column against several allowed values is the most common filter shape in analytics ('these three countries', 'these statuses'). The OR chain works — `role = 'frontend' OR role = 'backend' OR role = 'fullstack'` — but it repeats the column, invites typos, and stacks ORs onto the precedence pile. `IN` says it once:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- The 'code-side developers': frontend, backend, fullstack\n-- (devops excluded — different career track)\nSELECT name, role, hours_studied\nFROM developers\nWHERE role IN ('frontend', 'backend', 'fullstack')\nORDER BY hours_studied DESC;",
+      "caption": "12 rows: everyone except Sofia Rossi and Tom Baker (the devops pair)"
+    },
+    { "t": "p", "text": "Three properties make IN safer than the OR chain it replaces. It reads as its meaning — a visible list of allowed values. It's commutative — the order of the list is irrelevant, no grouping ambiguity. And it scales — ten values in an IN list are still one condition, while ten ORs are a precedence minefield. The negation `NOT IN` flips it — with **one critical NULL caveat**:" },
+    {
+      "t": "callout",
+      "variant": "danger",
+      "title": "NOT IN meets NULL: the silent empty result",
+      "text": "If the value list (or the column being tested) contains a NULL, NOT IN can return zero rows even when 'nothing matches' seems impossible — by three-valued logic, 'x NOT IN (a, b, NULL)' evaluates to UNKNOWN for every row, because x might equal that unknown value. It's the WHERE-side twin of Lesson 3's = NULL trap. The robust pattern in real engines: NOT EXISTS or a LEFT JOIN ... IS NULL (Lesson 8's signature move). With literal value lists — the normal case — NOT IN is perfectly safe, because you control every element."
+    },
+    { "t": "h", "text": "BETWEEN: inclusive, both ends" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Lesson 3's exercise, compressed:\nSELECT name, role, level, hours_studied\nFROM developers\nWHERE hours_studied BETWEEN 400 AND 700\n  AND role IN ('frontend', 'fullstack', 'devops');\n\n-- Both bounds are INCLUDED: 400 and 700 both match.\n-- Text ranges work too (alphabetical):\nSELECT name\nFROM developers\nWHERE name BETWEEN 'A' AND 'D';",
+      "caption": "4 rows: Liam 402, Tom 465, Marcus 519, Priya 648 — Jonas (534) is backend, so the IN list drops him"
+    },
+    { "t": "p", "text": "`hours_studied BETWEEN 400 AND 700` is *exactly* `hours_studied >= 400 AND hours_studied <= 700` — same semantics, same plan, fewer tokens. The detail that bites: **both endpoints are inclusive**, unlike many programming ranges (`array.slice(1, 3)` excludes the end). BETWEEN 400 AND 699 would silently exclude exactly-700 values — the class of off-by-one that dashboards are built on. Text BETWEEN compares alphabetically: `'A' AND 'D'` catches names from A up to anything alphabetically ≤ 'D' — watch the surprise at boundary names like 'Diego' vs 'D' itself." },
+    {
+      "t": "practice",
+      "query": "SELECT name, role, level, hours_studied\nFROM developers\nWHERE hours_studied BETWEEN 400 AND 700\n  AND role IN ('frontend', 'fullstack', 'devops');",
+      "note": "Verify the survivors: Liam 402, Tom 465, Marcus 519, Priya 648 — plus one more? Jonas (534) is backend, excluded by the IN list. Exactly 4 rows."
+    },
+    { "t": "h", "text": "Choosing between the tools" },
+    { "t": "list", "items": [
+      "**Equality against one value** → `=`. Two to a handful of values, same column → `IN`. Ranges → `BETWEEN`, or paired comparisons when a bound is exclusive.",
+      "**Text shape questions** (starts with, contains, second letter) → `LIKE`. Exact text → `=`, never a LIKE without wildcards.",
+      "**Negations** → `NOT IN`, `NOT LIKE`, `NOT BETWEEN` all exist; each inherits the NULL caveats of its positive form. When a NOT filter returns suspiciously few rows, check for NULLs in the tested column before blaming the logic.",
+      "**Composability** → all three combine with AND/OR/NOT freely — and mixed AND/OR still needs the parentheses rule from Lesson 3. New syntax, same precedence law."
+    ] },
+    { "t": "keytakeaways", "items": [
+      "LIKE has exactly two wildcards: % = any run (including empty), _ = exactly one character",
+      "LIKE case behavior is engine-dependent: insensitive in SQLite/MySQL/this sandbox, sensitive by default in PostgreSQL",
+      "IN replaces same-column OR chains — safer, commutative, immune to precedence bugs",
+      "NOT IN with NULL anywhere in the list or column can silently match zero rows — three-valued logic again",
+      "BETWEEN is inclusive on both ends and works on text (alphabetical) as well as numbers"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "The support team needs 'our European code-side developers at Intermediate level, for a webinar at a Europe-friendly hour'. Translate: country is one of Germany, Italy, Ireland, Bulgaria, Czechia, United Kingdom; role is frontend, backend, or fullstack; level is exactly Intermediate. Return name, role, country. Expected: exactly 2 developers. Then a follow-up: a teammate suggests adding AND name LIKE '%e%' to 'keep the list tidy' — run both versions and decide whether that filter earns its place.",
+    "hints": [
+      "Three conditions, all AND: an IN list for country, an IN list for role, an = for level. Where does the name test belong — and is it actually required by the business question?",
+      "The LIKE pattern for 'contains e' is '%e%' (case question: 'E' — use lowercase 'e'; 'Weber', 'Rossi', 'Novak' all carry lowercase e).",
+      "The Europeans at Intermediate, code-side: Jonas Weber (backend, Germany) and Liam Murphy (frontend, Ireland). Tom Baker (UK) is devops — role filter; Elena Novak (Czechia) is Advanced, not Intermediate — level filter; Nadia Petrova (Bulgaria) is Beginner; Aisha Hassan (Egypt) and Marcus Johnson (US) fail the country list. The '%e%' filter drops neither Jonas nor Liam — both names contain 'e' — it's decorative."
+    ],
+    "solution": "SELECT name, role, country\nFROM developers\nWHERE country IN ('Germany', 'Italy', 'Ireland', 'Bulgaria', 'Czechia', 'United Kingdom')\n  AND role IN ('frontend', 'backend', 'fullstack')\n  AND level = 'Intermediate';",
+    "why": "The three real conditions are country membership, role membership, and level equality — IN for the lists, = for the single value, all conjunctive. The name filter turned out to be pure decoration: both qualifying rows already contain 'e', so it excluded nothing while making the query longer and the intent muddier. Filters should earn their place by excluding something real — a query you can't 'lose a condition from' is a query that says exactly what the business asked. (Jonas and Liam survive; Tom falls on role, Elena on level, Aisha and Marcus on country.)",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT name, role, country\nFROM developers\nWHERE country IN ('Germany', 'Italy', 'Ireland', 'Bulgaria', 'Czechia', 'United Kingdom')\n  AND role IN ('frontend', 'backend', 'fullstack')\n  AND level = 'Intermediate';",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "Which pattern matches exactly the titles that END in 's'?",
+      "options": [
+        "LIKE 's%'",
+        "LIKE '%s'",
+        "LIKE '%s%'",
+        "LIKE '_s'"
+      ],
+      "answer": 1,
+      "explain": "Trailing wildcard anchors the match to the end: '%s' = anything, then 's', then stop. 's%' anchors the start, '%s%' matches anywhere, '_s' is exactly two characters ending in s. Wildcard position IS the meaning."
+    },
+    {
+      "q": "WHERE hours_studied BETWEEN 400 AND 700 — which values match?",
+      "options": [
+        "401 to 699 — both ends exclusive",
+        "400 to 700 — both ends inclusive",
+        "400 to 699 — low end inclusive, high exclusive (like array slicing)",
+        "Whatever the planner decides"
+      ],
+      "answer": 1,
+      "explain": "BETWEEN a AND b ≡ col >= a AND col <= b — both bounds included. It's the deliberate opposite of most programming languages' half-open ranges, and it's the reason hand-checked dashboards sometimes disagree with queries by exactly one boundary row."
+    },
+    {
+      "q": "In this sandbox, LIKE '%maya%' matches 'Maya Chen'. In default PostgreSQL it does not. What's the honest one-line explanation for a teammate?",
+      "options": [
+        "PostgreSQL is broken for text search",
+        "LIKE case behavior is engine-defined: SQLite/MySQL fold case in LIKE, PostgreSQL does not — use LOWER(name) LIKE '%maya%' or ILIKE for portable case-insensitivity",
+        "You need double quotes for patterns in PostgreSQL",
+        "PostgreSQL stores text as bytes, and bytes can't match patterns"
+      ],
+      "answer": 1,
+      "explain": "It's a documented engine difference, not a bug: LIKE's case handling is implementation-defined territory. The portable fixes are LOWER() on both sides, PostgreSQL's ILIKE, or a case-insensitive collation. Migration week is when this quirk earns its rent."
+    },
+    {
+      "q": "NOT IN ('a', 'b') against a column containing a NULL row — what happens?",
+      "options": [
+        "The NULL row is returned — it's not in the list, so NOT IN is true",
+        "The NULL row is not returned — 'NULL NOT IN (a, b)' is UNKNOWN, not TRUE (the row might equal something unknown), so WHERE drops it",
+        "The whole query errors out",
+        "NOT IN converts NULL to 'a' first"
+      ],
+      "answer": 1,
+      "explain": "Three-valued logic again: NOT (x = a OR x = b OR x = NULL) — the last term is UNKNOWN, poisoning the disjunction, and NOT of UNKNOWN is still UNKNOWN. The row vanishes from the result without an error message. This is why production code often prefers NOT EXISTS or anti-joins over NOT IN."
+    },
+    {
+      "q": "You need 'roles other than devops and fullstack' — the safest formulation is:",
+      "options": [
+        "WHERE role != 'devops' OR role != 'fullstack' — every row passes at least one test",
+        "WHERE role != 'devops' AND role != 'fullstack'",
+        "WHERE role NOT BETWEEN 'devops' AND 'fullstack'",
+        "WHERE NOT role LIKE 'd%' AND NOT role LIKE 'f%'"
+      ],
+      "answer": 1,
+      "explain": "Option 1 is the classic negation trap: any non-devops passes the first test, any non-fullstack passes the second — their OR is true for EVERY row (devops fails only the first, passes the second). Excluding a set requires AND-ing the negations — which is precisely what NOT IN ('devops', 'fullstack') says in one keyword: NOT (member of the set)."
+    }
+  ],
+  "summary": "Three ergonomic filters now sit on your toolbelt: LIKE with its two wildcards (% = any run, _ = exactly one) for text shapes, with case behavior that depends on the engine; IN for membership lists, immune to the precedence bugs that OR chains breed; BETWEEN for inclusive-both-ends ranges on numbers and text alike. Their NOT-forms inherit three-valued logic's sharp edges — NOT IN with NULL is the famous silent-empty-result. You can now filter rows well; next you'll control what order they arrive in and how many you get — the clauses that turn a firehose into a leaderboard and a page.",
+  "next": "Queries so far return rows in whatever order the engine chose — undefined, unstable, and about to become a problem the moment someone asks 'top 5'. ORDER BY, LIMIT and OFFSET are the trio that fixes it: deterministic sorts, multi-column tiebreakers, and the paging pattern behind every 'next page' button you've ever clicked."
+}

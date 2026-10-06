@@ -1,0 +1,138 @@
+{
+  "title": "ORDER BY, LIMIT & OFFSET: Sorting and Paging",
+  "slug": "05-order-by-limit-offset",
+  "objective": "After this lesson you will be able to sort results deterministically with single and multi-column ORDER BY (with tiebreakers), grab top-N with LIMIT, and page through data with OFFSET — and explain why unordered results are a bug waiting to ship.",
+  "minutes": 18,
+  "xp": 70,
+  "why": "Every leaderboard, every 'top 10', every infinite-scroll page button, every 'show more' — all of it is ORDER BY plus LIMIT under the hood. But the deeper reason this lesson matters is a contract: without ORDER BY, SQL promises NOTHING about row order. Today your query happens to return insertion order. It will keep happening until the table grows, an index gets used, or a cache changes the plan — and then your 'first row' logic silently breaks in production. Deterministic queries say what they mean.",
+  "blocks": [
+    { "t": "h", "text": "ORDER BY: the only promise of order" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- The leaderboard: highest hours first\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC;\n\n-- Ascending is the default; ASC is optional but explicit is kind\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied ASC;",
+      "caption": "DESC gives Kenji 947, Maya 912, Sofia 871, Elena 783…; ASC flips to Nadia 158 first"
+    },
+    { "t": "p", "text": "The verb is deliberate: ORDER BY is a **sort specification**, not a wish. `DESC` (descending, biggest first) and `ASC` (ascending, default) set the direction per sort key. Text sorts alphabetically; numbers numerically — the same column type discipline you met in Lesson 1 quietly doing its job. And a query *without* ORDER BY has undefined order: not 'insertion order', not 'key order' — *undefined*, an implementation detail the engine is free to change. The professional reflex: any result whose order matters to a consumer gets an explicit ORDER BY, full stop." },
+    { "t": "h", "text": "Multi-column sorts and the tiebreaker discipline" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Sort by role, then hours within each role\nSELECT name, role, hours_studied\nFROM developers\nORDER BY role ASC, hours_studied DESC;\n\n-- Order by position: 2 means 'the second column in the SELECT list'\nSELECT name, hours_studied\nFROM developers\nORDER BY 2 DESC;",
+      "caption": "The positional form works but is brittle — add a column and 2 silently means something else"
+    },
+    { "t": "p", "text": "The first query groups by role alphabetically (backend, devops, frontend, fullstack) and *within* each role sorts by hours descending — the second key breaks ties of the first. This **tiebreaker discipline** is what makes sorts deterministic: one sort key with duplicate values (four backends, five frontends) leaves the order *within* the tie undefined unless a second key resolves it. For anything that pages (next lesson's OFFSET) or feeds a 'top N' list, the final tiebreaker is usually a unique column — the id or name — so the same page 1 is the same page 1 every time it's requested." },
+    { "t": "p", "text": "The positional form (`ORDER BY 2`) numbers the SELECT list instead of naming the column — legal SQL, shorter to type, and a maintenance trap: `SELECT name, role, hours_studied` reordered to `SELECT role, name, hours_studied` silently changes what `ORDER BY 2` sorts by. Real codebases name columns. One more sorting power move: **ORDER BY accepts aliases** — `ORDER BY full_days DESC` works on the alias you invented in Lesson 2, which is how you sort by computed values." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Where NULLs land",
+      "text": "Sorting is NULL's second act of weirdness: engines disagree where NULLs sort. SQLite (and this sandbox) put NULLs FIRST in ascending order; PostgreSQL puts them LAST ascending; you can override in real engines with NULLS FIRST / NULLS LAST. NULLs are coming from Lesson 8's LEFT JOINs — knowing where they land in your sort explains 'why is that weird row at the top'."
+    },
+    { "t": "h", "text": "LIMIT: the top-N clause" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- The podium: 3 most studious developers\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC\nLIMIT 3;\n\n-- With a tiebreaker so 'the top 3' is stable even if data changes:\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC, name ASC\nLIMIT 3;",
+      "caption": "Kenji 947, Maya 912, Sofia 871 — LIMIT trims AFTER the sort, never before"
+    },
+    { "t": "p", "text": "The order of operations in that query is the part to burn in: **sort everything, then cut**. LIMIT 3 without ORDER BY returns '3 arbitrary rows' — valid SQL, meaningless semantics. With ORDER BY it's a true top-3. This compose-after-sort pattern is why LIMIT is the last clause in every query you'll write. (This engine's dialect: `LIMIT n OFFSET m` — the sandbox and SQLite form. PostgreSQL and MySQL accept it too; SQL Server uses `TOP`/`FETCH` — the one clause family where dialects genuinely diverge.)" },
+    { "t": "h", "text": "OFFSET: paging through results" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Page 1: rows 1–5 (after sorting)\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC, name ASC\nLIMIT 5 OFFSET 0;\n\n-- Page 2: rows 6–10\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC, name ASC\nLIMIT 5 OFFSET 5;\n\n-- Page 3: rows 11–14 — only 4 left, that's fine\nSELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC, name ASC\nLIMIT 5 OFFSET 10;",
+      "caption": "OFFSET skips rows before LIMIT applies: page k is LIMIT 5 OFFSET (k-1)*5"
+    },
+    { "t": "p", "text": "OFFSET skips m rows *of the sorted result*, then LIMIT takes the next n. Pages compose from the formula `LIMIT pageSize OFFSET (page - 1) * pageSize` — page 1 is OFFSET 0, which you can also just omit. Page 3 here returns 4 rows, not 5: LIMIT is a *maximum*, and consumers of paged APIs handle the short final page. The determinism note from earlier becomes critical now: without a total tiebreaker, rows that tie across a page boundary can appear on *both* pages or neither — one more reason the id/name tiebreaker is standard practice." },
+    {
+      "t": "practice",
+      "query": "SELECT name, hours_studied\nFROM developers\nORDER BY hours_studied DESC, name ASC\nLIMIT 5 OFFSET 5;",
+      "note": "Page 2 of the leaderboard: rows 6–10 by hours. Check: it starts with Jonas Weber (534) and ends with Aisha Hassan (366) — Priya (648) was the last row of page 1."
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "OFFSET's dirty secret: it doesn't skip work",
+      "text": "OFFSET 100000 makes the engine sort and walk past 100000 rows just to hand you the next 20 — page 5000 of a large table costs as much as the whole table scan. For deep pagination at scale, production systems switch to keyset (a.k.a. seek) pagination: WHERE (hours, name) < (last seen values) ORDER BY ... LIMIT 20 — filtering instead of skipping, using an index. For the 14-row teaching dataset OFFSET is perfect; for the 14-million-row table it's the reason the API gets slow on page 500."
+    },
+    { "t": "keytakeaways", "items": [
+      "Without ORDER BY, row order is undefined — not insertion order, not key order; anything depending on order must request it",
+      "Multi-column ORDER BY: first key sorts, later keys break ties; final tiebreaker on a unique column makes sorts deterministic",
+      "ORDER BY accepts SELECT-list aliases (sort by computed values) and positional numbers (brittle — prefer names)",
+      "LIMIT is a maximum, applied after sorting; LIMIT without ORDER BY is 'n arbitrary rows'",
+      "OFFSET pages by skipping: LIMIT n OFFSET (page-1)*n — deep paging at scale needs keyset pagination instead"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Marketing wants a 'Fast starters' mail-out: the 3 Beginner-level developers with the highest hours_studied, breaking hour ties alphabetically by name, showing name, country, and hours_studied as a computed percentage of Kenji Tanaka's 947 (the platform record) — call the computed column pct_of_record. Verify before shipping: all three rows must have level Beginner, and the highest of them should be Amara Okafor.",
+    "hints": [
+      "Three jobs in one query: filter (WHERE level = 'Beginner'), compute (the percentage expression with an alias), and order-plus-trim (ORDER BY ... DESC with LIMIT 3).",
+      "The percentage: hours_studied / 947 * 100 AS pct_of_record — the alias is immediately usable in ORDER BY, but order by hours_studied DESC (same order, less rounding doubt).",
+      "Beginners by hours: Amara 224, Yuki 205, Diego 186, Nadia 158 — the top 3 are Amara, Yuki, Diego; no hour ties here, but the name tiebreaker costs nothing and documents intent."
+    ],
+    "solution": "SELECT name, country,\n       hours_studied / 947 * 100 AS pct_of_record\nFROM developers\nWHERE level = 'Beginner'\nORDER BY hours_studied DESC, name ASC\nLIMIT 3;",
+    "why": "One query, four jobs, each named: WHERE picks Beginner rows, SELECT computes the percentage per row (Lesson 2's expression engine), ORDER BY sorts with a tiebreaker that documents determinism, LIMIT trims after the sort. The 947 constant is honest — Kenji's record is a fact of this dataset — but note what it would mean in production: a baked-in constant silently goes stale when the record breaks. Real reports compute the record in a subquery; you'll meet that tool later, and now you know exactly which problem it solves.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT name, country,\n       hours_studied / 947 * 100 AS pct_of_record\nFROM developers\nWHERE level = 'Beginner'\nORDER BY hours_studied DESC, name ASC\nLIMIT 3;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "A teammate's LIMIT 1 query 'returns the newest row'. It worked for months, then started returning an old row after an index was added. Root cause?",
+      "options": [
+        "LIMIT 1 has a hidden cache",
+        "The query has no ORDER BY — LIMIT 1 just takes one arbitrary row, and the plan change (new index) changed which row happens to come first",
+        "Indexes delete old rows asynchronously",
+        "LIMIT 1 means 'first inserted' and the index corrupted it"
+      ],
+      "answer": 1,
+      "explain": "'LIMIT 1' + trust is the classic time-bomb: it means 'any one row' unless ORDER BY turns it into 'the row that sorts first'. The fix is ORDER BY created_at DESC LIMIT 1 (or id DESC as a proxy) — deterministic by construction, immune to plan changes."
+    },
+    {
+      "q": "ORDER BY role ASC, hours_studied DESC — what does the second key do?",
+      "options": [
+        "It re-sorts the entire result, overriding the first key",
+        "It breaks ties: among rows with equal role, hours decide the order",
+        "Nothing — only the first key is used",
+        "It sorts only the devops rows"
+      ],
+      "answer": 1,
+      "explain": "Later sort keys are tiebreakers, applied within the groups left tied by earlier keys — exactly the mental model of 'sort by X, then by Y' in any spreadsheet's multi-level sort. Deterministic output needs the tie chain to end at a unique column."
+    },
+    {
+      "q": "Page 4 of a page-size-10 listing is:",
+      "options": [
+        "LIMIT 10 OFFSET 4",
+        "LIMIT 10 OFFSET 30",
+        "LIMIT 40 OFFSET 10",
+        "LIMIT 30 OFFSET 40"
+      ],
+      "answer": 1,
+      "explain": "OFFSET skips (page-1)*size rows: page 4 skips the 30 rows of pages 1–3, then takes 10. The classic off-by-one: page 1 is OFFSET 0 — if your UI ever shows the first row twice, hunt for OFFSET 10 on page 1."
+    },
+    {
+      "q": "Why does deep OFFSET paging get slow on large tables?",
+      "options": [
+        "OFFSET rows are transferred to the client and discarded there",
+        "The engine must still produce and walk past all skipped rows — page 5000 pays the full cost of the first 5000 pages' worth of work",
+        "OFFSET disables parallelism",
+        "Each page re-opens a new database connection"
+      ],
+      "answer": 1,
+      "explain": "OFFSET is 'compute the prefix, throw it away'. The scalable alternative is keyset/seek pagination — WHERE (sortkey) < (last value seen) LIMIT n — which turns skipping into indexed filtering. Same UX, radically different cost curve."
+    },
+    {
+      "q": "SELECT name, hours_studied / 60 AS full_days FROM developers ORDER BY full_days DESC — is sorting by the alias legal and sensible?",
+      "options": [
+        "Illegal — ORDER BY only accepts stored column names",
+        "Legal and sensible: ORDER BY can reference SELECT-list aliases, which is exactly how you sort by computed values (positional ORDER BY 1 also exists but is brittle)",
+        "Legal but the sort ignores DESC for aliases",
+        "Only in SQLite — no other engine allows it"
+      ],
+      "answer": 1,
+      "explain": "Alias references in ORDER BY are standard SQL — and they're the ergonomic bridge between Lesson 2's expression engine and this lesson's ordering: compute a value, name it, sort by the name. The same does NOT hold inside WHERE (aliases aren't visible there — the expression must be repeated), a quirk that follows from the logical evaluation order."
+    }
+  ],
+  "summary": "ORDER BY is a promise: without it, order is undefined — with it, single and multi-key sorts become deterministic, especially with a final unique tiebreaker. LIMIT takes the top n after the sort (a maximum, not an exact count), and OFFSET pages by skipping — LIMIT n OFFSET (page-1)*n — with the keyset technique waiting in the wings for deep pages at scale. You now control columns, rows, order, and count: the complete shape of a result. What's missing is the ability to ask questions that span many rows at once — 'how many?', 'what's the average?' — which is where aggregates begin.",
+  "next": "Every query so far has operated row by row: filter, compute, sort, trim. But the questions businesses actually ask are 'how many users signed up', 'what's the average order value', 'which category sells best' — answers that summarize hundreds of rows into one. Time to collapse rows on purpose: aggregate functions, then GROUP BY, the clause that turns one summary into one summary per group."
+}

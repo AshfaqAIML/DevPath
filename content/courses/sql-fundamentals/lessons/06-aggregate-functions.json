@@ -1,0 +1,132 @@
+{
+  "title": "Aggregates: COUNT, SUM, AVG, MIN, MAX",
+  "slug": "06-aggregate-functions",
+  "objective": "After this lesson you will be able to summarize entire tables (or any filtered subset) with the five aggregate functions, predict exactly how each treats NULL, and diagnose the classic 'bare column next to an aggregate' error on sight.",
+  "why": "'How many users?', 'what's the total revenue?', 'what's the longest session?' — these are the questions that get SQL written in the real world, and they share one shape: many rows in, one value out. Aggregate functions are that shape. They also carry the two behaviors that most often surprise people: NULL handling (each function has a definite, slightly different policy) and the mixing rule (one aggregate value plus one raw column is a type error in spirit — and the error message you get is famously cryptic). Getting fluent here is the difference between writing reports and copy-pasting them.",
+  "minutes": 19,
+  "xp": 75,
+  "blocks": [
+    { "t": "h", "text": "One number from many rows" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "SELECT COUNT(*)            AS developers,\n       SUM(hours_studied)   AS total_hours,\n       AVG(hours_studied)   AS avg_hours,\n       MIN(hours_studied)   AS min_hours,\n       MAX(hours_studied)   AS max_hours\nFROM developers;",
+      "caption": "The whole developers table in one row: 14 · 7220 · 515.71… · 158 · 947"
+    },
+    { "t": "p", "text": "Run it in the sandbox and read the row like a dashboard: **14** developers have studied a total of **7220** hours, averaging **515.71…** hours each, from a low of **158** (Nadia Petrova) to a high of **947** (Kenji Tanaka). Every aggregate function takes a whole column's worth of values (from the rows the query selected — after WHERE!) and collapses them into a single result value. The output of an aggregate query with no GROUP BY is exactly one row, even if the input was fourteen, or fourteen million, or zero." },
+    { "t": "p", "text": "That last case matters: an aggregate over an **empty set** still returns one row — `COUNT(*)` of zero rows is 0, and the others come back as NULL (the sum of nothing isn't 0, it's 'unknown'... for SUM of empty set most engines return NULL; some return 0 — a portability footnote you can look up when an empty report shows NULL where you expected 0). Compare with a plain `SELECT name FROM developers` on zero rows: no rows at all. Aggregates always answer, even when the answer is 'nothing here'." },
+    { "t": "h", "text": "Aggregates respect WHERE" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Aggregate over a filtered subset: the frontend picture\nSELECT COUNT(*)          AS frontend_devs,\n       AVG(hours_studied) AS avg_hours\nFROM developers\nWHERE role = 'frontend';\n\n-- Two aggregates in one query via conditional filtering:\nSELECT COUNT(*) AS all_rows,\n       COUNT(*) AS published_rows\nFROM courses\nWHERE published = 1;",
+      "caption": "5 frontend devs average (912+186+402+205+519)/5 = 444.8 hours"
+    },
+    { "t": "p", "text": "The first query's aggregate sees only the 5 rows WHERE selected — **the filter runs before the aggregation** (a preview of the full evaluation-order picture in Lesson 7). The second query is a deliberate mistake to learn from: both columns count the same filtered set, so `published_rows` equals `all_rows` equals 14 — the second COUNT(*) knows nothing about 'published vs not'. If you wanted 16 and 14, you needed no WHERE and a conditional count — in real SQL, `SUM(CASE WHEN published = 1 THEN 1 ELSE 0 END)`, or GROUP BY (next lesson). The lesson: WHERE changes *which rows the aggregates see*, and two aggregates in one SELECT list see exactly the same rows." },
+    { "t": "h", "text": "The NULL policies — one table to remember" },
+    { "t": "p", "text": "Every aggregate except COUNT(*) **ignores NULLs**: they're excluded from the computation, not treated as zero. That's usually what you want — averaging incomes shouldn't count unknown incomes as 0 — but each function's exact behavior is worth one deliberate look:" },
+    { "t": "table", "headers": ["Function", "Empty input", "NULL policy", "Ask it…"], "rows": [
+      ["COUNT(*)", "0", "counts rows, NULLs and all", "how many rows are in this (filtered) table?"],
+      ["COUNT(col)", "0", "counts non-NULL values only", "how many rows have this fact filled in?"],
+      ["SUM(col)", "NULL", "sums non-NULL values", "what's the total?"],
+      ["AVG(col)", "NULL", "average of non-NULL values — the denominator shrinks", "what's the typical value?"],
+      ["MIN / MAX(col)", "NULL", "ignores NULLs", "what are the extremes?"]
+    ] },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "AVG's denominator is the quiet data bug",
+      "text": "AVG(hours_studied) with 10 known values and 4 NULLs divides by 10 — not 14. The average of 'known values' is usually the right question, but if NULL actually means 'zero hours' in your data's semantics, AVG silently overstates. When a report's average looks too high, check the NULL count first: SELECT COUNT(*) AS rows, COUNT(hours_studied) AS known FROM ... — the gap is your missing data."
+    },
+    { "t": "h", "text": "The mixing rule: one value, or many — never both" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- ⚠ The classic error-in-spirit:\nSELECT name, COUNT(*)\nFROM developers;\n-- One aggregate value (14) ... and fourteen names.\n-- Which name should the single output row carry? SQL refuses to guess.\n-- Real engines reject it ('must appear in the GROUP BY clause...');\n-- permissive engines pick an arbitrary row — worse, because it looks fine."
+    },
+    { "t": "p", "text": "The query asks for two things with incompatible shapes: COUNT(*) wants to emit one row, name wants to emit fourteen. SQL's answer is the rule you'll lean on for the rest of the course: **every column in a SELECT list with aggregates must itself be aggregated or grouped** (GROUP BY arrives next lesson and resolves exactly this tension — one row per *group*, with aggregates describing each group). Reading a broken report query almost always starts with this check: find the bare column, and you've found the bug." },
+    {
+      "t": "practice",
+      "query": "SELECT COUNT(*) AS published_courses,\n       SUM(hours) AS total_hours,\n       AVG(hours) AS avg_hours,\n       MIN(hours) AS shortest,\n       MAX(hours) AS longest\nFROM courses\nWHERE published = 1;",
+      "note": "The published catalog: 14 courses, 146 total hours, average ~10.43, from 5 (Git Branching) to 20 (Kubernetes Basics)."
+    },
+    { "t": "keytakeaways", "items": [
+      "Aggregates collapse many rows into one value; an aggregate query without GROUP BY always returns exactly one row",
+      "WHERE runs before aggregation — aggregates describe only the filtered rows; two aggregates in one SELECT see the same rows",
+      "COUNT(*) counts rows; every other aggregate (and COUNT(col)) ignores NULLs — AVG's denominator shrinks accordingly",
+      "Empty input: aggregates still answer — COUNT gives 0, the others give NULL",
+      "A bare column beside an aggregate is a shape mismatch — SQL (or your discipline) must resolve it with GROUP BY"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Finance asks two questions about the published catalog for the quarterly review. (1) 'What's the total price of the catalog?' — the sum of price over published courses. (2) 'How many are free?' — published courses that cost nothing (price = 0). Answer both in ONE query by computing: COUNT(*) AS published, SUM(price) AS catalog_value, plus a third column free_courses counting only the free ones — using the tools you have (hint: an aggregate can count an expression, not just a column... but if that's a stretch, two queries is an acceptable answer; state which you chose and why). Verify: catalog_value should be 500 and free_courses 4.",
+    "hints": [
+      "Filter first: WHERE published = 1 — both questions are about the published catalog only. Then think about what each aggregate needs to see.",
+      "COUNT(price) counts non-NULL prices — every row has a price, so that's just the row count. The free-count needs to count rows WHERE price = 0 — but a second WHERE can't be attached per column. That's the wall this exercise is designed to hit.",
+      "Two clean solutions: (a) two queries — SELECT COUNT(*) FROM courses WHERE published = 1 AND price = 0 for the free count; (b) one query with an expression aggregate: SUM(price = 0 ... ) isn't standard, but COUNT of a computed truthy value works in engines with booleans — the portable classic is SUM(CASE WHEN price = 0 THEN 1 ELSE 0 END). In this sandbox: simplest verifiable form is two queries, or SUM(price = 0) is not supported — use CASE form in real engines, and say so in your write-up."
+    ],
+    "solution": "-- Query A: the published catalog's value and size\nSELECT COUNT(*)      AS published,\n       SUM(price)    AS catalog_value\nFROM courses\nWHERE published = 1;\n\n-- Query B: the free tier\nSELECT COUNT(*) AS free_courses\nFROM courses\nWHERE published = 1\n  AND price = 0;\n\n-- (In real engines, one query does it with a conditional aggregate:\n--  SUM(CASE WHEN price = 0 THEN 1 ELSE 0 END) AS free_courses)",
+    "why": "The two-query answer is honest: each question is a row-set (a WHERE shape), and one SELECT list cannot contain two different row-sets — that's the deep reason for the exercise, and the exact tension GROUP BY and conditional aggregation resolve later. The numbers check out: published courses 1–13 and 15 (14 rows) sum to 0+29+49+0+59+49+0+69+39+79+29+0+29+69 = 500, and exactly four are free (TypeScript Fundamentals, Accessibility in Practice, SQL Joins Explained, Git Branching Workflows). The CASE trick is the production pattern — worth having seen before you need it.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT COUNT(*)   AS published,\n       SUM(price) AS catalog_value\nFROM courses\nWHERE published = 1;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "SELECT COUNT(*) FROM developers WHERE role = 'devops' returns…?",
+      "options": [
+        "0 rows — there are devops rows, so it returns their columns",
+        "One row with the value 2 (Sofia Rossi and Tom Baker)",
+        "One row with the value 14",
+        "An error — COUNT requires GROUP BY"
+      ],
+      "answer": 1,
+      "explain": "Aggregate queries always return exactly one row — and the aggregate saw only the WHERE-filtered set: 2 devops developers. Filter, then collapse: the evaluation order is the whole story."
+    },
+    {
+      "q": "A table has 200 rows; email is NULL in 50 of them. COUNT(email) returns…",
+      "options": [
+        "200 — COUNT counts rows like COUNT(*)",
+        "150 — COUNT(column) counts only non-NULL values",
+        "50 — it counts the NULLs",
+        "An error — NULL columns cannot be counted"
+      ],
+      "answer": 1,
+      "explain": "COUNT(col) counts known values: 150. The gap between COUNT(*) and COUNT(col) is a free data-quality metric — 'how many users never gave us an email' — no extra query needed."
+    },
+    {
+      "q": "A sessions table has 10 rows with durations [5, 10, 15, NULL, 20, 25, NULL, 30, 35, 40]. AVG(duration) is…",
+      "options": [
+        "18 — NULLs count as 0 and the denominator is 10",
+        "22.5 — NULLs are skipped: 180 total over 8 known values",
+        "NULL — any NULL poisons the average",
+        "20 — NULLs are replaced by the median"
+      ],
+      "answer": 1,
+      "explain": "AVG ignores NULLs entirely: both numerator (5+10+15+20+25+30+35+40 = 180) and denominator (8). 'Any NULL poisons everything' is true of *comparisons* (Lesson 3), not of aggregates — the two NULL behaviors most people blend together."
+    },
+    {
+      "q": "SELECT name, MAX(hours_studied) FROM developers; — what's the problem?",
+      "options": [
+        "MAX cannot be combined with WHERE in the same query",
+        "Shape mismatch: MAX produces one value, name produces fourteen — SQL demands every non-aggregated column be grouped (next lesson), or the engine picks an arbitrary name (worse)",
+        "Nothing — it returns Kenji Tanaka and 947, which is the intended pair",
+        "MAX requires the column to be sorted first"
+      ],
+      "answer": 1,
+      "explain": "The output row can hold one name; the query names fourteen. Strict engines reject it with the famous 'must appear in the GROUP BY clause or be used in an aggregate' error; permissive ones (SQLite, MySQL historically) grab *some* row's name — which happens to be right just often enough to become a production bug. If you need the row that holds the max, that's a top-1 pattern: ORDER BY hours_studied DESC LIMIT 1."
+    },
+    {
+      "q": "Why does SELECT COUNT(*) FROM courses WHERE published = 1 AND COUNT(*) WHERE price = 0 in one query 'not compile', conceptually?",
+      "options": [
+        "COUNT(*) can only appear once per query",
+        "One SELECT list describes ONE row-set; the two counts need two different WHERE filters (two row-sets) — resolve with two queries, a JOIN of subqueries, or conditional aggregation",
+        "AND cannot join COUNT functions",
+        "price = 0 is not a valid condition for aggregates"
+      ],
+      "answer": 1,
+      "explain": "The SELECT list and the WHERE clause are one unit — one filter, one set of rows, described many ways by the aggregates. Two questions about two different row-sets are two queries (or a conditional aggregate: SUM(CASE WHEN price = 0 THEN 1 ELSE 0 END)). This is the structural insight GROUP BY generalizes: one row-set per SELECT, one output row per group."
+    }
+  ],
+  "summary": "Aggregates collapse rows into single answers: COUNT(*) counts rows, COUNT(col) counts known values, SUM, AVG, MIN and MAX ignore NULLs (AVG's shrinking denominator is the quiet report-distorter). WHERE filters before aggregation, so aggregates always describe exactly the rows you chose. A bare column beside an aggregate is a shape mismatch that GROUP BY exists to resolve — which is precisely where we're going, because 'one number' is only half the story: real dashboards want one number *per group*.",
+  "next": "'Average hours' is nice; 'average hours per role' is a dashboard. The single collapse becomes N collapses — one per group — with GROUP BY choosing the grouping and HAVING deciding which groups survive. That pair powers every analytics query you'll ever write, and completes the WHERE-to-HAVING pipeline you've been assembling since Lesson 3."
+}

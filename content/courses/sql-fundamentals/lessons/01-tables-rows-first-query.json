@@ -1,0 +1,118 @@
+{
+  "title": "Tables, Rows & Your First Query",
+  "slug": "01-tables-rows-first-query",
+  "objective": "After this lesson you will be able to describe how a relational database organizes data, read a table's schema, and run your first two queries: everything, and exactly the columns you choose.",
+  "why": "Almost every application you will ever work on stores its truth in a relational database. Feature code is replaceable — the data survives rewrite after rewrite. Developers who can read that data directly debug faster, answer product questions without waiting for a data team, and write APIs that don't fight the database. It all starts with one mental model: data lives in tables, and SQL is how you ask about them.",
+  "minutes": 16,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "What a database actually holds" },
+    { "t": "p", "text": "Forget the server, the connection string, the cloud dashboard. A **relational database** is a collection of **tables**, and each table is a strict grid: every row is one thing (one developer, one course, one enrollment), and every column is one fact about that thing. Crucially, every row in a table has the *same* columns — that regularity is what makes the math of the whole system work." },
+    { "t": "p", "text": "This course runs against a live three-table dataset that mirrors a real learning platform. Here is a slice of the `developers` table — 14 rows, 6 columns:" },
+    { "t": "table", "headers": ["id", "name", "role", "level", "country", "hours_studied"], "rows": [
+      ["1", "Maya Chen", "frontend", "Advanced", "Taiwan", "912"],
+      ["2", "Jonas Weber", "backend", "Intermediate", "Germany", "534"],
+      ["3", "Priya Sharma", "fullstack", "Intermediate", "India", "648"],
+      ["4", "Diego Alvarez", "frontend", "Beginner", "Mexico", "186"],
+      ["…", "…", "…", "…", "…", "…"]
+    ] },
+    { "t": "p", "text": "Two details in that little table are doing more work than they appear to. Each column has a **type** — `id` is an INTEGER, `name` is TEXT, `hours_studied` is an INTEGER. The database enforces those types: you cannot store `'Taiwan'` in `hours_studied`. And the `id` column holds values that are unique per row — a **primary key**, which you will exploit constantly starting in Lesson 8." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Where you will run the queries",
+      "text": "DevPath ships a SQL Query Sandbox — a real query engine running in your browser against this exact dataset (developers, courses, enrollments). Every query in this course is runnable there, one click away. Reading SQL without running it is like reading sheet music without an instrument: it works, but slowly."
+    },
+    { "t": "h", "text": "SQL is declarative — you ask, it decides" },
+    { "t": "p", "text": "In application code you spell out *how*: loop over the rows, check each condition, collect matches, sort the list. SQL flips that. You describe *what* you want — which columns, which rows, what order — and the database's **query planner** figures out the fastest way to deliver it. This style is called **declarative**, and it is the single biggest mindset shift for developers coming from JavaScript or Python." },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- You will write this roughly a thousand times in your career:\nSELECT name, country\nFROM developers;",
+      "caption": "Your first query: names and countries of all 14 developers"
+    },
+    { "t": "p", "text": "Read it out loud, left to right — SQL is designed to be readable as English: *select* the name and country columns *from* the developers table. Keywords like `SELECT` and `FROM` are case-insensitive (`select` and `Select` are identical), but the community convention is UPPERCASE keywords with lowercase names — it makes queries scannable, and this course follows it. Comments start with `--` and run to the end of the line." },
+    { "t": "diagram", "caption": "The life of a query", "nodes": ["Your SQL text", "Parser — is it valid SQL?", "Planner — what's the fastest route?", "Executor — read the rows", "Result set — a new table"] },
+    { "t": "p", "text": "The result comes back as a fresh table — same shape discipline as the storage tables: named columns, uniform rows. That's the deep idea of the relational model: **query output is itself a table**, which can be queried again (you will meet that idea as subqueries later). Everything flows from it." },
+    { "t": "h", "text": "Everything, or exactly what you need" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- The firehose: every column, every row (14 rows, 6 columns)\nSELECT * FROM developers;\n\n-- The scalpel: two columns, still every row (14 rows, 2 columns)\nSELECT name, hours_studied FROM developers;"
+    },
+    { "t": "p", "text": "`SELECT *` means 'all columns'. It is perfect for *exploring* a table you just met — and a bad habit in code. In real systems, `*` drags columns you don't need over the wire (some tables have dozens), makes your intent vague to the next reader, and silently breaks reports when someone adds a column. Professional queries name their columns — and column order in the output follows the order you list them, not the table's storage order." },
+    {
+      "t": "practice",
+      "query": "SELECT name, country FROM developers;",
+      "note": "Run your first query in the sandbox — then try SELECT * and compare the two result tables."
+    },
+    { "t": "callout", "variant": "tip", "title": "The four jobs of a query", "text": "Keep this map in your head for the next nine lessons — every clause you learn does exactly one job: SELECT chooses **columns** (projection), WHERE chooses **rows** (filtering), ORDER BY chooses **order**, LIMIT chooses **how many**. When a query misbehaves, ask 'which of the four jobs did I get wrong?' before touching anything." },
+    { "t": "keytakeaways", "items": [
+      "A relational database stores tables: uniform rows, typed columns; query results are tables too",
+      "SQL is declarative — you describe the result, the planner computes it",
+      "SELECT column_list FROM table picks columns; * returns all of them and is for exploration, not production",
+      "Keywords are case-insensitive but conventionally UPPERCASE; comments start with --",
+      "Every clause you will learn does one job: columns (SELECT), rows (WHERE), order (ORDER BY), count (LIMIT)"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "The team's standup question: 'Which countries do our developers live in — just the countries and names, nothing else, and keep it readable.' Write the query that answers it with exactly two columns, then run it in the sandbox and note how many rows came back (there are 14 developers — but only 13 distinct countries; one country repeats. Keep that fact in mind for Lesson 2).",
+    "hints": [
+      "You need column selection, not filtering — the question asks for all developers, just fewer columns.",
+      "The two columns are name and country; the table is developers.",
+      "The shape is SELECT name, country FROM developers; — 14 rows return, and Japan appears twice (Kenji Tanaka and Yuki Sato)."
+    ],
+    "solution": "SELECT name, country\nFROM developers;",
+    "why": "The question names exactly two facts per developer, so the projection is two columns. No WHERE (all developers count), no ORDER BY (the question doesn't rank anyone) — the discipline of writing the minimal query that answers the actual question is what keeps SQL readable at work. And the 14-rows-but-13-countries detail is the seed of the next lesson: what if you wanted each country once?",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT name, country\nFROM developers;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "In the developers table, what does the id column's 'primary key' property guarantee?",
+      "options": [
+        "Values are always even numbers",
+        "Each row's id is unique — a row can always be identified by it",
+        "The column is sorted automatically on every query",
+        "Values never exceed 100"
+      ],
+      "answer": 1,
+      "explain": "A primary key is the row's identity: unique, never NULL. It is the anchor other tables reference (enrollments point at developers by id), and it's how UPDATE and DELETE can target exactly one row safely."
+    },
+    {
+      "q": "Your query returns 5 columns but you only listed 3 after SELECT. Most likely cause?",
+      "options": [
+        "The database added the table's remaining columns as a convenience",
+        "You wrote SELECT * somewhere, or you're looking at the wrong query's result",
+        "Columns can multiply when the table has indexes",
+        "FROM and SELECT negotiated a compromise"
+      ],
+      "answer": 1,
+      "explain": "The SELECT list is law: you get exactly what you list (or everything, with *). If the result has more columns than your list, you are not running the query you think you are — the classic causes are an unsaved file, a stale tab, or a stray * in the editor."
+    },
+    {
+      "q": "Which statement about SQL keywords (SELECT, FROM, WHERE…) is true?",
+      "options": [
+        "They must be uppercase or the query fails",
+        "They are case-insensitive — case is a readability convention, not a rule",
+        "They must be lowercase by the SQL standard",
+        "Each database agrees on one required case"
+      ],
+      "answer": 1,
+      "explain": "Keywords are case-insensitive in every mainstream engine. The uppercase-keywords convention exists purely for human scanning. Column and table names are also case-insensitive in SQLite and MySQL, but case-sensitive in PostgreSQL — one of the small portability surprises worth knowing."
+    },
+    {
+      "q": "Why do experienced developers avoid SELECT * in application code?",
+      "options": [
+        "* queries are not allowed over network connections",
+        "It ships unnecessary data, hides intent, and breaks silently when the table's column set changes",
+        "The planner refuses to use indexes for *",
+        "It returns rows in an undefined order — which is ORDER BY's job to fix anyway"
+      ],
+      "answer": 1,
+      "explain": "Naming columns is a contract: your code keeps working no matter what columns get added later, and reviewers can see exactly what the query depends on. * is great while exploring an unfamiliar table — then retire it."
+    }
+  ],
+  "summary": "Relational databases store data in tables — uniform, typed rows — and treat query results as tables too, which is why queries compose. SQL is declarative: you describe the result (which columns, which rows, what order, how many) and the planner finds the route. You can now project exactly the columns you need and you know why SELECT * belongs to exploration, not production.",
+  "next": "You can choose columns — but the output columns are still exactly what's stored. Next you'll compute new values on the fly: arithmetic in the SELECT list, renamed results with aliases, and the moment of truth where 14 rows become 13 because of DISTINCT."
+}

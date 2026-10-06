@@ -1,0 +1,129 @@
+{
+  "title": "GROUP BY & HAVING: One Row Per Group",
+  "slug": "07-group-by-having",
+  "objective": "After this lesson you will be able to collapse tables into per-group summaries with GROUP BY (single and multiple keys), filter groups with HAVING, and mentally execute a full query in SQL's true evaluation order — FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT.",
+  "why": "'How many developers per role?' 'Average hours per country.' 'Which course topics have more than 2 published courses?' — every analytics question has the same shape: partition rows into groups, summarize each group. GROUP BY is the clause that does the partitioning, and HAVING is the filter that runs on the *results* — the thing WHERE cannot do, because aggregates don't exist yet when WHERE runs. Together they close the loop on the query pipeline you've been building piece by piece since Lesson 3, and they unlock the capstone project's hardest queries.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "From one summary to one per group" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Lesson 6: one row for the whole table\nSELECT COUNT(*) FROM developers;\n\n-- Lesson 7: one row PER ROLE\nSELECT role,\n       COUNT(*)         AS developers,\n       AVG(hours_studied) AS avg_hours\nFROM developers\nGROUP BY role;",
+      "caption": "4 rows: backend 4 · 501.25, devops 2 · 668, frontend 5 · 444.8, fullstack 3 · 551.67"
+    },
+    { "t": "p", "text": "Read the mechanics precisely: GROUP BY role tells the engine to **partition the 14 rows into buckets by role value** — a backend bucket, a devops bucket, and so on — then compute the SELECT list's aggregates **within each bucket**. The bare column `role` is now legal beside aggregates (Lesson 6's shape mismatch resolved): it's the *grouping key*, identical for every row in its bucket, so there's no ambiguity about which value to emit. Output: one row per distinct role — 4 rows. Run it and verify the counts against the data: 5 frontend, 4 backend, 3 fullstack, 2 devops — the group row count always equals the number of distinct values of the key." },
+    { "t": "p", "text": "The iron rule that follows: **every non-aggregated column in the SELECT list must appear in the GROUP BY clause**. `SELECT role, name, COUNT(*) ... GROUP BY role` is the classic error — name varies *within* a group, so which developer's name represents the backend bucket? SQL refuses to guess (strict engines reject it; permissive ones pick arbitrarily). When you hit that error, the fix is either aggregate the column (MAX(name)?) or add it to the GROUP BY — which changes the shape of the answer, because you'd then get one row per role-**name** combination. Choosing between those two is the whole craft of grouped queries." },
+    { "t": "h", "text": "Grouping by multiple columns" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "SELECT role, level, COUNT(*) AS developers\nFROM developers\nGROUP BY role, level\nORDER BY role, level;",
+      "caption": "11 rows — Lesson 2's DISTINCT pairs, now with counts: (frontend, Advanced) 1, (frontend, Beginner) 2, (frontend, Intermediate) 2, ..."
+    },
+    { "t": "p", "text": "Multi-key grouping nests the partitions: first by role, then by level *within* each role — 11 buckets from Lesson 2's 11 distinct combinations (one pairing, devops Beginner, doesn't exist in the data, so it produces no row). This is exactly `SELECT DISTINCT role, level` plus a per-combination count — DISTINCT and GROUP BY without aggregates return identical row sets. Add COUNT(*) and GROUP BY becomes the strictly more powerful tool; that's why experienced SQL writers reach for GROUP BY even for 'distinct values' questions, like counting them per group later." },
+    { "t": "h", "text": "HAVING: the filter that runs after" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- 'Which roles have MORE THAN 2 developers?'\nSELECT role, COUNT(*) AS developers\nFROM developers\nGROUP BY role\nHAVING COUNT(*) > 2\nORDER BY developers DESC, role;",
+      "caption": "3 rows: frontend 5, backend 4, fullstack 3 — devops (2) filtered out AFTER counting"
+    },
+    { "t": "p", "text": "Try to write that with WHERE and you'll feel the wall: `WHERE COUNT(*) > 2` is illegal — **WHERE runs per row, before any grouping exists**; there is no COUNT(*) of a group to compare while rows are still individuals. HAVING runs per *group*, after GROUP BY, and may reference aggregates. The division of labor is the single most interview-worthy concept in this course:" },
+    { "t": "table", "headers": ["", "WHERE", "HAVING"], "rows": [
+      ["Runs", "per row, before grouping", "per group, after grouping"],
+      ["Can use", "raw columns (indexes help!)", "aggregates AND raw columns"],
+      ["Filters", "which rows enter the computation", "which computed groups leave it"],
+      ["Classic bug", "aggregate in WHERE — syntax error", "row-level condition in HAVING — works, but wasteful"]
+    ] },
+    { "t": "p", "text": "That last row is the professional nuance: HAVING accepts plain column conditions too (`HAVING role != 'devops'` is legal), but filtering *after* the grouping means the engine did the bucketing work for rows you then throw away. Row-level facts belong in WHERE — cheaper, indexable, and honest about what they are. The rule of thumb you can defend in any code review: **if the condition mentions an aggregate, it must be HAVING; if it doesn't, it wants to be WHERE.**" },
+    { "t": "h", "text": "The full pipeline — SQL's true order" },
+    { "t": "p", "text": "You now know every clause of a SELECT query. Fix the evaluation order in your head, because it explains every 'why won't this work' you'll meet from here on:" },
+    { "t": "diagram", "caption": "Logical evaluation order (top to bottom)", "nodes": ["FROM — which table(s)", "WHERE — keep which rows", "GROUP BY — partition into groups", "HAVING — keep which groups", "SELECT — compute output expressions", "ORDER BY — sort the output", "LIMIT / OFFSET — trim the output"] },
+    { "t": "p", "text": "Two consequences to internalize. Aliases defined in SELECT don't exist yet when WHERE runs — `WHERE full_days > 10` fails even though `ORDER BY full_days` works (ORDER BY runs *after* SELECT; WHERE runs before). And WHERE can't reference aggregates not because of syntax pedantry but because of *time*: the groups aren't built yet. Every 'illegal' thing in SQL becomes obvious once you can narrate the pipeline." },
+    {
+      "t": "practice",
+      "query": "SELECT topic, COUNT(*) AS courses, AVG(hours) AS avg_hours\nFROM courses\nWHERE published = 1\nGROUP BY topic\nHAVING COUNT(*) >= 2\nORDER BY courses DESC;",
+      "note": "The full pipeline in one query: published courses per topic (≥ 2 courses): frontend 6 · 9.83 avg, backend 2 · 13 avg, database 2 · 10 avg, devops 2 · 13.5 avg. WHERE takes published rows only; HAVING drops testing and tools (1 course each)."
+    },
+    { "t": "keytakeaways", "items": [
+      "GROUP BY partitions rows into buckets per key value and computes aggregates per bucket; output is one row per distinct key",
+      "Every non-aggregated SELECT column must be in GROUP BY — the grouping key is the only unambiguous bare column",
+      "HAVING filters groups after aggregation and can use aggregate results; WHERE filters rows before — aggregates in WHERE are illegal",
+      "Row-level conditions belong in WHERE (indexable, cheaper); group-level conditions in HAVING — aggregate in the condition is the tell",
+      "Logical evaluation order: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT — it explains alias visibility, aggregate placement, and every 'why is this illegal'"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "The engagement review asks: 'Which countries have MORE THAN ONE developer, and how studious are they there?' Build the country dashboard: country, number of developers, and average hours_studied, for countries with at least 2 developers, sorted by developer count descending (ties alphabetical). Then answer in a comment: the data has exactly one such country — which, and why is 'at least 2' doing real work here (what does a single-developer country's 'average' mean)? Expected: exactly 1 output row.",
+    "hints": [
+      "Shape: GROUP BY country, aggregates COUNT(*) and AVG(hours_studied), group filter HAVING COUNT(*) > 1 (or >= 2 — same meaning), sort with a tiebreaker on country.",
+      "The aggregate condition must be HAVING, not WHERE — COUNT(*) exists only after the grouping. WHERE has nothing to filter here (all 14 rows enter the grouping).",
+      "Japan is the only repeated country: Kenji Tanaka and Yuki Sato — 2 developers, average (947 + 205) / 2 = 576. A one-developer country's 'average' is just that one person's number: technically valid, statistically meaningless — which is exactly why HAVING COUNT(*) > 1 is the analyst's standard guard against n-of-1 groups."
+    ],
+    "solution": "SELECT country,\n       COUNT(*)          AS developers,\n       AVG(hours_studied) AS avg_hours\nFROM developers\nGROUP BY country\nHAVING COUNT(*) > 1\nORDER BY developers DESC, country ASC;",
+    "why": "Every clause in its natural slot: GROUP BY country builds the buckets (13 of them — 14 rows, Japan doubled), HAVING keeps only groups with 2+ members (Japan alone survives), the aggregates describe the survivors (2 developers averaging 576 hours — a genuinely meaningful pair: Kenji the workhorse and Yuki the newcomer). The n-of-1 insight is why this exercise is worth doing: averages over single-member groups are how dashboards end up confidently reporting that 'Luxembourg is our most engaged market' off one user. HAVING COUNT(*) > 1 (or >= 2) is the guard rail.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT country,\n       COUNT(*)          AS developers,\n       AVG(hours_studied) AS avg_hours\nFROM developers\nGROUP BY country\nHAVING COUNT(*) > 1\nORDER BY developers DESC, country ASC;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "WHERE topic = 'frontend' vs HAVING topic = 'frontend' on a grouped query — both are legal. What's the difference?",
+      "options": [
+        "No difference — the engine rewrites one into the other",
+        "WHERE drops non-frontend rows before grouping (cheaper, and changes every group's counts); HAVING drops whole frontend GROUPS after — different query, and wasteful if you meant the first",
+        "HAVING is always preferred for correctness",
+        "WHERE cannot be combined with GROUP BY at all"
+      ],
+      "answer": 1,
+      "explain": "Same column, different filter targets: WHERE shapes what enters the buckets (so a WHERE topic='frontend' + GROUP BY level query counts only frontend courses per level), while HAVING removes entire groups from the output. Using HAVING for row-level conditions 'works' but pays the grouping cost on rows you discard — and changes the result whenever the condition interacts with the counts."
+    },
+    {
+      "q": "SELECT role, name, COUNT(*) FROM developers GROUP BY role — why is this rejected (or dangerous)?",
+      "options": [
+        "COUNT(*) cannot be combined with GROUP BY",
+        "name is neither aggregated nor a grouping key — the backend group has 4 different names and SQL refuses to pick one arbitrarily (strict engines error; lenient ones do pick, which is worse)",
+        "GROUP BY must list every column of the table",
+        "The ORDER BY is missing"
+      ],
+      "answer": 1,
+      "explain": "The iron rule: non-aggregated SELECT columns must be grouping keys. The fix is a design decision, not syntax — either add name to GROUP BY (one row per role-name pair: usually not what you wanted) or aggregate it (MAX(name) picks a representative deterministically). Recognizing this error on sight saves an hour of head-scratching per incident."
+    },
+    {
+      "q": "Why does WHERE full_days > 10 fail when full_days is a SELECT alias (hours_studied / 60 AS full_days)?",
+      "options": [
+        "Aliases cannot be used in comparisons",
+        "Evaluation order: WHERE runs before SELECT, so the alias doesn't exist yet — ORDER BY can use it because sorting happens after the SELECT list is computed",
+        "The alias is only visible to aggregates",
+        "It doesn't fail — this is a trick question"
+      ],
+      "answer": 1,
+      "explain": "The pipeline is FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT. Aliases are born at SELECT; WHERE is upstream. The standard workarounds: repeat the expression in WHERE, or wrap the query as a subquery (which you'll meet later in the course — the reason CTEs exist)."
+    },
+    {
+      "q": "GROUP BY role, level on developers returns 11 rows. SELECT DISTINCT role, level returns how many?",
+      "options": [
+        "4 — the distinct roles",
+        "3 — the distinct levels",
+        "11 — same rows: GROUP BY over all listed non-aggregate columns is equivalent to DISTINCT on those columns",
+        "12 — all possible combinations"
+      ],
+      "answer": 2,
+      "explain": "Both produce the set of distinct (role, level) combinations — 11, because (devops, Beginner) exists in no row. GROUP BY + aggregates is the general form: add COUNT(*) and you learn how *many* rows each combination has, which DISTINCT cannot tell you."
+    },
+    {
+      "q": "The query 'SELECT role, COUNT(*) FROM developers WHERE hours_studied > 300 GROUP BY role' — what do the counts mean?",
+      "options": [
+        "All developers per role — WHERE doesn't affect grouping",
+        "Only developers with hours over 300, counted per role — WHERE ran first, so each group shrinks: backend 3, frontend 3, fullstack 2, devops 2 (Nadia 158, Diego 186, Yuki 205, Amara 224 never reach the grouping)",
+        "One row — aggregates ignore WHERE",
+        "An error — WHERE and GROUP BY cannot coexist"
+      ],
+      "answer": 1,
+      "explain": "WHERE is upstream of GROUP BY: the pipeline filters individuals first, then buckets survivors. Verified against the data: backend keeps Jonas 534, Kenji 947, Aisha 366 (3); frontend keeps Maya 912, Liam 402, Marcus 519 (3); fullstack keeps Priya 648, Elena 783 (2); devops keeps Sofia 871, Tom 465 (2) — Nadia, Diego, Yuki and Amara never reach the grouping. The counts describe the filtered set — always narrate the pipeline to predict them."
+    }
+  ],
+  "summary": "GROUP BY partitions rows into per-key buckets and computes aggregates per bucket — output is one row per distinct key, and every bare SELECT column must be a grouping key. HAVING filters groups after aggregation; WHERE filters rows before it — aggregates in the condition are HAVING's tell, plain columns want WHERE. The full pipeline FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT now explains every clause interaction you'll meet. You can summarize any single table; what's still impossible is questions that need facts from two tables at once — 'who completed which course' — which is exactly what joins are for.",
+  "next": "The dataset stores developer names in one table, course titles in another, and the relationship between them as bare numbers — enrollments rows that reference both by id. Joins are how those numbers become answers: match rows across tables on their keys, combine columns from each side, and finally LEFT JOIN — the one that finds the things that never matched."
+}

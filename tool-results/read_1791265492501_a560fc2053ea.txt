@@ -1,0 +1,819 @@
+     1→"use client";
+     2→
+     3→// CourseView — the course-first learning experience.
+     4→//   /?course=slug                 → course overview (what you'll learn, prereqs, project)
+     5→//   /?course=slug&lesson=N        → lesson N (blocks, exercise, quiz)
+     6→//   /?course=slug&lesson=assessment → final assessment
+     7→// Progress is computed from real lesson records in the library store —
+     8→// never hardcoded. Content is fetched from the course APIs (never JSX).
+     9→import * as React from "react";
+    10→import Link from "next/link";
+    11→import { useRouter, useSearchParams } from "next/navigation";
+    12→import { useQuery } from "@tanstack/react-query";
+    13→import { motion } from "framer-motion";
+    14→import {
+    15→  ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Clock, Compass,
+    16→  Flag, GraduationCap, Hammer, Layers, ListChecks, Sparkles, Target, Zap,
+    17→} from "lucide-react";
+    18→
+    19→import type { CourseView as Course, LessonView } from "@/lib/course-types";
+    20→import type { ResourceItemView, CategoryView } from "@/lib/platform";
+    21→import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
+    22→import { trackEvent } from "./platform-data";
+    23→import { LessonBlocks, renderInline, InterviewQuestion } from "./lesson/LessonBlocks";
+    24→import { QuizCard } from "./lesson/QuizCard";
+    25→import { ExerciseCard } from "./lesson/ExerciseCard";
+    26→import { getAccent } from "@/lib/accent";
+    27→
+    28→interface CourseViewProps {
+    29→  course: Course;
+    30→  item: ResourceItemView;
+    31→  category: CategoryView;
+    32→  initialLesson: string | null;
+    33→}
+    34→
+    35→type LessonTab = "overview" | number | "assessment";
+    36→
+    37→function courseHref(slug: string) {
+    38→  return `/?course=${slug}`;
+    39→}
+    40→function lessonHref(slug: string, lesson: Exclude<LessonTab, "overview">) {
+    41→  return `/?course=${slug}&lesson=${lesson}`;
+    42→}
+    43→
+    44→async function fetchLesson(slug: string, order: number): Promise<{ lesson: LessonView }> {
+    45→  const res = await fetch(`/api/courses/${slug}/lessons/${order}`);
+    46→  if (!res.ok) throw new Error("Failed to load lesson");
+    47→  return res.json();
+    48→}
+    49→
+    50→export function CourseView({ course, item, category, initialLesson }: CourseViewProps) {
+    51→  const router = useRouter();
+    52→  const sp = useSearchParams();
+    53→  const hydrated = useLibraryHydrated();
+    54→  const accent = getAccent(category.accent);
+    55→
+    56→  const lessonParam = sp.get("lesson") ?? initialLesson;
+    57→  const tab: LessonTab = !lessonParam
+    58→    ? "overview"
+    59→    : lessonParam === "assessment"
+    60→      ? "assessment"
+    61→      : Math.max(1, Math.min(Number(lessonParam) || 1, course.lessons.length));
+    62→
+    63→  // Progress — computed from real lesson records
+    64→  const courseProgress = useLibrary((s) => s.courseProgress[course.courseSlug]);
+    65→  const completedLessons = hydrated ? courseProgress?.lessons ?? [] : [];
+    66→  const doneCount = completedLessons.filter((n) => n <= course.lessonCount).length;
+    67→  const progressPct = course.lessonCount
+    68→    ? Math.round((doneCount / course.lessonCount) * 100)
+    69→    : 0;
+    70→  const assessmentPassed = Boolean(hydrated && courseProgress?.completedAt);
+    71→
+    72→  const completeLesson = useLibrary((s) => s.completeLesson);
+    73→  const recordAssessment = useLibrary((s) => s.recordAssessment);
+    74→  const pushRecent = useLibrary((s) => s.pushRecent);
+    75→
+    76→  // Recents + item analytics on course open
+    77→  React.useEffect(() => {
+    78→    pushRecent({
+    79→      slug: item.slug,
+    80→      title: item.title,
+    81→      level: item.level,
+    82→      duration: item.duration,
+    83→      categorySlug: category.slug,
+    84→      categoryTitle: category.title,
+    85→      categoryIcon: category.icon,
+    86→      categoryAccent: category.accent,
+    87→    });
+    88→     
+    89→  }, [course.courseSlug]);
+    90→
+    91→  const nextLesson = Math.min(...course.lessons.filter((l) => !completedLessons.includes(l.order)).map((l) => l.order), Infinity);
+    92→
+    93→  return (
+    94→    <div className="mx-auto max-w-6xl">
+    95→      {/* Breadcrumb */}
+    96→      <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+    97→        <Link href={`/?category=${category.slug}`} className="transition-colors hover:text-foreground">
+    98→          {category.title}
+    99→        </Link>
+   100→        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+   101→        <span className="text-foreground" aria-current="page">{item.title}</span>
+   102→        {tab !== "overview" ? (
+   103→          <>
+   104→            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+   105→            <span className="text-foreground">{tab === "assessment" ? "Final assessment" : `Lesson ${tab}`}</span>
+   106→          </>
+   107→        ) : null}
+   108→      </nav>
+   109→
+   110→      {/* Course header */}
+   111→      <header className="mb-6 overflow-hidden rounded-2xl border border-border bg-card/60">
+   112→        <div className={`h-1 w-full ${accent.dot} opacity-80`} aria-hidden="true" />
+   113→        <div className="p-5 sm:p-7">
+   114→          <div className="flex flex-wrap items-start justify-between gap-4">
+   115→            <div className="min-w-0">
+   116→              <div className="mb-2 flex flex-wrap items-center gap-2">
+   117→                <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${accent.chip}`}>
+   118→                  {item.level}
+   119→                </span>
+   120→                <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+   121→                  v{course.version}
+   122→                </span>
+   123→                {assessmentPassed ? (
+   124→                  <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+   125→                    <GraduationCap className="h-3 w-3" aria-hidden="true" />
+   126→                    Completed
+   127→                  </span>
+   128→                ) : null}
+   129→              </div>
+   130→              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+   131→                {item.title}
+   132→              </h1>
+   133→              {course.subtitle ? (
+   134→                <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
+   135→                  {course.subtitle}
+   136→                </p>
+   137→              ) : null}
+   138→            </div>
+   139→
+   140→            {tab === "overview" ? (
+   141→              <button
+   142→                type="button"
+   143→                onClick={() => {
+   144→                  const target = Number.isFinite(nextLesson) ? nextLesson : 1;
+   145→                  trackEvent("card_click", course.courseSlug, "start-course");
+   146→                  router.push(lessonHref(course.courseSlug, target));
+   147→                }}
+   148→                className={`flex shrink-0 items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-100 ${accent.dot} ${accent.iconGlow ? "" : ""} shadow-black/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500`}
+   149→              >
+   150→                <BookOpen className="h-4 w-4" aria-hidden="true" />
+   151→                {doneCount > 0 ? `Continue · lesson ${nextLesson}` : "Start course"}
+   152→              </button>
+   153→            ) : null}
+   154→          </div>
+   155→
+   156→          <dl className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+   157→            <div className="flex items-center gap-1.5">
+   158→              <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   159→              <dt className="sr-only">Lessons</dt>
+   160→              <dd className="font-medium text-foreground">{course.lessonCount} lessons</dd>
+   161→            </div>
+   162→            <div className="flex items-center gap-1.5">
+   163→              <Clock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   164→              <dt className="sr-only">Total time</dt>
+   165→              <dd className="font-medium text-foreground">
+   166→                {course.totalMinutes >= 60
+   167→                  ? `${Math.floor(course.totalMinutes / 60)}h ${course.totalMinutes % 60 ? `${course.totalMinutes % 60}m` : ""}`.trim()
+   168→                  : `${course.totalMinutes}m`}
+   169→              </dd>
+   170→            </div>
+   171→            <div className="flex items-center gap-1.5">
+   172→              <Zap className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   173→              <dt className="sr-only">XP</dt>
+   174→              <dd className="font-medium text-foreground">{course.xpTotal} XP</dd>
+   175→            </div>
+   176→            <div className="flex items-center gap-1.5">
+   177→              <ListChecks className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   178→              <dt className="sr-only">Quizzes</dt>
+   179→              <dd className="font-medium text-foreground">
+   180→                {course.lessons.reduce((s, l) => s + l.quizCount, 0)} quiz questions
+   181→              </dd>
+   182→            </div>
+   183→          </dl>
+   184→
+   185→          {/* Progress bar — computed from lesson records */}
+   186→          <div className="mt-5">
+   187→            <div className="mb-1.5 flex items-center justify-between text-xs">
+   188→              <span className="text-muted-foreground">
+   189→                {doneCount} of {course.lessonCount} lessons complete
+   190→              </span>
+   191→              <span className={`font-mono font-semibold ${accent.text}`}>{progressPct}%</span>
+   192→            </div>
+   193→            <div
+   194→              className="h-2.5 overflow-hidden rounded-full bg-muted"
+   195→              role="progressbar"
+   196→              aria-valuenow={progressPct}
+   197→              aria-valuemin={0}
+   198→              aria-valuemax={100}
+   199→              aria-label="Course progress"
+   200→            >
+   201→              <div
+   202→                className={`h-full rounded-full ${accent.dot} transition-[width] duration-500`}
+   203→                style={{ width: `${progressPct}%` }}
+   204→              />
+   205→            </div>
+   206→          </div>
+   207→        </div>
+   208→      </header>
+   209→
+   210→      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+   211→        {/* Curriculum sidebar */}
+   212→        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+   213→          <nav aria-label="Course curriculum" className="rounded-2xl border border-border bg-card/60 p-4">
+   214→            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   215→              <Compass className="h-3.5 w-3.5" aria-hidden="true" />
+   216→              Curriculum
+   217→            </p>
+   218→            <ol className="space-y-1">
+   219→              {course.lessons.map((l) => {
+   220→                const isCurrent = tab === l.order;
+   221→                const isDone = completedLessons.includes(l.order);
+   222→                return (
+   223→                  <li key={l.id}>
+   224→                    <Link
+   225→                      href={lessonHref(course.courseSlug, l.order)}
+   226→                      className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${
+   227→                        isCurrent
+   228→                          ? `${accent.text} font-semibold ${course.lessonCount ? "" : ""} bg-accent/10`
+   229→                          : "text-foreground/80 hover:bg-muted/70"
+   230→                      }`}
+   231→                      aria-current={isCurrent ? "page" : undefined}
+   232→                    >
+   233→                      <span
+   234→                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-semibold ${
+   235→                          isDone
+   236→                            ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+   237→                            : isCurrent
+   238→                              ? `border-current ${accent.text}`
+   239→                              : "border-border text-muted-foreground"
+   240→                        }`}
+   241→                        aria-hidden="true"
+   242→                      >
+   243→                        {isDone ? <Check className="h-3 w-3" /> : l.order}
+   244→                      </span>
+   245→                      <span className="flex-1 leading-snug">{l.title}</span>
+   246→                      <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground sm:inline">
+   247→                        {l.minutes}m
+   248→                      </span>
+   249→                    </Link>
+   250→                  </li>
+   251→                );
+   252→              })}
+   253→              <li className="border-t border-border/60 pt-1">
+   254→                <Link
+   255→                  href={lessonHref(course.courseSlug, "assessment")}
+   256→                  className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 ${
+   257→                    tab === "assessment"
+   258→                      ? `${accent.text} font-semibold bg-accent/10`
+   259→                      : "text-foreground/80 hover:bg-muted/70"
+   260→                  }`}
+   261→                >
+   262→                  <span
+   263→                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+   264→                      assessmentPassed
+   265→                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+   266→                        : "border-border text-muted-foreground"
+   267→                    }`}
+   268→                    aria-hidden="true"
+   269→                  >
+   270→                    {assessmentPassed ? <Check className="h-3 w-3" /> : <Flag className="h-3 w-3" />}
+   271→                  </span>
+   272→                  <span className="flex-1 leading-snug">Final assessment</span>
+   273→                  <span className="mt-0.5 shrink-0 font-mono text-[10px] text-muted-foreground">
+   274→                    {course.assessment.length}q
+   275→                  </span>
+   276→                </Link>
+   277→              </li>
+   278→            </ol>
+   279→          </nav>
+   280→        </aside>
+   281→
+   282→        {/* Main content */}
+   283→        <div className="min-w-0">
+   284→          {tab === "overview" ? (
+   285→            <CourseOverview
+   286→              course={course}
+   287→              accent={accent}
+   288→              onStart={() => {
+   289→                const target = Number.isFinite(nextLesson) ? nextLesson : 1;
+   290→                router.push(lessonHref(course.courseSlug, target));
+   291→              }}
+   292→            />
+   293→          ) : tab === "assessment" ? (
+   294→            <AssessmentView
+   295→              course={course}
+   296→              accent={accent}
+   297→              onResult={(score, passed) =>
+   298→                recordAssessment(course.courseSlug, score, passed)
+   299→              }
+   300→              courseSlugForAnalytics={course.courseSlug}
+   301→            />
+   302→          ) : (
+   303→            <LessonPane
+   304→              course={course}
+   305→              order={tab}
+   306→              completedLessons={completedLessons}
+   307→              completeLesson={(order) => {
+   308→                completeLesson(course.courseSlug, order);
+   309→                trackEvent("lesson_complete", course.courseSlug, `lesson-${order}`);
+   310→              }}
+   311→              router={router}
+   312→            />
+   313→          )}
+   314→        </div>
+   315→      </div>
+   316→    </div>
+   317→  );
+   318→}
+   319→
+   320→// ---------------------------------------------------------------------------
+   321→
+   322→function CourseOverview({
+   323→  course,
+   324→  accent,
+   325→  onStart,
+   326→}: {
+   327→  course: Course;
+   328→  accent: ReturnType<typeof getAccent>;
+   329→  onStart: () => void;
+   330→}) {
+   331→  return (
+   332→    <div className="space-y-6">
+   333→      <motion.section
+   334→        initial={{ opacity: 0, y: 10 }}
+   335→        animate={{ opacity: 1, y: 0 }}
+   336→        className="rounded-2xl border border-border bg-card/60 p-5 sm:p-6"
+   337→        aria-labelledby="wyl-title"
+   338→      >
+   339→        <h2 id="wyl-title" className="mb-4 flex items-center gap-2.5 text-base font-semibold text-foreground">
+   340→          <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent.chip}`}>
+   341→            <Target className="h-4 w-4" aria-hidden="true" />
+   342→          </span>
+   343→          What you&apos;ll learn
+   344→        </h2>
+   345→        <ul className="grid gap-2.5 sm:grid-cols-2">
+   346→          {course.outcomes.map((o, i) => (
+   347→            <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-foreground/90">
+   348→              <Check className={`mt-0.5 h-4 w-4 shrink-0 ${accent.text}`} aria-hidden="true" />
+   349→              <span>{renderInline(o, `oc-${i}`)}</span>
+   350→            </li>
+   351→          ))}
+   352→        </ul>
+   353→      </motion.section>
+   354→
+   355→      <div className="grid gap-6 md:grid-cols-2">
+   356→        <section className="rounded-2xl border border-border bg-card/60 p-5" aria-labelledby="audience-title">
+   357→          <h2 id="audience-title" className="mb-3 text-base font-semibold text-foreground">
+   358→            Who this course is for
+   359→          </h2>
+   360→          <p className="text-sm leading-relaxed text-foreground/85">
+   361→            {renderInline(course.audience, "aud")}
+   362→          </p>
+   363→        </section>
+   364→        <section className="rounded-2xl border border-border bg-card/60 p-5" aria-labelledby="prereq-title">
+   365→          <h2 id="prereq-title" className="mb-3 text-base font-semibold text-foreground">
+   366→            Prerequisites
+   367→          </h2>
+   368→          {course.prereqSlugs.length > 0 ? (
+   369→            <ul className="space-y-2">
+   370→              {course.prereqSlugs.map((slug) => (
+   371→                <li key={slug}>
+   372→                  <Link
+   373→                    href={`/?category=courses&item=${slug}`}
+   374→                    className="flex items-center gap-2 text-sm text-foreground/85 transition-colors hover:text-foreground"
+   375→                  >
+   376→                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+   377→                    <span className="capitalize">{slug.replace(/-/g, " ")}</span>
+   378→                  </Link>
+   379→                </li>
+   380→              ))}
+   381→            </ul>
+   382→          ) : (
+   383→            <p className="text-sm text-muted-foreground">No prerequisites — jump right in.</p>
+   384→          )}
+   385→        </section>
+   386→      </div>
+   387→
+   388→      <div className="grid gap-6 md:grid-cols-2">
+   389→        {course.technologies.length > 0 ? (
+   390→          <section className="rounded-2xl border border-border bg-card/60 p-5" aria-labelledby="tech-title">
+   391→            <h2 id="tech-title" className="mb-3 text-base font-semibold text-foreground">
+   392→              Technologies & tools
+   393→            </h2>
+   394→            <div className="flex flex-wrap gap-2">
+   395→              {course.technologies.map((t, i) => (
+   396→                <span key={i} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${accent.chip}`}>
+   397→                  {t}
+   398→                </span>
+   399→              ))}
+   400→            </div>
+   401→          </section>
+   402→        ) : null}
+   403→        {course.skills.length > 0 ? (
+   404→          <section className="rounded-2xl border border-border bg-card/60 p-5" aria-labelledby="skills-title">
+   405→            <h2 id="skills-title" className="mb-3 text-base font-semibold text-foreground">
+   406→              Skills you&apos;ll practice
+   407→            </h2>
+   408→            <div className="flex flex-wrap gap-2">
+   409→              {course.skills.map((s, i) => (
+   410→                <span key={i} className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+   411→                  {s}
+   412→                </span>
+   413→              ))}
+   414→            </div>
+   415→          </section>
+   416→        ) : null}
+   417→      </div>
+   418→
+   419→      {/* Final assessment + project teaser */}
+   420→      <div className="grid gap-6 md:grid-cols-2">
+   421→        <section className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.06] to-transparent p-5">
+   422→          <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-foreground">
+   423→            <Flag className="h-4 w-4 text-teal-500" aria-hidden="true" />
+   424→            Final assessment
+   425→          </h2>
+   426→          <p className="text-sm leading-relaxed text-foreground/85">
+   427→            {course.assessment.length} questions across concepts, code reading and debugging —
+   428→            pass with {course.passScore}% to complete the course.
+   429→          </p>
+   430→        </section>
+   431→        {course.project ? (
+   432→          <section className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-500/[0.06] to-transparent p-5">
+   433→            <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-foreground">
+   434→              <Hammer className="h-4 w-4 text-amber-500" aria-hidden="true" />
+   435→              Capstone project
+   436→            </h2>
+   437→            <p className="text-sm leading-relaxed text-foreground/85">
+   438→              {course.project.summary}
+   439→            </p>
+   440→          </section>
+   441→        ) : null}
+   442→      </div>
+   443→
+   444→      <button
+   445→        type="button"
+   446→        onClick={onStart}
+   447→        className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-black/20 transition-transform hover:scale-[1.01] active:scale-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 ${accent.dot}`}
+   448→      >
+   449→        <BookOpen className="h-5 w-5" aria-hidden="true" />
+   450→        Start lesson 1
+   451→        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+   452→      </button>
+   453→
+   454→      {course.interviewQs.length > 0 ? (
+   455→        <section aria-labelledby="interview-title" className="rounded-2xl border border-border bg-card/60 p-5 sm:p-6">
+   456→          <h2 id="interview-title" className="mb-2 flex items-center gap-2.5 text-base font-semibold text-foreground">
+   457→            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400">
+   458→              <Sparkles className="h-4 w-4" aria-hidden="true" />
+   459→            </span>
+   460→            Interview preparation
+   461→          </h2>
+   462→          <p className="mb-3 text-sm text-muted-foreground">
+   463→            How this course&apos;s knowledge reads in a hiring conversation — try answering before revealing.
+   464→          </p>
+   465→          {course.interviewQs.map((qa, i) => (
+   466→            <InterviewQuestion key={i} q={qa.q} a={qa.a} />
+   467→          ))}
+   468→        </section>
+   469→      ) : null}
+   470→    </div>
+   471→  );
+   472→}
+   473→
+   474→// ---------------------------------------------------------------------------
+   475→
+   476→function LessonPane({
+   477→  course,
+   478→  order,
+   479→  completedLessons,
+   480→  completeLesson,
+   481→  router,
+   482→}: {
+   483→  course: Course;
+   484→  order: number;
+   485→  completedLessons: number[];
+   486→  completeLesson: (order: number) => void;
+   487→  router: ReturnType<typeof useRouter>;
+   488→}) {
+   489→  const { data, isLoading, isError } = useQuery({
+   490→    queryKey: ["course", course.courseSlug, "lesson", order],
+   491→    queryFn: () => fetchLesson(course.courseSlug, order),
+   492→  });
+   493→
+   494→  // lesson analytics
+   495→  React.useEffect(() => {
+   496→    trackEvent("lesson_view", course.courseSlug, `lesson-${order}`);
+   497→  }, [course.courseSlug, order]);
+   498→
+   499→  const lesson = data?.lesson;
+   500→  const isDone = completedLessons.includes(order);
+   501→  const hasNext = order < course.lessonCount;
+   502→
+   503→  if (isLoading) {
+   504→    return (
+   505→      <div className="space-y-4" aria-busy="true" aria-label="Loading lesson">
+   506→        <div className="h-7 w-2/3 animate-pulse rounded-lg bg-muted" />
+   507→        <div className="h-24 animate-pulse rounded-xl bg-muted/60" />
+   508→        <div className="h-4 w-full animate-pulse rounded bg-muted" />
+   509→        <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
+   510→        <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
+   511→      </div>
+   512→    );
+   513→  }
+   514→
+   515→  if (isError || !lesson) {
+   516→    return (
+   517→      <div className="rounded-2xl border border-border p-8 text-center">
+   518→        <p className="text-sm text-muted-foreground">
+   519→          This lesson couldn&apos;t be loaded. It may be unpublished.
+   520→        </p>
+   521→        <Link
+   522→          href={courseHref(course.courseSlug)}
+   523→          className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-teal-600 hover:underline dark:text-teal-400"
+   524→        >
+   525→          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+   526→          Back to course
+   527→        </Link>
+   528→      </div>
+   529→    );
+   530→  }
+   531→
+   532→  return (
+   533→    <motion.article
+   534→      key={order}
+   535→      initial={{ opacity: 0, y: 10 }}
+   536→      animate={{ opacity: 1, y: 0 }}
+   537→      transition={{ duration: 0.25 }}
+   538→      className="max-w-[46rem]"
+   539→    >
+   540→      {/* Lesson header */}
+   541→      <header className="mb-6">
+   542→        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+   543→          <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono font-semibold text-muted-foreground">
+   544→            Lesson {order} / {course.lessonCount}
+   545→          </span>
+   546→          <span className="flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-muted-foreground">
+   547→            <Clock className="h-3 w-3" aria-hidden="true" />
+   548→            {lesson.minutes} min
+   549→          </span>
+   550→          <span className="flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-muted-foreground">
+   551→            <Zap className="h-3 w-3" aria-hidden="true" />
+   552→            {lesson.xp} XP
+   553→          </span>
+   554→          {isDone ? (
+   555→            <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
+   556→              <Check className="h-3 w-3" aria-hidden="true" />
+   557→              Completed
+   558→            </span>
+   559→          ) : null}
+   560→        </div>
+   561→        <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+   562→          {lesson.title}
+   563→        </h2>
+   564→        {lesson.objective ? (
+   565→          <div className="mt-3 rounded-xl border-l-2 border-teal-500/70 bg-teal-500/[0.05] px-4 py-3.5">
+   566→            <p className="text-sm leading-relaxed text-foreground/90">
+   567→              <span className="font-semibold text-teal-600 dark:text-teal-400">
+   568→                In this lesson you will:{" "}
+   569→              </span>
+   570→              {renderInline(lesson.objective, "obj")}
+   571→            </p>
+   572→          </div>
+   573→        ) : null}
+   574→        {lesson.why ? (
+   575→          <div className="mt-3 px-4 text-sm leading-relaxed text-muted-foreground">
+   576→            <span className="font-semibold text-foreground/80">Why this matters — </span>
+   577→            {renderInline(lesson.why, "why")}
+   578→          </div>
+   579→        ) : null}
+   580→      </header>
+   581→
+   582→      {/* Content blocks */}
+   583→      <LessonBlocks blocks={lesson.blocks} />
+   584→
+   585→      {/* Exercise */}
+   586→      {lesson.exercise ? (
+   587→        <div className="mt-8">
+   588→          <ExerciseCard exercise={lesson.exercise} />
+   589→        </div>
+   590→      ) : null}
+   591→
+   592→      {/* Quiz */}
+   593→      {lesson.quiz.length > 0 ? (
+   594→        <div className="mt-8">
+   595→          <QuizCard
+   596→            questions={lesson.quiz}
+   597→            courseSlug={course.courseSlug}
+   598→            label={`lesson-${order}`}
+   599→            title="Quick quiz"
+   600→          />
+   601→        </div>
+   602→      ) : null}
+   603→
+   604→      {/* Summary + next */}
+   605→      {lesson.summary || lesson.next ? (
+   606→        <section className="mt-8 rounded-2xl border border-border bg-card/60 p-5 sm:p-6">
+   607→          {lesson.summary ? (
+   608→            <>
+   609→              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+   610→                Lesson summary
+   611→              </h3>
+   612→              <p className="text-[15px] leading-relaxed text-foreground/90">
+   613→                {renderInline(lesson.summary, "sum")}
+   614→              </p>
+   615→            </>
+   616→          ) : null}
+   617→          {lesson.next ? (
+   618→            <div className="mt-4 rounded-xl border border-teal-500/25 bg-teal-500/[0.05] px-4 py-3">
+   619→              <p className="text-sm leading-relaxed text-foreground/90">
+   620→                <span className="font-semibold text-teal-600 dark:text-teal-400">
+   621→                  What&apos;s next:{" "}
+   622→                </span>
+   623→                {renderInline(lesson.next, "next")}
+   624→              </p>
+   625→            </div>
+   626→          ) : null}
+   627→        </section>
+   628→      ) : null}
+   629→
+   630→      {/* Footer nav */}
+   631→      <footer className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   632→        <div className="flex gap-2">
+   633→          {order > 1 ? (
+   634→            <Link
+   635→              href={lessonHref(course.courseSlug, order - 1)}
+   636→              className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
+   637→            >
+   638→              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+   639→              Lesson {order - 1}
+   640→            </Link>
+   641→          ) : (
+   642→            <Link
+   643→              href={courseHref(course.courseSlug)}
+   644→              className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
+   645→            >
+   646→              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+   647→              Overview
+   648→            </Link>
+   649→          )}
+   650→        </div>
+   651→        <div className="flex gap-2">
+   652→          {!isDone ? (
+   653→            <button
+   654→              type="button"
+   655→              onClick={() => completeLesson(order)}
+   656→              className="flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-500/20 dark:text-emerald-300"
+   657→            >
+   658→              <Check className="h-4 w-4" aria-hidden="true" />
+   659→              Mark complete
+   660→            </button>
+   661→          ) : null}
+   662→          {hasNext ? (
+   663→            <Link
+   664→              href={lessonHref(course.courseSlug, order + 1)}
+   665→              onClick={() => completeLesson(order)}
+   666→              className="flex items-center gap-2 rounded-lg border border-border bg-foreground px-4 py-2 text-sm font-semibold text-background transition-transform hover:scale-[1.02]"
+   667→            >
+   668→              Next lesson
+   669→              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+   670→            </Link>
+   671→          ) : (
+   672→            <Link
+   673→              href={lessonHref(course.courseSlug, "assessment")}
+   674→              onClick={() => completeLesson(order)}
+   675→              className="flex items-center gap-2 rounded-lg border border-teal-500/40 bg-teal-500/10 px-4 py-2 text-sm font-semibold text-teal-700 transition-transform hover:scale-[1.02] dark:text-teal-300"
+   676→            >
+   677→              <Flag className="h-4 w-4" aria-hidden="true" />
+   678→              Final assessment
+   679→            </Link>
+   680→          )}
+   681→        </div>
+   682→      </footer>
+   683→    </motion.article>
+   684→  );
+   685→}
+   686→
+   687→// ---------------------------------------------------------------------------
+   688→
+   689→function AssessmentView({
+   690→  course,
+   691→  accent,
+   692→  onResult,
+   693→  courseSlugForAnalytics,
+   694→}: {
+   695→  course: Course;
+   696→  accent: ReturnType<typeof getAccent>;
+   697→  onResult: (score: number, passed: boolean) => void;
+   698→  courseSlugForAnalytics: string;
+   699→}) {
+   700→  if (course.assessment.length === 0) {
+   701→    return (
+   702→      <div className="rounded-2xl border border-border p-8 text-center text-sm text-muted-foreground">
+   703→        The final assessment for this course is being prepared.
+   704→      </div>
+   705→    );
+   706→  }
+   707→  return (
+   708→    <motion.div
+   709→      initial={{ opacity: 0, y: 10 }}
+   710→      animate={{ opacity: 1, y: 0 }}
+   711→      className="space-y-6"
+   712→    >
+   713→      <header>
+   714→        <div className="mb-2 flex items-center gap-2 text-xs">
+   715→          <span className={`rounded-full border px-2.5 py-0.5 font-mono font-semibold ${accent.chip}`}>
+   716→            Course finale
+   717→          </span>
+   718→        </div>
+   719→        <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+   720→          Final assessment
+   721→        </h2>
+   722→        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+   723→          {course.assessment.length} questions mixing concepts, code reading, debugging and applied
+   724→          scenarios. Score {course.passScore}% or higher to complete the course — every answer
+   725→          explains itself, so a wrong turn is still a lesson.
+   726→        </p>
+   727→      </header>
+   728→      <QuizCard
+   729→        questions={course.assessment}
+   730→        courseSlug={courseSlugForAnalytics}
+   731→        label="assessment"
+   732→        title="Final assessment"
+   733→        isAssessment
+   734→        passScore={course.passScore}
+   735→        onAssessmentResult={onResult}
+   736→      />
+   737→      {course.project ? <ProjectCard project={course.project} /> : null}
+   738→    </motion.div>
+   739→  );
+   740→}
+   741→
+   742→function ProjectCard({
+   743→  project,
+   744→}: {
+   745→  project: NonNullable<Course["project"]>;
+   746→}) {
+   747→  return (
+   748→    <section className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/[0.05] to-transparent p-5 sm:p-6" aria-labelledby="proj-title">
+   749→      <h2 id="proj-title" className="mb-2 flex items-center gap-2.5 text-base font-semibold text-foreground">
+   750→        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+   751→          <Hammer className="h-4 w-4" aria-hidden="true" />
+   752→        </span>
+   753→        Capstone project — {project.title}
+   754→      </h2>
+   755→      <p className="mb-4 text-sm leading-relaxed text-foreground/85">{project.summary}</p>
+   756→      <div className="grid gap-5 md:grid-cols-2">
+   757→        <div>
+   758→          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   759→            Functional requirements
+   760→          </h3>
+   761→          <ul className="space-y-2">
+   762→            {project.requirements.map((r, i) => (
+   763→              <li key={i} className="flex gap-2 text-sm leading-relaxed text-foreground/85">
+   764→                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500/70" aria-hidden="true" />
+   765→                <span>{renderInline(r, `pr-${i}`)}</span>
+   766→              </li>
+   767→            ))}
+   768→          </ul>
+   769→        </div>
+   770→        <div>
+   771→          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   772→            Implementation steps
+   773→          </h3>
+   774→          <ol className="space-y-2">
+   775→            {project.steps.map((s, i) => (
+   776→              <li key={i} className="flex gap-2 text-sm leading-relaxed text-foreground/85">
+   777→                <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 font-mono text-[10px] font-semibold text-amber-600 dark:text-amber-400" aria-hidden="true">
+   778→                  {i + 1}
+   779→                </span>
+   780→                <span>{renderInline(s, `ps-${i}`)}</span>
+   781→              </li>
+   782→            ))}
+   783→          </ol>
+   784→        </div>
+   785→        <div>
+   786→          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   787→            Evaluation criteria
+   788→          </h3>
+   789→          <ul className="space-y-2">
+   790→            {project.evaluation.map((e, i) => (
+   791→              <li key={i} className="flex gap-2 text-sm leading-relaxed text-foreground/85">
+   792→                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500/70" aria-hidden="true" />
+   793→                <span>{renderInline(e, `pe-${i}`)}</span>
+   794→              </li>
+   795→            ))}
+   796→          </ul>
+   797→        </div>
+   798→        <div>
+   799→          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   800→            Stretch goals
+   801→          </h3>
+   802→          <ul className="space-y-2">
+   803→            {project.stretch.map((s, i) => (
+   804→              <li key={i} className="flex gap-2 text-sm leading-relaxed text-foreground/85">
+   805→                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500/70" aria-hidden="true" />
+   806→                <span>{renderInline(s, `px-${i}`)}</span>
+   807→              </li>
+   808→            ))}
+   809→          </ul>
+   810→        </div>
+   811→      </div>
+   812→      <div className="mt-4 rounded-lg border-l-2 border-amber-500/50 bg-amber-500/[0.05] px-4 py-2.5 text-sm text-foreground/85">
+   813→        <span className="font-semibold text-amber-600 dark:text-amber-400">Architecture — </span>
+   814→        {project.architecture}
+   815→      </div>
+   816→    </section>
+   817→  );
+   818→}
+   819→

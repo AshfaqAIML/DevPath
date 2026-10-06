@@ -64,7 +64,8 @@ export function trackEvent(
     | "lesson_view"
     | "lesson_complete"
     | "quiz_attempt"
-    | "assessment_pass",
+    | "assessment_pass"
+    | "sandbox_deep_link",
   slug?: string | null,
   label?: string | null
 ) {

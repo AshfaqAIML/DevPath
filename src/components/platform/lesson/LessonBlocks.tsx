@@ -6,7 +6,8 @@
 // Callout, CodeBlock, Diagram, KeyTakeaways, InterviewQuestion, table, list.
 // Content never lives inside JSX: this renderer maps data → components.
 import * as React from "react";
-import { Check, ChevronDown, HelpCircle, Info, Lightbulb, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, Copy, Database, HelpCircle, Info, Lightbulb, Play, TriangleAlert } from "lucide-react";
 import type { ContentBlock } from "@/lib/course-types";
 
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ export function renderInline(text: string, keyPrefix = "i"): React.ReactNode[] {
       nodes.push(
         <code
           key={key}
-          className="rounded-sm border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] font-medium text-foreground"
         >
           {token.slice(1, -1)}
         </code>
@@ -350,6 +351,75 @@ export function InterviewQuestion({ q, a }: { q: string; a: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// PracticeCard — a runnable query handed to a live sandbox (SQL Query
+// Simulator). The deep-link pre-fills the sandbox editor with the query.
+
+const SANDBOX_HREF = "/?view=simulator&sim=sql-query-sandbox";
+
+export function practiceHref(query: string): string {
+  return `${SANDBOX_HREF}&q=${encodeURIComponent(query)}`;
+}
+
+export function PracticeCard({ query, note, title }: { query: string; note?: string; title?: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(query);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard unavailable */ }
+  };
+  return (
+    <aside className="my-6 overflow-hidden rounded-xl border border-teal-500/35 bg-gradient-to-br from-teal-500/[0.08] via-transparent to-transparent">
+      <div className="flex items-center gap-2.5 border-b border-teal-500/20 bg-teal-500/[0.06] px-4 py-2.5">
+        <Database className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300">
+          {title ?? "Practice"}
+        </span>
+        <span className="hidden text-xs text-muted-foreground sm:inline">
+          run it live in the SQL Query Sandbox
+        </span>
+      </div>
+      <div className="overflow-x-auto bg-zinc-950 px-4 py-3 dark:bg-black/50">
+        <pre className="font-mono text-[12.5px] leading-relaxed text-zinc-100">
+          {query.split("\n").map((line, li) => (
+            <React.Fragment key={li}>
+              {tokenizeLine(line, "sql").map((t, j) => (
+                <span key={j} className={t.cls}>{t.text}</span>
+              ))}
+              {li < query.split("\n").length - 1 ? "\n" : null}
+            </React.Fragment>
+          ))}
+        </pre>
+      </div>
+      {note ? (
+        <p className="border-b border-teal-500/15 px-4 py-2.5 text-xs leading-relaxed text-foreground/80">
+          {renderInline(note, "pn")}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+        <Link
+          href={practiceHref(query)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-teal-500 hover:shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 active:scale-[0.98]"
+        >
+          <Play className="h-3.5 w-3.5" aria-hidden="true" />
+          Open in sandbox
+        </Link>
+        <button
+          type="button"
+          onClick={copy}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500"
+          aria-label="Copy query to clipboard"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+          {copied ? "Copied ✓" : "Copy query"}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The block dispatcher
 
 export function LessonBlocks({ blocks }: { blocks: ContentBlock[] }) {
@@ -440,6 +510,8 @@ export function LessonBlocks({ blocks }: { blocks: ContentBlock[] }) {
             return <KeyTakeaways key={i} items={b.items} title={b.title} />;
           case "interview":
             return <InterviewQuestion key={i} q={b.q} a={b.a} />;
+          case "practice":
+            return <PracticeCard key={i} query={b.query} note={b.note} title={b.title} />;
           default:
             return null;
         }

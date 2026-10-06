@@ -1,0 +1,133 @@
+{
+  "title": "Expressions, Aliases & DISTINCT",
+  "slug": "02-expressions-aliases-distinct",
+  "objective": "After this lesson you will be able to compute new columns inside SELECT (arithmetic and string work), name those results with aliases, and collapse duplicate values with DISTINCT — and know exactly when a query's output stops matching the stored data.",
+  "why": "Raw stored values are rarely what a report needs. 'hours_studied' is an integer, but the question is 'roughly how many full days has each developer studied?'. 'country' is per-row, but the question is 'which countries are represented at all?'. SELECT is not just a column picker — it is a small expression engine, and learning to use it means fewer round-trips to application code, fewer bugs from post-processing loops, and queries that read like the answer.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "The SELECT list is an expression list" },
+    { "t": "p", "text": "Every item in a SELECT list can be a column name — or an **expression** built from columns. The database evaluates the expression **per row**, and the result becomes that row's value in a new output column. The arithmetic operators are the familiar `+ - * /`:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "SELECT name,\n       hours_studied,\n       hours_studied / 60      AS full_days,\n       hours_studied / 10      AS tens\nFROM developers\nLIMIT 5;",
+      "caption": "Computed columns, evaluated once per row"
+    },
+    { "t": "p", "text": "Run that in the sandbox and read Maya Chen's row: `912` hours becomes `15.2` full days (912 / 60). Two things to internalize. First, the expression used `hours_studied` **twice** — expressions can reference any column as many times as you like, and every reference reads the *same row's* value. Cross-row math (running totals, differences between developers) needs the tools of Lessons 6–7; inside one row, you are free. Second, notice the division produced a decimal, not an integer — this engine, like SQLite, computes 912 / 60 as 15.2 rather than 15. Some engines (and some column types) do integer division instead and would say 15 — a portability fact worth knowing exists, even before you meet it." },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Precision is not rounding",
+      "text": "AVG and division can produce values like 515.7142857142857 — the database is being honest, not annoying. There is no ROUND() in this sandbox engine (a deliberate teaching simplification); real engines all have it, and you'll round for display in the report layer, not silently in the data layer. Keep full precision in queries; round in the last mile."
+    },
+    { "t": "h", "text": "Aliases: naming what you computed" },
+    { "t": "p", "text": "An expression needs a name, and `hours_studied / 60` is an unbearable column header. The `AS` keyword names an output column — an **alias**:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "SELECT name,\n       hours_studied / 60 AS full_days,\n       hours_studied * 2  AS doubled_hours\nFROM developers\nORDER BY full_days DESC\nLIMIT 3;",
+      "caption": "Aliases also become sortable names — ORDER BY full_days works"
+    },
+    { "t": "p", "text": "Aliases do three jobs. They **name** computed columns (reports and downstream code depend on stable names). They **rename** stored columns — `SELECT hours_studied AS study_hours` — which is how API-facing queries present friendly names without changing the schema. And they **shorten** references in joins, which you will use relentlessly in Lesson 8. The `AS` word itself is optional in most engines (`hours_studied / 60 full_days` parses), but writing it keeps the intent loud — omit it and one missing comma later turns a rename into a silent two-column list." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Two quoting conventions you will meet in the wild",
+      "text": "Single quotes ('frontend') are for string VALUES. Double quotes (\"full days\") are for IDENTIFIERS — column and table names — mainly when they contain spaces or clash with keywords. Mixing these up is the most common first-week SQL error: WHERE name = \"Maya\" looks like a comparison but, in engines that follow the standard, tries to reference a column named Maya. Values get single quotes; names get double quotes; most of the time names need no quotes at all."
+    },
+    { "t": "h", "text": "DISTINCT: one row per value" },
+    { "t": "p", "text": "Lesson 1 left a loose end: 14 developers, but only 13 countries — Japan appears twice (Kenji Tanaka and Yuki Sato). If the question is *which countries are represented*, you don't want a row per developer; you want a row per country. `DISTINCT` collapses the output to unique **combinations** of the listed columns:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- 14 rows, with Japan twice\nSELECT country FROM developers;\n\n-- 13 rows — every country exactly once\nSELECT DISTINCT country FROM developers;\n\n-- Role × level combinations, each once: 11 rows\nSELECT DISTINCT role, level FROM developers;"
+    },
+    { "t": "p", "text": "The two-column version is the one that surprises people: DISTINCT applies to the whole row of output, not to each column independently. `role, level` pairs — 5 frontend rows collapse to (frontend, Beginner), (frontend, Intermediate), (frontend, Advanced); the combination is what must be unique. There are 4 distinct roles and 3 distinct levels, but 11 distinct combinations, because not every pairing occurs in the data." },
+    { "t": "p", "text": "One more distinction worth burning in: DISTINCT is about the **result**, WHERE is about the **input rows** (next lesson). DISTINCT dedupes whatever you selected; it never decides which rows were read. And a practical note: DISTINCT is allowed once, immediately after SELECT — `SELECT DISTINCT DISTINCT country` is a syntax error, and `SELECT name, DISTINCT country` is too." },
+    {
+      "t": "practice",
+      "query": "SELECT DISTINCT role, level FROM developers ORDER BY role, level;",
+      "note": "Count the pairs — 4 roles × 3 levels is 12 possible combinations, but the data only has 11. Which pairing is missing?"
+    },
+    { "t": "callout", "variant": "tip", "title": "The exploration habit", "text": "When you meet a new table, three queries tell you most of its story: SELECT * FROM t LIMIT 5 (shape and sample values), SELECT DISTINCT column FROM t for low-cardinality columns like role, level, topic (what categories exist), and a couple of COUNT queries once you know Lesson 6. Five minutes of this saves an hour of confused joins later." },
+    { "t": "keytakeaways", "items": [
+      "SELECT list items can be expressions over columns, evaluated per row — arithmetic is computed in the database, not in application code",
+      "AS names an output column (alias); aliases give computed columns stable names and become usable in ORDER BY",
+      "Single quotes for string values, double quotes for identifiers — mixing them is the classic first-week bug",
+      "DISTINCT dedupes the output rows — for the full combination of listed columns, not each column separately",
+      "COUNT(DISTINCT col) exists in real engines but not this sandbox — count the rows of a DISTINCT query instead"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Product wants a 'study intensity' breakdown for the standup slide: for each developer, show the name, their hours_studied, and a computed column intensity that is hours_studied divided by 100, rounded for display however you like in the slide (not in SQL). Order the slide by intensity, most intense first, and show only the top 5. Verify with the data: Kenji Tanaka (947) should lead.",
+    "hints": [
+      "Two of the three columns are plain (name, hours_studied); the third is an expression with an alias.",
+      "The alias is intensity, the expression is hours_studied / 100.",
+      "Sorting: ORDER BY intensity DESC, trimming: LIMIT 5. All four jobs of a query in one statement — columns, order, and count; the WHERE job isn't needed because 'top 5 by intensity' has no row condition beyond the sort."
+    ],
+    "solution": "SELECT name,\n       hours_studied,\n       hours_studied / 100 AS intensity\nFROM developers\nORDER BY intensity DESC\nLIMIT 5;",
+    "why": "Every clause does its one job: SELECT names the projection (two stored columns plus one computed), the alias gives the computed column a name ORDER BY can use, DESC points the leaderboard the right way, LIMIT trims it to the slide's five rows. The top 5 are Kenji 947, Maya 912, Sofia 871, Elena 783, Priya 648 — and you got the ranking for free from the database instead of sorting in application code.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT name,\n       hours_studied,\n       hours_studied / 100 AS intensity\nFROM developers\nORDER BY intensity DESC\nLIMIT 5;",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "SELECT name, hours_studied / 60 AS full_days FROM developers — what does the full_days column contain for Diego Alvarez (186 hours)?",
+      "options": [
+        "3.1 — the expression is evaluated for his row: 186 / 60",
+        "186 — aliases copy the original value",
+        "15.2 — Maya's value; expressions evaluate once for the table",
+        "NULL — you cannot divide inside SELECT"
+      ],
+      "answer": 0,
+      "explain": "Expressions evaluate per row, and each row's output value comes from that same row's inputs. Diego's row: 186 / 60 = 3.1 full days. Maya's row stays 15.2. The row-by-row evaluation is what makes computed columns safe to mix with any filtering."
+    },
+    {
+      "q": "SELECT DISTINCT role, level FROM developers returns 11 rows, not 12. What does that tell you?",
+      "options": [
+        "One developer's data is corrupt",
+        "One role-level combination doesn't exist in the data — DISTINCT dedupes complete row combinations, so a missing pairing simply never appears",
+        "DISTINCT dropped a row at random as a tiebreaker",
+        "The engine caps DISTINCT output at 11 rows"
+      ],
+      "answer": 1,
+      "explain": "4 roles × 3 levels = 12 possible pairs; the data contains 11 (there is no devops Beginner in this dataset). DISTINCT never invents or samples — it shows exactly the combinations that occur, each once. Counting distinct combinations is a genuinely useful data-profiling move."
+    },
+    {
+      "q": "Why does WHERE name = \"Maya Chen\" fail (or behave surprisingly) in many engines?",
+      "options": [
+        "Because names cannot be compared with =",
+        "Double quotes denote an identifier (column name), not a string value — the engine looks for a column called Maya Chen",
+        "Because WHERE only works on numbers",
+        "Because Maya Chen contains a space"
+      ],
+      "answer": 1,
+      "explain": "The standard's rule: single quotes wrap string values, double quotes wrap identifiers. Some engines (MySQL by default) bend this and treat double quotes as strings — which makes the bug port with you. Values: single quotes. Always."
+    },
+    {
+      "q": "What is the practical difference between an alias and a renamed table column?",
+      "options": [
+        "None — aliases physically rewrite the table's column names",
+        "An alias only affects this query's output; the stored table is untouched — it's a presentation name for one result set",
+        "Aliases persist for the session once used",
+        "Aliases can only contain single words"
+      ],
+      "answer": 1,
+      "explain": "SELECT is read-only: aliases rename columns in the OUTPUT table, never in storage. That's why the same column can be study_hours in one report and hours in another — the underlying table never notices. Renaming a real column is a schema change (Lesson 9 territory)."
+    },
+    {
+      "q": "You need 'how many distinct countries do our developers represent?' in the sandbox engine. Approach?",
+      "options": [
+        "COUNT(DISTINCT country) — works everywhere",
+        "The sandbox lacks COUNT(DISTINCT): run SELECT DISTINCT country FROM developers and count the 13 returned rows (real engines have COUNT(DISTINCT) for exactly this)",
+        "SELECT DISTINCT COUNT(country) FROM developers",
+        "It's impossible — DISTINCT cannot be counted"
+      ],
+      "answer": 1,
+      "explain": "This engine deliberately keeps a small teaching surface, so you compose tools instead: DISTINCT to dedupe, then the row count. Real SQL has COUNT(DISTINCT col) as a one-liner. Knowing both — the shortcut AND the composition — is the mark of understanding rather than memorizing."
+    }
+  ],
+  "summary": "The SELECT list is an expression engine: arithmetic over columns is computed per row, in the database. Aliases (AS) give computed columns stable, sortable names — and the single-vs-double-quote rule (values vs identifiers) is the first bug you'll stop making. DISTINCT collapses output to unique row-combinations, which turns '14 developers' into '13 countries' and '11 role-level pairings'. You can now shape output; next you'll shape which rows are read at all.",
+  "next": "Every query so far has returned all 14 developers. Real questions are pickier: only the frontend developers, only the serious studiers, only rows where the data admits a fact. That's WHERE — and its most infamous trap: a value that is neither true nor false, called NULL."
+}

@@ -195,6 +195,13 @@ const courseItems: SeedItem[] = [
   tags: "course,focused,practical",
   featured: i === 0 || i === 27,
 }));
+// SQL Fundamentals ships with complete lesson content
+// (content/courses/sql-fundamentals/) — its catalog copy describes the real course.
+const sqlFundamentals = courseItems.find((c) => c.title === "SQL Fundamentals");
+if (sqlFundamentals) {
+  sqlFundamentals.description =
+    "Ten hands-on lessons from your first SELECT to three-table joins: filtering, sorting, aggregates, GROUP BY, data design and safe mutations. Every example runs live in the SQL Query Sandbox, and the capstone makes you the platform's first analytics hire.";
+}
 courseItems.push({ title: "Zig Fundamentals", level: "Intermediate", duration: "2h 30m", tags: "zig,systems", published: false });
 
 const resourceItems: SeedItem[] = [

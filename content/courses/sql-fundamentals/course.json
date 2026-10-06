@@ -1,0 +1,237 @@
+{
+  "courseSlug": "sql-fundamentals",
+  "subtitle": "Read, filter, join and summarize real data — ten lessons where every query runs live in the SQL Query Sandbox",
+  "audience": "Developers who have never written SQL, and developers who paste queries from tickets without confidence. No database setup required — every example and exercise in this course runs in DevPath's SQL Query Sandbox against a realistic three-table dataset (developers, courses, enrollments). If you will ever touch an application database, an analytics dashboard, or a 'the numbers look wrong' bug investigation, this course is for you.",
+  "outcomes": [
+    "Explain how relational databases organize data into tables, rows and columns, and why SQL is declarative rather than procedural",
+    "Write SELECT queries that project exactly the columns you need, compute expressions, and rename output with aliases",
+    "Filter rows precisely with WHERE — comparisons, AND/OR/NOT logic, and correct NULL handling with IS NULL",
+    "Search text with LIKE patterns, test membership with IN, and express ranges with BETWEEN",
+    "Sort with ORDER BY, take top-N results with LIMIT, and page through large results with OFFSET",
+    "Summarize data with COUNT, SUM, AVG, MIN and MAX — per table and per group with GROUP BY and HAVING",
+    "Combine tables with INNER JOIN and LEFT JOIN, including three-table joins and finding unmatched rows",
+    "Design sound tables — primary keys, foreign keys, types and normalization — and write safe INSERT, UPDATE, DELETE inside transactions"
+  ],
+  "prereqSlugs": [],
+  "technologies": ["ANSI SQL", "SQLite 3 (sandbox engine)", "PostgreSQL", "Relational data model"],
+  "skills": ["SQL querying", "filtering", "aggregation", "joins", "data modeling", "transactions"],
+  "assessment": [
+    {
+      "q": "What does it mean that SQL is a declarative language?",
+      "options": [
+        "You describe the result you want; the database decides how to compute it",
+        "You must declare all variables before use, like in C",
+        "Every query must start with the DECLARE keyword",
+        "Results are declared in a schema file before querying"
+      ],
+      "answer": 0,
+      "explain": "In SQL you specify WHAT (which columns, which rows, what order) and the query planner decides HOW — which indexes, which join order, which scan strategy. That separation is why the same query can get faster with zero rewrites when the planner improves.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "SELECT name, hours_studied FROM developers — what does the SELECT list control?",
+      "options": [
+        "Which rows are returned (which people)",
+        "Which columns are returned and in what order (projection)",
+        "The order the rows come back in",
+        "How many rows are returned at most"
+      ],
+      "answer": 1,
+      "explain": "The SELECT list is the projection: it picks columns and their order. Row selection is WHERE's job, row count is LIMIT's, and ordering is ORDER BY's. Keeping the four jobs separate is the core mental model of this course.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Why does WHERE hours_studied = NULL return no rows even when some values are NULL?",
+      "options": [
+        "Because NULL equals zero and no hours are zero",
+        "Because comparing anything to NULL yields UNKNOWN, and only rows that are definitely TRUE survive",
+        "Because NULL must be written in double quotes",
+        "Because = only works on text columns"
+      ],
+      "answer": 1,
+      "explain": "NULL means 'unknown', so the comparison's truth is also unknown — and WHERE keeps only rows where the condition is certainly TRUE. The correct test is IS NULL (or IS NOT NULL), which asks a different question: is the value missing?",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You write WHERE role = 'frontend' AND level = 'Beginner' OR hours_studied > 900, intending 'frontend, and either beginner or very studious'. Which developers actually match?",
+      "options": [
+        "Exactly the ones you intended — AND and OR distribute evenly",
+        "AND binds tighter than OR, so the real grouping is (frontend AND Beginner) OR hours>900 — every developer over 900 hours matches regardless of role",
+        "The query fails to parse — mixed AND/OR needs parentheses",
+        "Only the frontend developers match, because AND always wins"
+      ],
+      "answer": 1,
+      "explain": "Precedence: AND groups before OR, like multiplication before addition. Your intended grouping needs explicit parentheses: WHERE role = 'frontend' AND (level = 'Beginner' OR hours_studied > 900). When mixing AND with OR, write the parentheses you mean — always.",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Which LIKE pattern matches titles whose second character is 'e' (like 'React Hooks Deep Dive')?",
+      "options": [
+        "LIKE '%e%'",
+        "LIKE '_e%'",
+        "LIKE 'e%'",
+        "LIKE '_e_'"
+      ],
+      "answer": 1,
+      "explain": "_ matches exactly one character, % matches any number. '_e%' = one arbitrary character, then 'e', then anything. 'e%' anchors to the start; '%e%' matches 'e' anywhere; '_e_' additionally requires exactly three characters total.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "A query returns rows in a pleasing order but has no ORDER BY. What can you rely on?",
+      "options": [
+        "Insertion order — rows come back in the order they were inserted",
+        "Primary key order, always",
+        "Nothing — without ORDER BY, row order is undefined and can change between runs",
+        "Alphabetical order of the first column"
+      ],
+      "answer": 2,
+      "explain": "SQL makes no promise about unordered results. In practice you often see insertion or key order — which is exactly what makes this a trap: it holds until a page cache, a parallel scan, or an index change flips it. Any code or report that depends on order must say so with ORDER BY.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "COUNT(role) vs COUNT(*) on a table where role is NULL in 5 of 40 rows — what do they return?",
+      "options": [
+        "40 and 40 — they are synonyms",
+        "35 and 40 — COUNT(column) skips NULLs, COUNT(*) counts rows",
+        "40 and 35 — COUNT(*) skips NULLs",
+        "Both return 35"
+      ],
+      "answer": 1,
+      "explain": "COUNT(*) answers 'how many rows'; COUNT(col) answers 'how many rows have a known value in col'. The distinction becomes powerful with outer joins and optional fields — COUNT(email) is a free 'how many users have an email' metric.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "You need published courses grouped by topic, keeping only topics with at least 2 such courses. Where does each condition belong?",
+      "options": [
+        "published in HAVING, the count check in WHERE",
+        "Both conditions in HAVING",
+        "published in WHERE, the count check in HAVING",
+        "Both conditions in WHERE"
+      ],
+      "answer": 2,
+      "explain": "WHERE filters individual rows before grouping (published = 1 is a row-level fact). HAVING filters groups after aggregation (COUNT(*) >= 2 is a fact about the group). Rule of thumb: if the condition mentions an aggregate, it must be HAVING; if it mentions a raw column, prefer WHERE — filtering early shrinks the work the grouping does.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "An INNER JOIN of enrollments to developers misses something a LEFT JOIN would show. What?",
+      "options": [
+        "Nothing — they produce identical results on any data",
+        "Rows from the left table with no match in the right table, NULL-padded — e.g. courses nobody enrolled in",
+        "Duplicate rows from the right table",
+        "LEFT JOIN is always faster, so it shows the same rows sooner"
+      ],
+      "answer": 1,
+      "explain": "INNER JOIN keeps only matching pairs. LEFT JOIN additionally keeps every left row, padding the right side's columns with NULL when no match exists — which is how you answer 'show me what's missing': LEFT JOIN ... WHERE right.id IS NULL.",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Why do the enrollments rows store developer_id = 3 instead of the developer's name?",
+      "options": [
+        "To make the table smaller on disk, nothing more",
+        "Referencing the key avoids duplication — the name lives in exactly one place, so renaming a developer is one UPDATE and can never leave the data inconsistent",
+        "Because SQL forbids text in integer columns globally",
+        "Names are not allowed in tables by the relational model"
+      ],
+      "answer": 1,
+      "explain": "That's normalization in one sentence: store each fact once and reference it by key. Duplicating 'Priya Sharma' across 28 enrollment rows invites update anomalies — change her name in one place, and stale copies silently disagree everywhere else. Keys make relationships explicit and cheap to enforce.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "You run UPDATE developers SET level = 'Advanced'; in production. What did you just do, and what would have protected you?",
+      "options": [
+        "Updated nothing — UPDATE requires a LIMIT clause",
+        "Updated every row in the table; a WHERE clause (or a transaction you inspect before COMMIT) would have scoped it",
+        "Updated one random row — SQL applies UPDATE to the first match",
+        "Deleted the level column — UPDATE without WHERE is a delete"
+      ],
+      "answer": 1,
+      "explain": "UPDATE and DELETE without WHERE are unbounded: every row qualifies. Protection comes in layers: write the WHERE first, run a SELECT with the same condition to preview victims, and wrap the change in a transaction so ROLLBACK can undo what you see go wrong before COMMIT.",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Inside a transaction you DELETE the wrong rows, notice immediately, and run ROLLBACK. What happens to the deletion?",
+      "options": [
+        "It stays — DELETE is permanent the moment it executes",
+        "It is undone — none of the transaction's changes become visible until COMMIT",
+        "It is moved to a quarantine table for manual review",
+        "ROLLBACK only works on INSERT, not DELETE"
+      ],
+      "answer": 1,
+      "explain": "A transaction is all-or-nothing: its changes are staged where other connections can't see them, then applied atomically at COMMIT or discarded entirely at ROLLBACK. That atomicity is the A in ACID and the reason migrations and bulk edits are always wrapped in BEGIN ... COMMIT.",
+      "difficulty": "medium"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The DevPath Engagement Report",
+    "summary": "You are the first analytics hire at DevPath. Management asks one question — 'is the catalog working?' — and you answer with queries, not opinions. You'll produce a ten-query engagement report against the live sandbox database, defend each number, and finish with a design review that would make the next hire's life easier.",
+    "requirements": [
+      "Query 1 — the headline: total developers, total courses, total enrollments, and the overall completion rate (completed enrollments ÷ all enrollments) — as a single summary row (the rate itself may be computed from the two counts in your write-up)",
+      "Query 2 — top learners: the 5 developers with the most completed enrollments, ties broken by name alphabetically",
+      "Query 3 — per-role engagement: role, developer count, average hours_studied (the write-up, not the query, may round for readability)",
+      "Query 4 — catalog gaps: every course with zero enrollments, including the columns needed to decide whether to publish or retire it",
+      "Query 5 — momentum check: in-progress enrollments (completed = 0) with developer name, course title and progress, sorted most-advanced first, top 10",
+      "Query 6 — topic quality: published courses per topic with average hours, keeping only topics averaging more than 8 hours",
+      "Query 7 — free vs paid: free courses (price 0) with their enrollment counts, to test whether price-zero content drives engagement",
+      "Query 8 — country reach: distinct countries represented by developers who have at least one completed enrollment",
+      "Query 9 — fairness audit: average progress of in-progress enrollments joined to course level — are Advanced courses stalling people?",
+      "Query 10 — the anomaly hunt: developers whose enrollments are ALL completed (no in-progress rows) — your power users"
+    ],
+    "technical": [
+      "Every query runs unmodified in the DevPath SQL Query Sandbox (SELECT-only engine — aggregates, joins, grouping, sorting, paging all available)",
+      "Each query in the report is followed by its result (row count + first rows), the business question it answers, and one sentence on why you structured it that way",
+      "No final query uses SELECT * — every projection is deliberate and minimal (SELECT * is allowed once per table, while exploring)",
+      "Numbers quoted in prose match the numbers in the result tables exactly"
+    ],
+    "architecture": "The report is a single document with three sections: (1) Executive summary — five bullets, each traceable to a query number; (2) The queries — ten numbered blocks of question → query → result → rationale; (3) Data quality & design review — what the schema does well, what it can't answer (e.g. no timestamps!), and three concrete schema changes you'd propose. That third section is what separates an analyst from a query-writer.",
+    "steps": [
+      "Open the SQL Query Sandbox and survey the schema: expand each table, check column types, and run SELECT * on each once — you're exploring, not reporting",
+      "Draft each requirement as an English sentence first, then translate to SQL in the sandbox — iterate until the result looks sane (row counts in the tens, values in plausible ranges)",
+      "For each query, test one deliberately wrong variant (drop the WHERE, change JOIN to LEFT JOIN) and note what changes — that contrast is your rationale paragraph",
+      "Assemble the report document; write the executive summary last, once the numbers have surprised you at least once",
+      "Write the design review: try to answer 'when did each developer sign up?' — discover it's impossible — and propose the columns that would fix it",
+      "Sanity-check every claim: every percentage recomputed by hand, every 'top N' verified against a sorted listing",
+      "Optional polish: paste the report into a README with the queries in runnable order, so anyone can regenerate your numbers in five minutes"
+    ],
+    "evaluation": [
+      "All ten queries run in the sandbox without error and answer their stated question",
+      "The completion rate and averages are arithmetically correct (the grader recomputes them from the raw tables)",
+      "At least one finding is non-obvious — something the raw tables don't shout (e.g. which level stalls, whether free courses really engage)",
+      "The design review proposes specific, type-correct schema changes, not vague 'add more data'",
+      "Zero SELECT * in final queries; every result table has named columns"
+    ],
+    "stretch": [
+      "Add a section answering 'which course has the highest average progress among in-progress learners?' and defend the small-sample caveat in writing",
+      "Propose the SQL for two new tables — sessions (login events) and payments — that would let next quarter's report answer revenue and retention questions",
+      "Rewrite your three most complex queries with subqueries as an alternative structure and argue which form reads better and why"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "What is the difference between WHERE and HAVING?",
+      "a": "Both filter, but at different stages of the query pipeline. WHERE filters individual rows before grouping and cannot reference aggregate results; HAVING filters whole groups after GROUP BY has collapsed them and can reference aggregates like COUNT(*). The classic tell: a condition mentioning an aggregate function must live in HAVING, while a plain column condition belongs in WHERE — filtering early reduces the rows the engine must group at all. In one line: WHERE chooses which rows enter the computation, HAVING chooses which computed groups leave it. A strong follow-up point: because of that staging, WHERE conditions can use indexes, while HAVING conditions fundamentally cannot — they are evaluated after the work is done."
+    },
+    {
+      "q": "Explain INNER JOIN vs LEFT JOIN, and give a real problem only the latter can solve.",
+      "a": "An inner join returns only rows with a match on both sides; a left join additionally preserves every row from the left table, padding unmatched right-side columns with NULL. The problem only LEFT JOIN solves is 'show me the absences': courses with zero enrollments, customers with zero orders, developers who completed nothing. The pattern is LEFT JOIN ... WHERE right_table.id IS NULL — the NULL becomes the signal of no match rather than an annoyance. Interviewers like the caveats too: LEFT JOIN can silently multiply rows when the right side matches many times, and which table you name 'left' completely changes the result — the operator is not symmetric."
+    },
+    {
+      "q": "How do you handle NULL values in queries, and why does NULL behave so strangely?",
+      "a": "NULL represents 'unknown', not zero or empty string, and it propagates that uncertainty: any comparison with NULL yields UNKNOWN, which WHERE treats as false — so col = NULL matches nothing and you must write IS NULL. Aggregates mostly skip NULLs: COUNT(col) counts known values and AVG ignores NULL rows entirely, which is usually what you want and occasionally a trap. The practical toolkit is IS NULL / IS NOT NULL for tests and COALESCE(col, fallback) for substitution, plus awareness that engines disagree about where NULLs sort. The interview-worthy insight: NULL semantics are three-valued logic (TRUE / FALSE / UNKNOWN), and every 'weird' NULL behavior follows from taking that seriously instead of treating NULL as a value."
+    },
+    {
+      "q": "Why do we normalize tables, and when is denormalization the right call?",
+      "a": "Normalization reorganizes data so each fact lives in exactly one place, referenced by keys — which eliminates update anomalies (rename a developer once, not in 28 enrollment rows), insertion anomalies (add a course without inventing a fake enrollment to carry its name), and deletion anomalies (removing the last enrollment shouldn't erase the topic). The everyday working knowledge is 3NF: every non-key column depends on the key, the whole key, and nothing but the key. Denormalization is the deliberate trade of redundancy for read speed — duplicating a column into a table that is read constantly but rarely updated, or maintaining a summary table refreshed by a scheduled job. The mature answer names the cost explicitly: denormalized copies must be kept in sync (triggers, jobs, or application discipline), and every copy is a future consistency bug."
+    },
+    {
+      "q": "A teammate says their report query returned rows in a different order yesterday. Nothing in the query changed. How is that possible?",
+      "a": "Because the query has no ORDER BY, and unordered SQL results have no guaranteed order — the engine returns rows in whatever sequence its execution plan produced. The plan can change for boring reasons: table growth crossing a statistics threshold, a new index being chosen, a different cache state, a parallel scan, or a compaction rewriting the physical layout. The bug is in the report, not the database: any consumer that depends on row order must request it with ORDER BY, and any 'first row' logic needs ORDER BY plus LIMIT, not trust in accident. If order is a fact about the data itself, the real fix is a sequence column or timestamp so order is stored, not inferred."
+    },
+    {
+      "q": "Walk me through making a bulk UPDATE safe in production.",
+      "a": "Four layers. First, write the WHERE clause before the SET — the condition is the dangerous part, so author it deliberately, not as an afterthought. Second, preview the blast radius by running the identical WHERE in a SELECT, counting and eyeballing the rows. Third, wrap the change in a transaction: BEGIN, run the UPDATE, verify the reported row count matches the preview and spot-check rows, then COMMIT — or ROLLBACK the moment anything looks off; other connections see none of it until commit. Fourth, for extra safety, run changes in batches (by id ranges) so a mistake is small, and have a reversal plan — a backup, or a companion UPDATE that inverts the change (level swaps need a three-step dance through a temporary value to avoid collisions). The senior-level coda: the same discipline applies to DELETE, and ORMs do not save you — they will happily generate an unbounded UPDATE too."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

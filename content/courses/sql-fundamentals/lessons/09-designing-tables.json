@@ -1,0 +1,145 @@
+{
+  "title": "Designing Tables: Keys, Types & Normalization",
+  "slug": "09-designing-tables",
+  "objective": "After this lesson you will be able to design a table from scratch — primary key, foreign keys, column types, and the constraints that keep data honest — and refactor a badly-shaped table into normalized form, explaining each anomaly the redesign eliminates.",
+  "why": "For eight lessons you consumed a schema someone else designed, and every query you wrote was pleasant because of decisions made before any data existed: ids that identify rows, keys that reference them, types that keep values honest. This lesson is about making those decisions. Bad schemas don't fail loudly — they fail two years later as 'why does the reports query join seven tables', 'why is Priya spelled two ways', 'why can't we delete this course'. Data outlives application code; the schema is the part of your system the next five years of developers inherit from you.",
+  "minutes": 20,
+  "xp": 85,
+  "blocks": [
+    { "t": "h", "text": "Primary keys: identity for rows" },
+    { "t": "p", "text": "Every table in this dataset has an id column with three properties: unique (no two rows share it), never NULL, and stable (a row's id never changes). That's a **primary key (PK)** — the row's identity. Identity is what makes everything else in SQL safe: UPDATE and DELETE can target exactly one row, foreign keys can reference the row, and GROUP BY d.id groups by *actual developer* rather than by a name two people might share. When you design a table, the PK is the first decision, not an afterthought." },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "CREATE TABLE developers (\n  id            INTEGER PRIMARY KEY,\n  name          TEXT NOT NULL,\n  role          TEXT NOT NULL,\n  level         TEXT,\n  country       TEXT,\n  hours_studied INTEGER NOT NULL DEFAULT 0\n);",
+      "caption": "The developers table, declared (DDL — this sandbox is read-only, so read this one; run DDL in any real engine)"
+    },
+    { "t": "p", "text": "That's **DDL** — Data Definition Language, the SQL subset that creates and changes *structure* (as opposed to DML, which changes *data*, next lesson). Reading the declaration: `INTEGER PRIMARY KEY` makes id the identity (in SQLite this also auto-assigns increasing values when you insert without one — most engines call the explicit version AUTO_INCREMENT or IDENTITY). `NOT NULL` forbids missing values: every developer *must* have a name and role. `DEFAULT 0` gives hours_studied a value when an insert doesn't supply one. Constraints like these are the database enforcing your business rules at the only layer that can't be bypassed — every app, script, and midnight cron job included." },
+    { "t": "h", "text": "Foreign keys: relationships that enforce themselves" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "CREATE TABLE enrollments (\n  id           INTEGER PRIMARY KEY,\n  developer_id INTEGER NOT NULL REFERENCES developers(id),\n  course_id    INTEGER NOT NULL REFERENCES courses(id),\n  progress     INTEGER NOT NULL DEFAULT 0,\n  completed    INTEGER NOT NULL DEFAULT 0\n);",
+      "caption": "enrollments with declared foreign keys — the numbers in Lesson 8's joins"
+    },
+    { "t": "p", "text": "`REFERENCES developers(id)` declares a **foreign key (FK)**: this column's values must exist in the referenced table's PK. The database then *enforces* it — insert an enrollment with developer_id 99 (there is no developer 99) and the engine rejects it; that's the constraint protecting Lesson 8's joins from ever meeting a dangling reference. The join's `ON d.id = e.developer_id` is you *reading* the relationship the FK *wrote*. FKs also guard deletes: by default you cannot delete a developer who still has enrollments (the engine refuses, or cascades if you declare `ON DELETE CASCADE` — a decision with real consequences: cascade-delete a developer and their whole history vanishes with them)." },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Why SQLite in the sandbox doesn't show this",
+      "text": "SQLite ships with foreign key enforcement OFF by default (a pragmatism decision from its embedded origins) — you must run PRAGMA foreign_keys = ON per connection. This sandbox's engine is a teaching subset and validates nothing, but the *queries* still work precisely because the data respects the constraints. Real engines (PostgreSQL, MySQL with the flag on) enforce FKs in DML — which is the next lesson's territory."
+    },
+    { "t": "h", "text": "Column types: the three you'll use most" },
+    { "t": "table", "headers": ["Type", "Holds", "In this dataset"], "rows": [
+      ["INTEGER", "whole numbers", "id, hours_studied, progress, completed (the 0/1 boolean convention)"],
+      ["TEXT", "strings of any length", "name, role, level, country, title, topic"],
+      ["REAL", "floating-point numbers", "price (29.0, 49.5-style values)"]
+    ] },
+    { "t": "p", "text": "PostgreSQL adds richer types — DATE/TIMESTAMP (the thing this dataset conspicuously lacks: 'when did they sign up?' is unanswerable!), BOOLEAN (proper true/false instead of the 0/1 convention), NUMERIC (exact decimals — money, where REAL's floating-point rounding quietly loses cents), JSON, arrays. The type discipline pays off three ways: the engine rejects wrong-shaped data, it picks appropriate storage and indexes, and — most underappreciated — it *documents* the column's meaning. completed INTEGER with values 0/1 tells the next reader exactly what domain to expect; a TEXT column holding 'yes', 'no', '1', 0 tells them nothing." },
+    { "t": "h", "text": "Normalization: one fact, one place" },
+    { "t": "p", "text": "Here's the design question this whole lesson orbits. Why three tables — developers, courses, enrollments — instead of one big ENROLLMENTS table with everything spelled out? Watch the one-big-table design fail in three distinct ways, each with a name:" },
+    { "t": "table", "headers": ["Anomaly", "What goes wrong in the flat design", "What the 3-table design does"], "rows": [
+      ["Update", "Rename 'Priya Sharma' → 28 enrollment rows carry her name; miss one and the data disagrees with itself", "Name lives in developers once; rename = one UPDATE"],
+      ["Insert", "Add a course with no enrollments yet → nowhere to put it, or invent a fake enrollment", "courses row exists on its own; enrollments appear when the fact appears"],
+      ["Deletion", "Delete the last enrollment of SQL Joins Explained → the course itself vanishes", "Course and enrollment facts live in separate rows"]
+    ] },
+    { "t": "p", "text": "**Normalization** is the systematic process of splitting tables until those anomalies can't happen — each fact stored exactly once, referenced by keys. The working summary of the classic **third normal form (3NF)**: *every non-key column must depend on the key, the whole key, and nothing but the key.* In enrollments, progress and completed depend on the whole key pair (which developer, which course); the developer's name doesn't belong there because it depends on developer_id *alone* — it's already in developers. You don't need to memorize the formal normal forms to do this well — you need the reflex: **every time you catch yourself writing the same value into multiple rows, a table is missing.**" },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "When to denormalize — the honest trade",
+      "text": "Sometimes you duplicate on purpose: a report that reads developer's country in every one of a billion rows might store a copy in the fact table to skip the join, accepting that renames now need a backfill job. Denormalization buys read speed with write complexity — copies must be resynced (triggers, scheduled jobs, application discipline), and every copy is a future consistency bug. The mature position: normalize by default, denormalize measured — when a specific, real query is provably too slow, and with the sync strategy written down."
+    },
+    { "t": "h", "text": "Reviewing a schema like a professional" },
+    { "t": "list", "ordered": true, "items": [
+      "**Find the PK of every table.** No natural PK? Add an id. Composite situation (like enrollments, whose 'natural' key is the developer-course pair)? Either declare the pair unique or use a surrogate id — both are valid, know which you chose and why.",
+      "**Trace every relationship to a declared FK.** Undeclared references (a developer_id column with no REFERENCES) are conventions, not constraints — they drift, and joins start returning NULLs nobody expected.",
+      "**Interrogate the types.** 0/1 INTEGER where a BOOLEAN would say more? TEXT where NUMERIC money would prevent rounding losses? No TIMESTAMP anywhere — how will you answer 'when' questions later?",
+      "**Hunt duplicated facts.** Same value in two tables = the update anomaly on a timer. Normalize it or document the sync strategy that keeps it honest.",
+      "**Try the questions the business will ask.** 'Who completed what' works (join). 'When did they complete it' — fails, no timestamp. A schema review that only checks structure misses whether the data can *answer anything*."
+    ] },
+    {
+      "t": "practice",
+      "query": "SELECT d.name, c.title, e.progress, e.completed\nFROM enrollments e\nJOIN developers d ON d.id = e.developer_id\nJOIN courses c ON c.id = e.course_id\nORDER BY d.name, c.title\nLIMIT 8;",
+      "note": "Read this join as a schema review: every ON clause is a foreign key relationship done right — ids reference ids, names and titles live in exactly one place each."
+    },
+    { "t": "keytakeaways", "items": [
+      "Primary keys give rows identity: unique, non-NULL, stable — the anchor for targeting rows and referencing them",
+      "Foreign keys (REFERENCES) declare relationships so the engine enforces them — no dangling references, guarded deletes",
+      "Constraints (NOT NULL, DEFAULT, UNIQUE) are business rules enforced at the only layer that can't be bypassed",
+      "Normalization stores each fact once — eliminating update, insert, and deletion anomalies; 3NF in one line: non-key columns depend on the key, the whole key, and nothing but the key",
+      "Denormalize deliberately and measured, never by accident: every duplicated fact needs a documented sync strategy"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "A rival platform ships this table and asks you to review it: team_enrollments(developer_name TEXT, developer_country TEXT, course_title TEXT, course_price REAL, progress INTEGER, completed INTEGER) — one row per enrollment, names and titles spelled out. Write the review: (1) name each of the three anomalies with a concrete one-sentence example from this exact table, (2) produce the normalized DDL: three tables (developers, courses, enrollments) with PKs, FKs, NOT NULLs and sensible types — exactly the constraints this dataset demonstrates, (3) one paragraph: what does the flat design make *easier*, and is it worth it? (Read your DDL aloud after writing it — this sandbox can't run DDL, but any real engine can; your grading criterion is that every constraint in the reference schema is justified in your version.)",
+    "hints": [
+      "Update anomaly: 'Priya Sharma' appears in every enrollment row she's ever had — a rename is N updates that must all succeed. Insert: a brand-new course with zero enrollments has nowhere to live. Deletion: unenrolling the last student from a course erases the course's existence.",
+      "Your developers table needs id INTEGER PRIMARY KEY, name/country TEXT, plus whatever you met in this lesson (NOT NULL on name, types on the rest); enrollments needs developer_id REFERENCES developers(id) and course_id REFERENCES courses(id) — the pair could even be your PK, or a UNIQUE constraint over a surrogate id.",
+      "For the honest paragraph: the flat design skips the joins — every query over it is a single table scan. The price is every write becoming a multi-row transaction, every rename a migration, and the data slowly disagreeing with itself. It's worth it only for read-mostly derived copies (reporting snapshots), never for the system of record."
+    ],
+    "solution": "-- (2) Normalized design — the shape this whole course runs on:\nCREATE TABLE developers (\n  id            INTEGER PRIMARY KEY,\n  name          TEXT NOT NULL,\n  role          TEXT NOT NULL,\n  level         TEXT,\n  country       TEXT,\n  hours_studied INTEGER NOT NULL DEFAULT 0\n);\n\nCREATE TABLE courses (\n  id        INTEGER PRIMARY KEY,\n  title     TEXT NOT NULL,\n  topic     TEXT NOT NULL,\n  level     TEXT,\n  hours     INTEGER NOT NULL,\n  price     REAL NOT NULL DEFAULT 0,\n  published INTEGER NOT NULL DEFAULT 0\n);\n\nCREATE TABLE enrollments (\n  id           INTEGER PRIMARY KEY,\n  developer_id INTEGER NOT NULL REFERENCES developers(id),\n  course_id    INTEGER NOT NULL REFERENCES courses(id),\n  progress     INTEGER NOT NULL DEFAULT 0,\n  completed    INTEGER NOT NULL DEFAULT 0\n);",
+    "why": "The three anomalies are the review's spine: update (rename = N synchronized edits; miss one and 'Priya Sharma' and 'Priya S.' become two developers), insert (a course with no enrollments has no row — the catalog can't hold unpublished-but-planned courses, which this dataset's Rust and Security rows prove matters), deletion (removing the last enrollment erases the course). The normalized DDL moves each fact to exactly one home and lets the FK constraints enforce the relationships the joins then read. The paragraph's honest answer: flat is faster to *read naively* and catastrophic to *write honestly* — denormalization belongs in derived reporting copies, not the system of record.",
+    "code": "-- (1) The review target, for reference:\n-- team_enrollments(\n--   developer_name    TEXT,  -- duplicated per enrollment: update anomaly\n--   developer_country TEXT,  -- duplicated per enrollment: update anomaly\n--   course_title      TEXT,  -- duplicated per enrollment: update anomaly\n--   course_price      REAL,  -- duplicated AND stale when prices change\n--   progress          INTEGER,\n--   completed         INTEGER\n-- )",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "What does REFERENCES developers(id) on enrollments.developer_id guarantee?",
+      "options": [
+        "That developer_id is always the same as id",
+        "Every developer_id value must exist in developers.id — inserts with dangling references are rejected (and deletes that would orphan rows are blocked or cascaded, per the declaration)",
+        "The column is sorted by developer id",
+        "That developers can only be deleted after enrollments"
+      ],
+      "answer": 1,
+      "explain": "A declared FK is an enforced invariant, not documentation: the engine checks it on insert/update of the referencing row and on delete/update of the referenced one. Lesson 8's joins could never meet a NULL-padded enrollment because the data was constrained at birth — that's the difference between a relationship being real and merely being conventional."
+    },
+    {
+      "q": "The classic 3NF one-liner — 'every non-key column depends on the key, the whole key, and nothing but the key' — flags which design as violating it?",
+      "options": [
+        "enrollments: progress depends on developer_id + course_id together — the whole key. Fine",
+        "enrollments with a developer_name column: name depends on developer_id ALONE (not the whole key) — it belongs in developers, not here",
+        "developers: country depends only on id. Fine",
+        "courses: title depends on id. Fine"
+      ],
+      "answer": 1,
+      "explain": "The three clauses catch three different mistakes: 'the key' (no global constants), 'the whole key' (no fact of only one part of a composite key — developer_name), 'nothing but the key' (no fact derived from other columns, like storing course_price in enrollments, which depends on course_id alone too). The flat table from the exercise violates 'the whole key' three times over."
+    },
+    {
+      "q": "Why is storing money in REAL/FLOAT columns a known production footgun?",
+      "options": [
+        "REAL cannot store values above 1000",
+        "Floating-point is binary and inexact: 0.1 + 0.2 ≠ 0.3, so sums and comparisons drift by cents — NUMERIC/DECIMAL (exact base-10) is the money type",
+        "REAL rounds everything to integers",
+        "Databases refuse indexes on REAL columns"
+      ],
+      "answer": 1,
+      "explain": "Binary floats can't represent most decimal fractions exactly — pennies of error accumulate across millions of rows until reconciliations fail. This dataset's price column is REAL (a simplification for teaching); a payment system would declare NUMERIC(10,2). The general principle behind the answer: pick types for the semantics of the value, not just its shape."
+    },
+    {
+      "q": "A teammate proposes denormalizing country into every enrollment row 'because the report joins are getting slow'. The professional response is:",
+      "options": [
+        "Approve — denormalization is always the fix for slow joins",
+        "First verify the cost is actually the join (EXPLAIN the query, measure), then if real: denormalize into a *derived reporting copy* with a documented resync strategy — the system of record stays normalized",
+        "Reject — denormalization is forbidden by the SQL standard",
+        "Buy bigger hardware instead; schemas are immutable after launch"
+      ],
+      "answer": 1,
+      "explain": "The mature sequence: measure (the join might not even be the bottleneck), fix the index or query shape first, and only then duplicate data — into a copy whose staleness is acceptable and whose sync is written down. Normalization is the safe default; denormalization is a targeted, reversible optimization with a maintenance contract attached."
+    },
+    {
+      "q": "This dataset cannot answer 'when did each developer sign up?' What's the honest root cause and the fix?",
+      "options": [
+        "The query needs a bigger sandbox — the engine limits date math",
+        "No column stores it — a TIMESTAMP/DATE created_at column in developers is missing from the schema; add it (with a DEFAULT for existing rows) and the question becomes a trivial query",
+        "Sign-up dates must be stored in a separate service, always",
+        "SQL cannot represent dates — they're stored as TEXT only"
+      ],
+      "answer": 1,
+      "explain": "The capstone project's design review hits exactly this wall: it's not a query-skill problem, it's a schema gap — the fact was never captured. The fix is structural: add the column, backfill honestly (a DEFAULT or explicit migration value for existing rows), and capture it going forward. 'The data can't answer it' is the most valuable finding a schema review can produce."
+    }
+  ],
+  "summary": "Schemas are the decisions that outlive code: primary keys give rows identity, foreign keys make relationships enforceable rather than conventional, constraints encode business rules at the un-bypassable layer, and types document meaning while preventing whole classes of corruption. Normalization — one fact, one place — eliminates the update/insert/delete anomalies that flat designs accumulate; denormalization is a measured trade with a written sync contract, never an accident. You can now review a schema like the five-step professional loop and design tables the next developer will thank you for. One capability remains: changing data, not just reading it.",
+  "next": "SELECT has been the whole game so far — but data is written, updated, and retired too, and those operations carry risks SELECT never had: an UPDATE without WHERE rewrites a table, a DELETE without one empties it. The final lesson is the safety discipline of mutation: INSERT, UPDATE, DELETE, and the transaction — the all-or-nothing wrapper that makes mistakes survivable."
+}

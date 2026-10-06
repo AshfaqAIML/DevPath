@@ -22,6 +22,7 @@ const eventSchema = z.object({
     "lesson_complete",
     "quiz_attempt",
     "assessment_pass",
+    "sandbox_deep_link",
   ]),
   slug: z.string().max(80).optional().nullable(),
   label: z.string().max(120).optional().nullable(),

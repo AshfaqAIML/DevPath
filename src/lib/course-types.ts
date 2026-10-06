@@ -33,7 +33,8 @@ export type ContentBlock =
   | { t: "table"; headers: string[]; rows: string[][] }
   | { t: "diagram"; caption?: string; nodes: string[] }
   | { t: "keytakeaways"; title?: string; items: string[] }
-  | { t: "interview"; q: string; a: string };
+  | { t: "interview"; q: string; a: string }
+  | { t: "practice"; query: string; note?: string; title?: string };
 
 export type LessonSummary = {
   id: string;
@@ -46,6 +47,8 @@ export type LessonSummary = {
   published: boolean;
   quizCount: number;
   hasExercise: boolean;
+  /** True when any block is a live-sandbox practice deep-link. */
+  hasPractice: boolean;
 };
 
 export type LessonView = LessonSummary & {

@@ -1,0 +1,130 @@
+{
+  "title": "WHERE: Filtering Rows (and Meeting NULL)",
+  "slug": "03-where-filtering-logic",
+  "objective": "After this lesson you will be able to filter rows with comparisons, combine conditions with AND / OR / NOT (with parentheses where they matter), and correctly handle NULL with IS NULL — including explaining why 'equals NULL' never works.",
+  "why": "SELECT chooses columns; WHERE chooses rows — and it is the clause you will write most, debug most, and get burned by most. 'Show me the frontend developers' is one comparison. 'Show me active frontend developers who joined recently OR anyone flagged VIP' is where logic gets treacherous: AND and OR have precedence, parentheses change meanings entirely, and NULL — the value that isn't a value — makes conditions evaluate to a third state called UNKNOWN. The bugs this lesson prevents are the kind that quietly drop real users from real reports.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "Comparisons: the atoms of filtering" },
+    { "t": "p", "text": "A WHERE clause is a condition evaluated **per row**; rows where it is true are kept, everything else is discarded. The comparison operators are the ones you already know from every programming language: `=`, `!=` (and its synonym `<>`), `<`, `>`, `<=`, `>=`. One SQL-ism: text comparisons use single-quoted **literals**:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Text literals: single quotes, case matters\nSELECT name, role, hours_studied\nFROM developers\nWHERE role = 'frontend';\n\n-- Numbers: no quotes — 500 is a value, '500' would be text\nSELECT name, hours_studied\nFROM developers\nWHERE hours_studied > 500;",
+      "caption": "5 rows come back from the first, 7 from the second — count them in the sandbox"
+    },
+    { "t": "p", "text": "The text comparison `role = 'frontend'` matched exactly 5 rows (Maya, Diego, Liam, Yuki, Marcus). Number comparisons need no quotes — and quoting them is a real bug: in engines that don't auto-coerce, `hours_studied > '500'` compares text to number and either errors or does something you didn't ask for. Also notice string equality is **case-sensitive** here: 'Frontend' would match zero rows. (LIKE, next lesson, has its own case story.)" },
+    { "t": "h", "text": "AND, OR, NOT — and the precedence trap" },
+    { "t": "p", "text": "Conditions compose with AND (both must be true), OR (at least one), and NOT (invert). The danger is precedence: **AND binds tighter than OR**, exactly the way `*` binds tighter than `+`. Unparenthesized mixed logic computes a different formula than the one in your head:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- INTENDED: frontend developers who are either Beginners or very studious\nSELECT name, role, level, hours_studied\nFROM developers\nWHERE role = 'frontend' AND level = 'Beginner' OR hours_studied > 900;\n-- ⚠ reads as: (frontend AND Beginner) OR (>900)\n-- → backend and fullstack workhorses leak in! Kenji (947, backend) matches.\n\n-- FIXED: parentheses state the intended grouping\nSELECT name, role, level, hours_studied\nFROM developers\nWHERE role = 'frontend'\n  AND (level = 'Beginner' OR hours_studied > 900);",
+      "highlight": [5, 11, 12, 13]
+    },
+    { "t": "p", "text": "Run both in the sandbox and diff them. The first query returns rows like Kenji Tanaka — a backend developer — because the ungrouped OR accepts *anyone* over 900 hours regardless of role. The second returns only frontend developers who are Beginners or over 900. This is the single most common logic bug in working SQL; the professional rule is simple: **whenever AND and OR share a clause, write the parentheses even if you think you don't need them.** Reviewers, and future-you, read grouped logic instantly." },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Debugging trick: run the condition as a SELECT",
+      "text": "When a filter misbehaves, SELECT the condition's columns AND its truthiness: SELECT name, role, level, hours_studied FROM developers — then eyeball which rows you expected to survive. For a big table, wrap the suspect condition: ... WHERE <condition> LIMIT 20 and read what actually matched. Filtering bugs are invisible in the result; they're obvious in the source rows."
+    },
+    { "t": "h", "text": "NULL: the value that answers 'no comment'" },
+    { "t": "p", "text": "A column can hold NULL — meaning *unknown, unset, not applicable*, emphatically **not zero and not an empty string**. The enrollments table has no NULLs, but real tables collect them fast: optional profile fields, columns added by migration to old rows, data that failed validation. SQL handles NULL with **three-valued logic**: a comparison can be TRUE, FALSE, or UNKNOWN, and WHERE keeps only TRUE. Watch what that does:" },
+    {
+      "t": "code",
+      "lang": "sql",
+      "code": "-- Suppose level were NULL for some developer:\nWHERE level = 'Advanced'    -- UNKNOWN for NULL rows → not kept\nWHERE level != 'Advanced'    -- ALSO UNKNOWN for NULL rows → not kept either!\n\n-- The only reliable NULL tests:\nWHERE level IS NULL           -- true when the value is missing\nWHERE level IS NOT NULL       -- true when any value is present"
+    },
+    { "t": "p", "text": "The first two lines are the trap: neither `=` nor `!=` (nor `<`, nor `>`) can ever match a NULL row, because a comparison with an unknown operand can't be *known* to be true. So `!= 'Advanced'` does **not** mean 'everything except Advanced' — it means 'everything with a known value that isn't Advanced', silently excluding NULL rows from both sides. If a WHERE drops rows you expected, ask 'is a column NULL?' before anything else. (The sandbox dataset has no NULLs — you'll manufacture them for real in Lesson 8, when LEFT JOIN pads unmatched rows with NULL.)" },
+    {
+      "t": "practice",
+      "query": "SELECT name, role, level, hours_studied\nFROM developers\nWHERE role = 'frontend'\n  AND (level = 'Beginner' OR hours_studied > 900);",
+      "note": "Run the corrected grouped version — Maya (912, Advanced) qualifies through the hours branch; Diego and Yuki through Beginner."
+    },
+    { "t": "h", "text": "Two habits that prevent WHERE disasters" },
+    { "t": "list", "ordered": true, "items": [
+      "**Write the filter as English first.** 'Beginner frontend developers, or anyone over 900 hours' and 'frontend developers who are Beginners or over 900 hours' are different queries with near-identical wording. If you can't say it unambiguously in English, the SQL can't save you.",
+      "**Preview with the same condition.** Change SELECT name, role, ... to SELECT COUNT(*) — or just run it with the columns visible — before trusting a report built on the filter. A condition that quietly matches zero rows looks exactly like 'no data' to everyone downstream."
+    ] },
+    { "t": "keytakeaways", "items": [
+      "WHERE is a per-row condition; only rows where it is definitely TRUE survive",
+      "Text literals take single quotes and compare case-sensitively; numbers take none",
+      "AND binds tighter than OR — mixed logic without parentheses computes a different query than you intend; write the parentheses always",
+      "NULL is 'unknown', not zero/empty; comparisons with NULL are UNKNOWN, so = and != both miss NULL rows",
+      "IS NULL / IS NOT NULL are the only reliable NULL tests — remember them when LEFT JOIN starts manufacturing NULLs in Lesson 8"
+    ] }
+  ],
+  "exercise": {
+    "prompt": "Recruiting wants 'intermediate-and-above developers who are serious but not extreme — hours between 400 and 700 — excluding backend developers, because that pipeline is full.' Using only the comparison and logic tools from this lesson (BETWEEN and IN are next lesson — earn it the hard way once), write the query: all columns for developers whose level is Intermediate or Advanced, hours_studied from 400 up to and including 700, and role is not backend. Sanity target: exactly 4 developers — verify against the data before trusting your query.",
+    "hints": [
+      "Three conditions joined by AND — no OR needed, because 'Intermediate or Advanced' can be expressed as level != 'Beginner' with this dataset's three levels.",
+      "'Not backend' is role != 'backend'; the hours range is two comparisons: hours_studied >= 400 AND hours_studied <= 700.",
+      "Liam Murphy has 402 hours — just inside the range. The survivors: Priya Sharma (648, fullstack), Liam Murphy (402, frontend), Tom Baker (465, devops) and Marcus Johnson (519, frontend). Jonas (534, backend) falls to the role filter; Aisha (366) is both too low and backend."
+    ],
+    "solution": "SELECT *\nFROM developers\nWHERE level != 'Beginner'\n  AND hours_studied >= 400\n  AND hours_studied <= 700\n  AND role != 'backend';",
+    "why": "Each requirement became one comparison, all joined by AND — when conditions are conjunctive there's no precedence trap, which is exactly why the parenthesizing reflex matters most the moment an OR appears. The bound check caught the subtlety: 402 is inside [400, 700], so Liam stays; Jonas (534 hours, backend) is excluded purely by the role condition — conditions act independently, and a row must satisfy every one. Next lesson's BETWEEN and IN will compress these patterns to one keyword each.",
+    "code": "-- Run me in the SQL Query Sandbox\nSELECT *\nFROM developers\nWHERE level != 'Beginner'\n  AND hours_studied >= 400\n  AND hours_studied <= 700\n  AND role != 'backend';",
+    "lang": "sql"
+  },
+  "quiz": [
+    {
+      "q": "WHERE hours_studied > 500 returns 7 rows. You change it to WHERE hours_studied > 500 AND level != 'Beginner'. One developer disappears: Diego Alvarez (186 hours, Beginner) was never in the first result anyway. What actually happened?",
+      "options": [
+        "Nothing — the AND with != is redundant here",
+        "The question is miscounted: both queries return the same 7 rows, because the two >500 Beginners (none exist in this dataset — Maya 912 and Elena 783 are Advanced/Advanced, Kenji 947 backend Advanced) were never there; AND filters survivors further, and no >500 developer is Beginner",
+        "The second query failed to parse",
+        "!= silently converts hours to text"
+      ],
+      "answer": 1,
+      "explain": "AND can only remove rows from a result, never add them — that's monotonicity, and it makes filters composable and debuggable. Checking the data: the >500 developers are Maya, Jonas, Priya, Sofia, Kenji, Elena, Marcus — levels Advanced/Intermediate/Advanced/Advanced/Advanced/Advanced/Intermediate. No Beginners among them, so the additional condition removes nothing. When a filter 'does nothing', the reason is always that its rejected rows weren't in the input."
+    },
+    {
+      "q": "In a table where country is NULL for 4 of 200 rows, what does WHERE country != 'Japan' return?",
+      "options": [
+        "196 rows — all non-Japan rows plus the NULL rows",
+        "All rows with a known country that isn't Japan — the 4 NULL rows are silently excluded, not by a bug in your logic but by three-valued logic",
+        "A syntax error — NULL requires IS NULL",
+        "200 rows minus the Japan rows, exactly as intended"
+      ],
+      "answer": 1,
+      "explain": "country != 'Japan' evaluates to UNKNOWN for NULL rows, and WHERE keeps only definite TRUEs. NULL rows fall out of BOTH 'Japan' and 'not Japan'. To include them you'd add OR country IS NULL — and to find exactly them, WHERE country IS NULL. This is the quiet data-loss bug behind many 'the export is missing rows' tickets."
+    },
+    {
+      "q": "Which condition is equivalent to: role = 'frontend' AND (level = 'Beginner' OR hours_studied > 900)?",
+      "options": [
+        "role = 'frontend' AND level = 'Beginner' OR hours_studied > 900",
+        "(role = 'frontend' AND level = 'Beginner') OR (role = 'frontend' AND hours_studied > 900)",
+        "role = 'frontend' OR level = 'Beginner' AND hours_studied > 900",
+        "role = 'frontend' AND level = 'Beginner' AND hours_studied > 900"
+      ],
+      "answer": 1,
+      "explain": "AND distributing over OR works exactly like multiplication distributing over addition: A AND (B OR C) ≡ (A AND B) OR (A AND C). Option 1 is the precedence trap — it computes (A AND B) OR C, letting backend 950-hour workhorses leak in. Writing the distribution out longhand is also a legitimate style for readable filters."
+    },
+    {
+      "q": "What is the practical meaning of NULL in a column like level?",
+      "options": [
+        "The empty string — someone saved an empty form field",
+        "Zero — the lowest possible value",
+        "Unknown or not set — a distinct third state that requires IS NULL to test and behaves non-intuitively in comparisons",
+        "The row is marked for deletion"
+      ],
+      "answer": 2,
+      "explain": "NULL is its own concept: neither '' nor 0 nor 'deleted'. Each of those would be a *known* value that comparisons could match. NULL is the absence of information — which is why comparing against it yields UNKNOWN rather than FALSE, and why aggregates like COUNT(col) quietly skip it (Lesson 6)."
+    },
+    {
+      "q": "You write WHERE role = 'FRONTEND' and get zero rows, but the table is full of frontend developers. First thing to check?",
+      "options": [
+        "The database is corrupted",
+        "String comparisons are case-sensitive — the stored value is 'frontend'; match its case (or use case-insensitive tools like LOWER() or LIKE patterns next lesson)",
+        "Quotes are required around FRONTEND in double form",
+        "WHERE must come before FROM"
+      ],
+      "answer": 1,
+      "explain": "'FRONTEND' ≠ 'frontend' under case-sensitive comparison — the rows exist and the condition is simply never true. Real engines offer LOWER(role) = 'frontend', case-insensitive collations, or LIKE with engine-specific case behavior (this sandbox's LIKE is case-insensitive; PostgreSQL's is not — the next lesson's portability note)."
+    }
+  ],
+  "summary": "WHERE is a per-row gate that keeps only definitely-TRUE rows. Comparisons use single-quoted text literals and case-sensitive equality; conditions compose with AND/OR/NOT, where AND's tighter precedence makes parentheses mandatory in mixed logic. NULL introduces three-valued logic — comparisons with NULL are UNKNOWN, so = and != both silently drop NULL rows, and IS NULL / IS NOT NULL are the only reliable tests. You can now shape both columns and rows; next come the ergonomic filters that make common patterns one keyword: LIKE for patterns, IN for lists, BETWEEN for ranges.",
+  "next": "You just hand-built a range with two comparisons and a set membership test with OR chains. SQL has dedicated syntax for both — plus the pattern-matching wildcard language of LIKE. Ten minutes from now, the exercise you just finished will collapse to three readable keywords, and you'll know which of them quietly change case-sensitivity rules under you."
+}
