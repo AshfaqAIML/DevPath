@@ -23,7 +23,7 @@ earliest-allowed — slipping later is always fine, earlier is not.
 | 2026-10-06 | ⚡ Quickdraw | ✅ EARNED 2026-10-06 (opened + closed same-day) |
 | 2026-10-10 (+4d) | ⚡ Quickdraw | Open + immediately close one issue |
 | 2026-10-28 (+18d) | ❤️ Heart On Your Sleeve | ❤️-react one comment/release |
-| 2026-11-20 (+23d) | 🤝 Pair Extraordinaire (base) | Merge co-authored PR (needs 2nd-account details first) |
+| 2026-11-20 (+23d) | 🤝 Pair Extraordinaire (base) | ✅ READY — branch `feat/foundation-charts-intermediate` pushed with `Co-authored-by: Dar-Ishfaq-1 <mohammadkamraan196@gmail.com>` (commit `9f9407a`, 15 files). ⏳ HOLD: open the PR + merge on/after 2026-11-20 only (pacing rule). Recipe: repo → Pull requests → New → compare branch → Create → Merge pull request → Confirm |
 | Dec 2026 – Jan 2027 (~1–2 mo) | 🌍 Open Sourcerer | 1 small merged PR in another public repo |
 | Feb 2027 (~1 mo) | 🧠 Galaxy Brain | 2 accepted discussion answers (enable Discussions first) |
 | Whenever stars hit 16 (organic) | ⭐ Starstruck | Polish repo surface + share; cannot be forced on a date |
