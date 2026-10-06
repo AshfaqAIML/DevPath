@@ -1,0 +1,52 @@
+{
+  "title": "Capstone Walkthrough: Marketplace Crew",
+  "slug": "10-marketplace-crew-capstone",
+  "objective": "After this lesson you will be able to assemble a three-crew marketplace team (catalog, pricing, support) from the course's pieces, evaluate it with per-agent attribution and segment diffs, and present it as traced runs plus a findings memo — ready for the final assessment and your capstone project.",
+  "why": "Nine lessons of team mechanics; one lesson of assembly. The walkthrough staffs three crews, wires delegation and boards, scopes tools, runs gold conversations, and reports per-segment truth — the complete performance your capstone repeats on its own domain. Assembly is the final team skill.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "Staffing: three crews, one roster" },
+    { "t": "p", "text": "Catalog crew (researcher → writer → reviewer, sequential): fixed pipeline, contracted stages. Pricing crew (analyst → approver-gate, managed on signals): conditional checks, money authority gated. Support crew (triage → decide → draft → approval): the LangGraph returns graph as a subgraph, reused whole. Roster audit (Ch.2) proves pairwise partition; tool audit (Ch.7) proves least privilege; board (Ch.6) coordinates all three." },
+    { "t": "code", "lang": "js", "code": "// Capstone roster manifest: crews, topologies, authorities (plain JS)\nconst manifest = {\n  crews: {\n    catalog: { topology: \"sequential\", agents: [\"researcher\", \"writer\", \"reviewer\"] },\n    pricing: { topology: \"managed\", agents: [\"analyst\", \"approver\"], gate: \"amount>100\" },\n    support: { topology: \"subgraph\", ref: \"returns-graph-v1\", agents: [\"triage\", \"decider\", \"drafter\"] },\n  },\n  shared: { board: true, goldKinds: [\"happy\", \"edge\", \"attack\"], gate: \"no-regressions\" },\n};\n// Topology per crew justified by variability (Ch.1/Ch.5); support reuses wholesale.", "caption": "Manifest-first: topologies justified, reuse explicit, eval shared" },
+    { "t": "h", "text": "Three traced runs (one per crew)" },
+    { "t": "p", "text": "Catalog run: research finds specs, writer drafts, reviewer passes with two fixes — trace shows stage handoffs with contracts. Pricing run: analyst proposes, amount trips the gate, approver edits, executed — governance traced. Support run: the returns subgraph end to end with interrupt skincare. Each run: trace + key state + timing + attribution-ready slots." },
+    { "t": "h", "text": "Findings memo (your project's shape)" },
+    { "t": "p", "text": "Baseline per crew and overall, per-kind scores with the weakest kind named, one iterated fix with measured delta (edge examples for catalog tone misses), router coverage numbers, gate health, tool-audit result, and deferred list (fraud crew next, multilingual support later). Measured, cited, improvable — the deliverable that survives stakeholders." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the manifest", "query": "const manifest = {\n  crews: {\n    catalog: { topology: 'sequential', agents: ['researcher', 'writer', 'reviewer'] },\n    pricing: { topology: 'managed', agents: ['analyst', 'approver'], gate: 'amount>100' },\n    support: { topology: 'subgraph', ref: 'returns-graph-v1' },\n  },\n};\nconst checks = [\n  ['three crews', Object.keys(manifest.crews).length === 3],\n  ['managed has gate', !!manifest.crews.pricing.gate],\n  ['support reuses subgraph', manifest.crews.support.topology === 'subgraph'],\n  ['catalog fixed pipeline', manifest.crews.catalog.topology === 'sequential'],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'manifest sound' : 'manifest BROKEN');", "note": "Run it: expect four PASS lines then 'manifest sound'. Topology justification encoded as data: managed-with-gate, subgraph-reuse, sequential-fixed — audit the architecture before running a single agent." },
+    { "t": "keytakeaways", "items": ["Staff per topology-by-variability; reuse via subgraphs; audit roster + tools before running", "Trace one run per crew with attribution-ready slots; findings per kind with weakest named", "Memo: baselines, one iterated delta, gate health, deferred list — measured and improvable"]} ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm soundness. (b) Break it (remove pricing's gate) and record the audit gap — then state the real-world harm of an ungated pricing crew in one sentence. (c) Draft your capstone manifest (same shape, your domain's crews) with topology justifications per crew.",
+    "hints": [
+      "Baseline sound (4 PASS); gateless pricing fails the managed-has-gate check — audits catch what enthusiasm misses.",
+      "Ungated pricing harm: autonomous money movement without approval — amounts set by agents, no human in the loop.",
+      "Your manifest needs per-crew topology + reason (fixed→sequential, variable→managed, reuse→subgraph)."
+    ],
+    "solution": "// (a) 4 PASS + sound. (b) gate check FAILs; harm: ungated autonomous pricing.\n// (c) domain manifest with per-crew topology justifications (variability analysis).",
+    "why": "Breakage-then-harm-statement practices audit-driven design: checks encode requirements, failures map to real incidents, manifests precede runs. Architecture audited before agents act.",
+    "code": "// Manifest-audit pattern: topology requirements as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the marketplace team?",
+      "options": ["Agents first, manifest later", "Roster + tool audits → contracts/boards → crews per topology → gold eval → one iteration — audited before acting", "Eval first", "Gates optional"],
+      "answer": 1,
+      "explain": "Audit-before-act: mandates, tools, and manifests verified before runs. Assembly in dependency order with checks per arrow."
+    },
+    {
+      "q": "Pricing crew without an approval gate. Harm?",
+      "options": ["Faster pricing", "Autonomous money movement without human oversight — amounts set and executed by agents", "Better margins", "None"],
+      "answer": 1,
+      "explain": "Money authority demands gates by value × reversibility. Ungated pricing is an incident class, not an optimization."
+    },
+    {
+      "q": "Support crew built fresh instead of reusing the returns graph. Cost?",
+      "options": ["None — fresh is cleaner", "Rebuilt, retested, re-debugged behavior: reuse via subgraphs with existing gold coverage beats rebuilds", "Faster", "Simpler eval"],
+      "answer": 1,
+      "explain": "Reuse inherits tests, traces, and tuned prompts. Rebuilds repay all debugging already spent — subgraph composition exists precisely for this."
+    }
+  ],
+  "summary": "Manifest-audited assembly, one traced run per crew, findings with per-kind truth, deferred list with reasons. Nine lessons become one operating team — assessment next, capstone after.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship the Marketplace Crew capstone — and step into RAG agents."
+}

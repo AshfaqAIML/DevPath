@@ -1,0 +1,53 @@
+{
+  "title": "Role Design: Mandates That Partition",
+  "slug": "02-role-design",
+  "objective": "After this lesson you will be able to write role cards (role/goal/backstory/tools) with non-overlapping testable mandates, detect overlap/gap failure pairs in review, and scope authority per role explicitly.",
+  "why": "Agents with vague roles ('help customers', 'ensure quality') duplicate each other and diffuse responsibility — two agents email the customer, nobody owns the refund. Role cards partition accountability the way schemas partition data: each mandate owned by exactly one agent, each boundary testable. Role review happens before code because overlap found in prose is cheap and in production expensive.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Role cards: identity with jurisdiction" },
+    { "t": "p", "text": "A **role card** has four fields. **Role**: the job title it answers to ('Returns Triage Specialist'). **Goal**: the measurable outcome it owns ('every ticket routed within one step, zero unrouted'). **Backstory**: domain context shaping judgment (policies known, past patterns). **Tools/authority**: what it may touch — and implicitly, what it may not. The card predicts behavior: read it and state what the agent will and won't do." },
+    { "t": "code", "lang": "js", "code": "// Role card as data: reviewable, diffable, testable (plain JS)\nconst triageSpecialist = {\n  role: \"Returns Triage Specialist\",\n  goal: \"Route every ticket to exactly one of [billing, shipping, returns] with confidence; unknowns to human.\",\n  backstory: \"Knows the 30-day/receipt/final-sale policy; lateness is shipping, never damage.\",\n  tools: [\"read_ticket\"],                 // reads only: no writes, no refunds\n  mustNot: [\"issue refunds\", \"contact customers\"],  // jurisdiction edge, explicit\n};\n// mustNot is the senior field: authority stated by exclusion, not implication.", "caption": "mustNot draws jurisdiction: what the role will never touch" },
+    { "t": "h", "text": "Overlap and gaps: the failure pair" },
+    { "t": "p", "text": "Two mandates covering one job → **overlap**: duplicated emails, double refunds, contradictory drafts. No mandate covering a job → **gap**: unowned failures ('nobody validates the amount'). Review pairwise: for each neighbor pair, state the shared boundary in one sentence ('triage routes; decider approves; neither drafts'). Unstatable boundaries are design debt." },
+    { "t": "code", "lang": "js", "code": "// Overlap audit: pairwise mandate comparison (plain JS pattern)\nfunction auditRoles(roles) {\n  const findings = [];\n  const verbs = (r) => new Set((r.goal + \" \" + (r.mustNot || []).join(\" \")).toLowerCase().match(/[a-z]+/g));\n  for (let i = 0; i < roles.length; i++)\n    for (let j = i + 1; j < roles.length; j++) {\n      const shared = [...verbs(roles[i])].filter((w) => verbs(roles[j]).has(w) && w.length > 4);\n      if (shared.length) findings.push(`${roles[i].role} × ${roles[j].role}: shared terms [${shared.join(\", \")}] — justify or split`);\n    }\n  return findings;\n}\n// Heuristic tripwire (shared vocabulary), human verdict: justify or split.", "caption": "Shared-vocabulary audit flags candidate overlaps for human judgment" },
+    { "t": "h", "text": "Authority scoping per role" },
+    { "t": "p", "text": "Tools follow authority: triage reads tickets; decider reads policy + facts; finance executes refunds (gated); support drafts only. Each tool grant answers 'what harm if misused?' — read-tools risk leakage (scope data), write-tools risk action (gate + log). The toolset audit (Ch.7) enforces this; role cards declare it." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the roster", "query": "function auditRoles(roles) {\n  const findings = [];\n  const verbs = (r) => new Set((r.goal + ' ' + (r.mustNot || []).join(' ')).toLowerCase().match(/[a-z]+/g));\n  for (let i = 0; i < roles.length; i++)\n    for (let j = i + 1; j < roles.length; j++) {\n      const shared = [...verbs(roles[i])].filter((w) => verbs(roles[j]).has(w) && w.length > 4);\n      if (shared.length) findings.push(roles[i].role + ' x ' + roles[j].role + ': [' + shared.join(', ') + ']');\n    }\n  return findings;\n}\nconst roster = [\n  { role: 'Triage', goal: 'route every ticket quickly', mustNot: ['issue refunds'] },\n  { role: 'Quality', goal: 'ensure every ticket quality quickly', mustNot: [] },\n  { role: 'Finance', goal: 'issue approved refunds accurately', mustNot: ['contact customers'] },\n];\nconst findings = auditRoles(roster);\nconsole.log('pairs flagged: ' + findings.length);\nfor (const f of findings) console.log(f);", "note": "Run it: expect 2 flags. Triage × Quality is TRUE overlap (shared routing vocabulary — split or justify). Triage × Finance is a FALSE positive (shared words sit in mustNot: deliberate partition, dismiss with reason). Finance × Quality stays clean. Heuristics flag; humans decide — including dismissals." },
+    { "t": "keytakeaways", "items": ["Role cards: role/goal/backstory/tools + mustNot — jurisdiction by exclusion", "Overlap (duplicated work) and gaps (unowned failures) are the failure pair — review pairwise with one-sentence boundaries", "Tools follow authority; shared-vocabulary audits flag candidates, humans render verdicts"]} ],
+  "exercise": {
+    "prompt": "(a) Run the roster audit and report flagged pairs. (b) Rewrite the Quality role card so its mandate partitions cleanly from Triage (goal + mustNot), then re-run and confirm zero flags between them. (c) State the gap check: name one job in a returns flow no listed role owns, and assign it.",
+    "hints": [
+      "Baseline: 2 flags — Triage × Quality (true overlap) plus Triage × Finance (mustNot false positive: shared words in an exclusion field mean deliberate partition — dismiss with reason).",
+      "Rewrite Quality as 'Review drafted replies against tone/length rules; never route tickets, never contact customers' — disjoint verbs, disjoint tools.",
+      "Gap candidates: amount validation, approval logging, quarantine review — assign each to an owner or create the role (gaps need names, not hopes)."
+    ],
+    "solution": "// (a) 2 flags: true overlap (Triage × Quality) + mustNot false positive (Triage × Finance).\n// (b) Quality rewritten to reply-review only (route/contact in mustNot) →\n//     true-overlap flag clears on re-run; mustNot flag correctly persists as dismissed.\n// (c) e.g. amount validation unowned → assign to Decider (or new Validator role).",
+    "why": "Rewrite-to-green practices mandate surgery: same roster, partitioned verbs, proof by re-audit. Gap assignment completes the partition — every job owned, every owner exclusive.",
+    "code": "// Partition checklist: pairwise one-sentence boundaries + gap sweep.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Two roles both 'ensure quality'. Failure mode?",
+      "options": ["Better coverage", "Overlap: duplicated work + diffused responsibility — mandates must partition with testable boundaries", "Faster reviews", "None"],
+      "answer": 1,
+      "explain": "Shared mandates duplicate effort and orphan accountability. One-sentence boundaries per pair, enforced by mustNot fields."
+    },
+    {
+      "q": "Nobody validates refund amounts. Failure mode?",
+      "options": ["Overlap", "Gap: unowned job — assign an owner or create the role; unowned work fails silently", "Tooling", "Latency"],
+      "answer": 1,
+      "explain": "Gaps are overlap's twin: work nobody owns fails without an owner to page. Gap sweeps name every job's owner."
+    },
+    {
+      "q": "mustNot fields exist to…",
+      "options": ["Insult agents", "State jurisdiction by exclusion: what the role will never touch — reviewable authority boundaries", "Save tokens", "Slow drafting"],
+      "answer": 1,
+      "explain": "Authority stated positively leaks ('may use tools' → which?). mustNot draws the fence explicitly: refunds, contact, execution — named and reviewable."
+    }
+  ],
+  "summary": "Cards with jurisdiction (role/goal/backstory/tools/mustNot), pairwise overlap review, gap sweeps assigning every job. Partition accountability like schemas partition data.",
+  "next": "Staffed with mandates — now the work orders: task specs with expected outputs that make handoffs hold. Next: delegation by contract."
+}

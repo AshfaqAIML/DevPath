@@ -1,0 +1,53 @@
+{
+  "title": "Team Failure Modes",
+  "slug": "09-team-failure-modes",
+  "objective": "After this lesson you will be able to diagnose the five team failure modes (role drift, delegation loops, context bloat, agent conflicts, silent drops) from symptoms, and prescribe structural fixes with regression gold items.",
+  "why": "Single-agent failures are tame; team failures are social: drift (reviewers rewriting), loops (A→B→A forever), bloat (context tripling per agent), conflicts (two agents emailing), drops (nobody validated). Each has a signature and a structural cure — and each recurs the week after you stop watching, unless a gold item pins it down.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "The five modes with signatures" },
+    { "t": "p", "text": "Learn signatures cold — incidents arrive as symptoms. **Role drift**: agent does neighbors' jobs (reviewer rewriting) — output contracts unenforced. **Delegation loops**: A→B→A cycles — missing termination. **Context bloat**: cost/latency climbing per added agent — transcript-passing instead of summaries. **Agent conflicts**: contradictory actions (two emails) — ownership gaps. **Silent drops**: work vanishes (unvalidated amounts) — missing handoff gates." },
+    { "t": "table", "headers": ["Mode", "Signature", "Structural fix"], "rows": [["Role drift", "Reviewer rewriting copy", "Output contracts + drift gold items (verdict+fixes only)"], ["Delegation loops", "A→B→A traces, budget burn", "Max rounds + done-flags; manager routing tests"], ["Context bloat", "Cost/latency per agent added", "Summarized handoffs; minimal per-role context"], ["Agent conflicts", "Duplicate/contradictory actions", "Single ownership + claim-before-work board"], ["Silent drops", "Missing validations, lost items", "Handoff gates + backlog visibility + forbid items"]] },
+    { "t": "h", "text": "Drift: mandates decay without enforcement" },
+    { "t": "p", "text": "Agents drift toward generic helpfulness: reviewers rewrite, triagers decide, drafters promise. Drift is entropy — it always wins without counter-pressure. Counter-pressure has two parts: **contracts** (outputs that can't express drift: verdict+fixes shape has no room for rewritten copy) and **drift gold items** (reviewer-given-rewrite-input must output verdict-only — tested per release). Structure beats vigilance." },
+    { "t": "code", "lang": "js", "code": "// Drift detector: output-shape conformance per role (plain JS)\nfunction detectDrift(role, output) {\n  const shapes = {\n    reviewer: [\"verdict\", \"fixes\"],       // ONLY these keys allowed\n    triage: [\"category\", \"confidence\"],\n    drafter: [\"reply\"],\n  };\n  const allowed = shapes[role] || [];\n  const extra = Object.keys(output).filter((k) => !allowed.includes(k));\n  return extra.length ? { drift: true, extra } : { drift: false };\n}\n// Reviewer returning {verdict, fixes, rewrittenCopy} → drift: [rewrittenCopy].\n// Shapes enforce mandates; detectors run in eval, not production hot paths.", "caption": "Shape conformance detects drift mechanically — mandates as key lists" },
+    { "t": "h", "text": "Pin every fix with a gold item" },
+    { "t": "p", "text": "Each fixed mode earns a permanent gold item: drift (rewrite-input → verdict-only expectation), loops (cyclic history → termination), bloat (context-size assertion per added agent), conflicts (dual-email scenario → single-owner), drops (missing-field run → gate refusal). Fixed-without-pinned regresses within quarters — the gold set is the team's immune system." },
+    { "t": "practice", "sim": "js-playground", "title": "Catch the drift", "query": "function detectDrift(role, output) {\n  const shapes = {\n    reviewer: ['verdict', 'fixes'],\n    triage: ['category', 'confidence'],\n    drafter: ['reply'],\n  };\n  const allowed = shapes[role] || [];\n  const extra = Object.keys(output).filter((k) => !allowed.includes(k));\n  return extra.length ? { drift: true, extra } : { drift: false };\n}\nconsole.log(JSON.stringify(detectDrift('reviewer', { verdict: 'fail', fixes: ['tone'] })));\nconsole.log(JSON.stringify(detectDrift('reviewer', { verdict: 'fail', fixes: [], rewrittenCopy: '...' })));\nconsole.log(JSON.stringify(detectDrift('triage', { category: 'shipping' })));\nconsole.log(JSON.stringify(detectDrift('triage', { category: 'shipping', confidence: 0.9, essay: '...' })));", "note": "Run it: expect clean, then drift on rewrittenCopy, then clean (subset of shape is fine — missing keys are a different check), then drift on essay. Shape conformance is one-sided by design: extra keys drift, missing keys validate elsewhere." },
+    { "t": "keytakeaways", "items": ["Five modes with signatures: drift, loops, bloat, conflicts, drops — diagnose by symptom", "Contracts + drift gold items beat vigilance; termination proofs beat hope", "Every fixed mode earns a permanent gold item — immune system, not incident response"]} ],
+  "exercise": {
+    "prompt": "(a) Run the drift detector on all four cases and map verdicts. (b) Add a drafter case with an extra 'refundAmount' key and confirm drift fires (scope violation!). (c) Write the gold item pinning the reviewer-rewrite fix (input, expect, forbid) in the Ch.8 gold format.",
+    "hints": [
+      "Verdicts: clean / drift[rewrittenCopy] / clean-subset / drift[essay]. Subsets pass shape (missing keys are contract-validation's job, not drift's).",
+      "Drafter + refundAmount → drift [refundAmount]: drafting role touching money keys is exactly the scope violation detectors exist for.",
+      "Gold pin: input (copy needing review) → expect {verdict, fixes} only → forbid rewrittenCopy key."
+    ],
+    "solution": "// (a) clean / drift / clean-subset / drift (in order).\n// (b) drafter+refundAmount → drift [refundAmount] (scope violation caught).\n// (c) gold: review-input → expect verdict+fixes keys only → forbid rewrittenCopy.",
+    "why": "Subset-vs-extra asymmetry (missing ≠ drifting) plus scope-violation detection (money keys in drafting roles) are the detector's two subtleties — each practiced, with gold pins making fixes permanent.",
+    "code": "// Drift-pin pattern: rewrite-input → keys-only expectation → forbid extra.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Reviewer returns rewritten copy instead of verdict. Mode + fix?",
+      "options": ["Helpfulness — keep it", "Role drift: re-assert output contract (verdict+fixes only) + pin drift gold item", "More backstory", "Higher temperature"],
+      "answer": 1,
+      "explain": "Mandates decay without enforcement. Contracts constrain shape; drift items regression-test the boundary."
+    },
+    {
+      "q": "Cost triples per added agent. Mode + fix?",
+      "options": ["Expected scaling", "Context bloat: transcript-passing compounds — summarized minimal handoffs per role instead", "Fewer tasks", "Bigger windows"],
+      "answer": 1,
+      "explain": "Handoff content scales teams: summaries + minimal context per role, referenced archives. Full transcripts per agent is the bloat signature."
+    },
+    {
+      "q": "Fixed loop bug, no gold item added. Prediction?",
+      "options": ["Fixed forever", "Regresses within quarters — fixes without pins decay; gold items are the immune system", "Loops can't recur", "Tests suffice"],
+      "answer": 1,
+      "explain": "Unpinned fixes evaporate with refactors and model updates. Every fixed mode earns permanent gold or it wasn't fixed, merely quiet."
+    }
+  ],
+  "summary": "Five modes, signatures, structural fixes, gold pins for each. Teams fail socially; prevention is structural plus immunized.",
+  "next": "Pathology cataloged — now assemble the marketplace crew end to end, measured throughout. Next and last: the capstone walkthrough."
+}

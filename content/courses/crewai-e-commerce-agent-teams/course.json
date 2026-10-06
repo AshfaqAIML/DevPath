@@ -1,0 +1,174 @@
+{
+  "courseSlug": "crewai-e-commerce-agent-teams",
+  "subtitle": "Multi-agent teamwork on a real domain: role design, task delegation, tools, and hand-offs for catalog, pricing, and support crews — CrewAI in an e-commerce context",
+  "audience": "Developers who finished LangGraph for E-commerce (graphs, state, routers, HITL) and now split work across specialized agents instead of one graph. Team mechanics are taught as runnable JS miniatures in the playground; production shapes target real CrewAI (Python) with accurate Agent/Task/Crew APIs.",
+  "outcomes": [
+    "Decide single-graph vs multi-agent by coordination needs, and draw the boundary explicitly",
+    "Write roles (role/goal/backstory) with non-overlapping mandates and testable scopes",
+    "Specify tasks with expected outputs and context passing that prevent rework",
+    "Run sequential crews for fixed pipelines with stage contracts and replay",
+    "Run hierarchical crews with manager delegation, budgets, and termination proofs",
+    "Design handoff protocols and shared task boards that prevent dropped and duplicated work",
+    "Scope tools per role (least privilege) with selection tests",
+    "Evaluate teams per-agent and end-to-end with blame attribution across agents",
+    "Diagnose team failure modes: role drift, delegation loops, context bloat, agent conflicts",
+    "Ship a marketplace crew: catalog + pricing + support agents measured on a gold set"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "langgraph-for-e-commerce"],
+  "technologies": ["CrewAI (Python: Agent, Task, Crew, Process)", "JavaScript (ES2020+) for team machinery", "Role/task contracts", "Delegation protocols"],
+  "skills": ["multi-agent design", "role writing", "task delegation", "hierarchical crews", "handoff protocols", "team evaluation"],
+  "assessment": [
+    {
+      "q": "Single graph vs agent team for fixed triage→decide→draft. Choice?",
+      "options": ["Team — more agents is better", "Single graph/chain: fixed pipeline with no coordination needs — teams pay coordination overhead for zero benefit", "Supervisor team", "Monolith prompt"],
+      "answer": 1,
+      "explain": "Teams cost coordination (handoff formats, delegation logic, compounded errors). Pay it only for variable, specialized, or parallelizable work (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Two roles both 'ensure quality'. Predict the failure?",
+      "options": ["Faster reviews", "Overlapping mandates: duplicated work plus diffusion of responsibility — scopes must partition the job with testable boundaries", "Better coverage", "Nothing"],
+      "answer": 1,
+      "explain": "Role design partitions accountability. Overlap duplicates effort and lets failures fall between owners (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Task spec lacks expected_output. Consequence?",
+      "options": ["Agents improvise formats — downstream parsing breaks; expected outputs are contracts, not suggestions", "Faster runs", "Better creativity", "Nothing"],
+      "answer": 0,
+      "explain": "Handoffs need shapes: without expected outputs each agent invents formats and the next stage chokes. Contracts per task (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Sequential crew for catalog (research→write→review). When does it break?",
+      "options": ["Never — pipelines always work", "When steps need skipping/reordering by judgment (conditional flows) — then hierarchical/supervisor routing", "On large catalogs", "On Mondays"],
+      "answer": 1,
+      "explain": "Sequential fits fixed pipelines; conditional work needs dynamic delegation. Topology follows variability (Ch.4, LangGraph Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Hierarchical crew loops researcher→writer→researcher forever. Missing?",
+      "options": ["More agents", "Termination: max rounds + done-flag, same proof supervisors need — unbounded delegation hangs", "Faster model", "Bigger context"],
+      "answer": 1,
+      "explain": "Dynamic delegation cycles without bounds. Caps + completion criteria are structural, not optional (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Two agents both email the customer about one ticket. Root cause + fix?",
+      "options": ["Enthusiasm — praise them", "Handoff gap: no claimed ownership on the shared board — tasks need claim/complete states with exactly one owner", "Add a third agent", "Faster triggers"],
+      "answer": 1,
+      "explain": "Unowned shared work duplicates (or drops when each assumes the other). Task boards with ownership states prevent both (Ch.6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Support agent holds the refund-issue tool. Verdict?",
+      "options": ["Convenient", "Least-privilege violation: support drafts, finance-team tools execute — scope tools per role and test selection", "Faster refunds", "Standard practice"],
+      "answer": 1,
+      "explain": "Tool scope follows role authority: drafting ≠ executing. Over-tooled agents cause out-of-mandate actions (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Team fails end-to-end but each agent passes unit checks. Missing layer?",
+      "options": ["More unit tests", "Team gold runs with per-agent attribution: handoffs, delegation choices, and shared-state reads under composition", "Bigger prompts", "More tools"],
+      "answer": 1,
+      "explain": "Composition creates emergent failures (dropped handoffs, misdelegation). End-to-end runs with blame attribution catch integration truth (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Reviewer agent starts rewriting instead of reviewing. Name + fix?",
+      "options": ["Helpfulness — keep it", "Role drift: mandate and output contract re-asserted (review → verdict + fixes list, never rewritten copy), with drift gold items", "More backstory", "Higher temperature"],
+      "answer": 1,
+      "explain": "Roles decay toward generic helpfulness without enforced outputs. Contracts + drift tests hold mandates (Ch.9).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Context grows 3x per added agent. Control?",
+      "options": ["Bigger windows", "Summarized handoffs (decisions + open items, not transcripts) plus per-role minimal context — share conclusions, not histories", "Fewer tasks", "One agent"],
+      "answer": 1,
+      "explain": "Handoff bloat compounds per agent. Summarized, minimal, referenced context scales teams; transcript-passing doesn't (Ch.9).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Pricing agent needs live competitor data mid-run. Pattern?",
+      "options": ["Hardcode prices", "Tool with validated args + fresh-data timestamp in handoffs (staleness visible downstream)", "Guess", "Ask the user"],
+      "answer": 1,
+      "explain": "Live data enters through scoped tools; timestamps make freshness auditable downstream. Stale prices need visible age, not silent reuse (Ch.7 + capstone).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "v2 team beats v1 overall, regresses VIP handling. Ship?",
+      "options": ["Yes — averages win", "No: per-segment no-regression gate — fix VIP path first (same discipline as single-graph eval)", "Delete VIP tests", "Average harder"],
+      "answer": 1,
+      "explain": "Segment gates transfer unchanged to teams: localized regressions never ship on averages (Ch.8 + capstone).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Marketplace Crew",
+    "summary": "Ship a three-crew marketplace team (catalog, pricing, support) with designed roles, contracted tasks, tested delegation, scoped tools, and a gold-set evaluation with per-segment diffs. The multi-agent capstone: teams measured like systems, not demoed like magic.",
+    "requirements": [
+      "Role cards: role/goal/backstory/tools for 5+ agents with non-overlap justification per pair of neighbors",
+      "Task specs: expected outputs + context-passing contracts for every handoff in the pipeline",
+      "Topology decision: sequential vs hierarchical per crew with the variability argument recorded",
+      "Tool scoping: per-role toolsets with least-privilege rationale; refund execution outside support's scope",
+      "Gold runs: 12 conversations (happy/edge/attack) with terminal paths, per-agent attribution, and no-regression gate",
+      "Operations: delegation budgets, termination proofs, handoff board design, refusal/skip audit plan"
+    ],
+    "technical": [
+      "Team machinery in runnable JS miniatures (runner, board, router, attribution) plus real CrewAI Python shapes",
+      "All handoffs schema-shaped; all tools closed-schema with outcome routing",
+      "Threads/boards namespaced per crew; no cross-crew state leakage",
+      "Numbers reproducible: gold set + routing/delegation tests committed"
+    ],
+    "architecture": "Four sections: (1) Team chart — roles, mandates, topology per crew with variability arguments; (2) Runs — traced conversations per crew with per-agent attribution; (3) Evaluation — gold scores, per-segment diffs, iterated fix with delta; (4) Operations — budgets, termination proofs, board design, guardrails.",
+    "steps": [
+      "Write role cards with overlap analysis before any code",
+      "Specify tasks with expected outputs; build the handoff board",
+      "Implement crews per topology decision; test delegation branches",
+      "Scope tools per role; verify selection with adversarial picks",
+      "Run gold set; attribute failures per agent; iterate one variable; re-score",
+      "Write operations section; self-review against Ch.9 failure gallery"
+    ],
+    "evaluation": [
+      "Role mandates partition without overlap (pairwise justification present)",
+      "Every handoff contracted and tested; board states cover claim/complete/skip",
+      "Delegation branches covered including fallback; loops termination-proved",
+      "Gold baseline + iteration with per-segment diffs on the same set",
+      "Refund execution outside support scope, proven by toolset audit"
+    ],
+    "stretch": [
+      "Add a fraud-review crew composed as a subgraph with its own gold items",
+      "Instrument delegation budgets (max rounds/depth) with overrun alerts",
+      "Convert one sequential crew to hierarchical and report measured trade-offs"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Single agent vs team — how do you decide?",
+      "a": "By coordination needs: fixed pipeline with no branching judgment → single graph/chain. Variable delegation across specialties, parallelizable research, or distinct authority domains (pricing vs support) → team. Cost the coordination explicitly (handoff formats, delegation logic, compounded error rates, context growth) against the specialization gain — and revisit when the topology's variability changes."
+    },
+    {
+      "q": "What makes a good agent role card?",
+      "a": "Role (identity), goal (measurable outcome it owns), backstory (domain context shaping judgment), tools (least-privilege set), and non-overlap with neighbors (pairwise justification). Testable scope beats colorful persona: the card must predict what the agent will and won't touch. Review cards for mandate collisions before any code — overlap found in review is cheap, in production expensive."
+    },
+    {
+      "q": "How do agents hand off without dropping or duplicating work?",
+      "a": "Shared task board with ownership states (open → claimed → done/skipped), exactly one owner per task, contracted output shapes at handoff, and idempotent consumers (re-runs safe). Claim-before-work prevents duplication; completion receipts prevent drops; skip reasons preserve auditability. Handoff protocol is tested like an API: claim races, skip paths, malformed outputs."
+    },
+    {
+      "q": "Manager keeps delegating in circles. Fix?",
+      "a": "Termination by construction: max delegation rounds + done-flag criteria checked per loop, with the manager's own routing tests covering exit branches. Then diagnose why exits never triggered (unclear completion criteria vs genuinely hard task) — caps stop the bleeding, criteria fix the cause. Loops without proofs are hangs awaiting traffic."
+    },
+    {
+      "q": "Support agent issued a refund directly. Postmortem?",
+      "a": "Least-privilege failure: execution tools lived in a drafting role's scope. Fix: remove issuance from support's toolset (draft + recommend only), route execution through approval-gated finance path, add toolset audit to review checklist, and add a gold attack item (refund-pressure ticket) asserting no direct issuance. Blame the scope design, not the agent."
+    },
+    {
+      "q": "Team passes agent unit tests, fails customers. Evaluation gap?",
+      "a": "Missing composition layer: end-to-end conversation gold sets with per-agent attribution (which handoff/delegation/state-read failed), run on every change with per-segment no-regression gates. Unit tests verify parts; gold runs verify teamwork — handoffs, delegation choices, and shared-state reads only exist in composition."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,53 @@
+{
+  "title": "Evaluating Teams End to End",
+  "slug": "08-evaluating-teams",
+  "objective": "After this lesson you will be able to build team gold runs with per-agent attribution, distinguish handoff vs node vs delegation failures, diff versions per segment, and gate shipping on team-level no-regressions.",
+  "why": "Unit-tested agents fail as teams: dropped handoffs, misdelegations, and shared-state misreads exist only in composition. Team gold runs (conversations with expected terminals + per-agent expectations + forbiddens) attribute end-to-end outcomes to components — the only evaluation that catches integration truth. Ship on team deltas, not agent averages.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Gold runs with attribution slots" },
+    { "t": "p", "text": "Team gold items assert per-agent expectations: triage routed shipping (router), decider approved with reason (node), draft ≤60 words (contract), no direct refund (forbidden). Each expectation names its owner — failures arrive pre-attributed. Cover happy/edge/attack conversations; every production team incident becomes a gold item with the failing agent named." },
+    { "t": "code", "lang": "js", "code": "// Team gold item: per-agent expectations + forbiddens (plain JS)\nconst teamGold = {\n  id: \"t4\", kind: \"edge\",\n  ticket: \"Sneakers 3 weeks late AND I want a refund.\",\n  expect: {\n    triage: { category: \"shipping\" },\n    decider: { approved: false, reasonPresent: true },\n    draft: { maxWords: 60 },\n  },\n  forbid: [\"direct-refund\", \"unvalidated-category\"],\n};\n// Runner checks each slot against the attributed agent's outputs.", "caption": "Expectations owned per agent; forbiddens guard team-level invariants" },
+    { "t": "h", "text": "Attribution: handoff, node, or delegation?" },
+    { "t": "p", "text": "Team failures sort into three bins. **Node**: right terminal, wrong content (bad draft — fix the agent). **Handoff**: right agents, broken transfer (missing confidence — fix the contract/gate). **Delegation**: wrong agent did the work (shipping handled by billing — fix router/manager). Attribution decides the fix location; misattribution (retraining the drafter for a router error) wastes cycles." },
+    { "t": "code", "lang": "js", "code": "// Attribution checker: per-agent slots + forbiddens (plain JS)\nfunction checkTeamRun(result, gold) {\n  const issues = [];\n  for (const [agent, exp] of Object.entries(gold.expect)) {\n    const got = result[agent] || {};\n    for (const [k, v] of Object.entries(exp)) {\n      const ok = typeof v === \"boolean\" ? !!got[k] === v : got[k] === v;\n      if (!ok) issues.push(`${agent}.${k}: expected ${JSON.stringify(v)}`);\n    }\n  }\n  for (const f of gold.forbid || [])\n    if (JSON.stringify(result).includes(f)) issues.push(\"forbidden:\" + f);\n  return { pass: issues.length === 0, issues };\n}\n// Slot mismatches name agents; forbiddens name invariants.", "caption": "Slot-by-slot attribution: failures arrive with owner names attached" },
+    { "t": "h", "text": "Version diffs per segment, gate on teams" },
+    { "t": "p", "text": "Same-set, per-kind diffs (happy/edge/attack) with segment gates — the LangGraph Ch.9 discipline unchanged, now attributing per agent. v2's VIP regression blocks shipping regardless of averages; the fix's owner comes from attribution (router? node? handoff?). Team eval reuses every single-graph practice; only the attribution slots are new." },
+    { "t": "practice", "sim": "js-playground", "title": "Attribute the failure", "query": "function checkTeamRun(result, gold) {\n  const issues = [];\n  for (const [agent, exp] of Object.entries(gold.expect)) {\n    const got = result[agent] || {};\n    for (const [k, v] of Object.entries(exp)) {\n      const ok = typeof v === 'boolean' ? !!got[k] === v : got[k] === v;\n      if (!ok) issues.push(agent + '.' + k);\n    }\n  }\n  return { pass: issues.length === 0, issues };\n}\nconst gold = { expect: { triage: { category: 'shipping' }, draft: { words: false } } };\nconst goodRun = { triage: { category: 'shipping' }, draft: { words: false } };\nconst badRun = { triage: { category: 'billing' }, draft: { words: false } };\nconsole.log(JSON.stringify(checkTeamRun(goodRun, gold)));\nconsole.log(JSON.stringify(checkTeamRun(badRun, gold)));", "note": "Run it: expect pass with [] then fail naming triage.category — attribution to the agent, not the team. Fix location decided by the issue string, before any code changes." },
+    { "t": "keytakeaways", "items": ["Gold runs assert per-agent slots + team forbiddens across happy/edge/attack", "Attribution bins: node (content) vs handoff (transfer) vs delegation (routing) — fix location follows", "Same-set per-segment diffs gate shipping; incidents become named gold items"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice checker on both runs and map verdicts. (b) Extend the gold with a forbid (direct-refund) and a failing run triggering it; confirm the issue names the invariant. (c) Attribute: terminal correct, draft over length, confidence missing — three faults, three bins, three owners.",
+    "hints": [
+      "Good passes []; bad fails [triage.category] — owner named, fix located upstream of draft.",
+      "Forbid check scans the serialized result: inject 'direct-refund' into a bad run's actions and watch forbidden fire.",
+      "Terminal correct + overlong draft → node (drafter contract); missing confidence → handoff (triage gate); wrong agent acted → delegation (router)."
+    ],
+    "solution": "// (a) pass [] / fail [triage.category] (in order).\n// (b) forbid fires on injected direct-refund (invariant guard proven).\n// (c) node (drafter) / handoff (triage gate) / delegation (router) — bins decide owners.",
+    "why": "Attribution precision across three bins is the team-debugging skill: same symptom class, three different owners, three different fixes. Misattribution wastes the most expensive cycles in team maintenance.",
+    "code": "// Attribution drill: per fault, bin + owner + fix location stated.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "All agent unit tests pass; customers get wrong refunds. Missing?",
+      "options": ["More unit tests", "Team gold runs with per-agent attribution: composition failures (handoffs, delegation) exist only end to end", "Faster agents", "Bigger state"],
+      "answer": 1,
+      "explain": "Integration truth lives in composition: transfers, routing choices, shared reads. Gold runs with attribution catch what unit tests structurally cannot."
+    },
+    {
+      "q": "Correct terminal, overlong draft. Fault bin + owner?",
+      "options": ["Delegation — router", "Node — drafter contract (length term unenforced)", "Handoff — triage", "State — checkpointer"],
+      "answer": 1,
+      "explain": "Content faults belong to producing nodes and their contracts. Terminal correctness exonerates routing; length terms indict the drafter."
+    },
+    {
+      "q": "v2 wins overall, regresses VIP. Ship?",
+      "options": ["Yes", "No — per-segment no-regression gate; fix VIP path first (team eval inherits single-graph discipline)", "Delete VIP tests", "Average on"],
+      "answer": 1,
+      "explain": "Segment gates transfer unchanged to teams. Averages hide localized harm; VIP regressions block shipping."
+    }
+  ],
+  "summary": "Per-agent gold slots, three-bin attribution (node/handoff/delegation), same-set segment diffs, ship on team deltas. Composition tested as composition.",
+  "next": "Proven patterns need their pathology counterpart: drift, loops, bloat, conflicts — and the fixes that hold. Next: team failure modes."
+}

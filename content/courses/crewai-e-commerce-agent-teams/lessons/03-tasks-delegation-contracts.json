@@ -1,0 +1,53 @@
+{
+  "title": "Tasks & Delegation Contracts",
+  "slug": "03-tasks-delegation-contracts",
+  "objective": "After this lesson you will be able to specify tasks with expected outputs and context contracts, delegate with exactly-sufficient context, and verify handoffs mechanically before downstream work begins.",
+  "why": "'Look into this ticket' delegates nothing checkable — the agent returns prose, the next stage stalls on missing fields, and the manager re-asks. Task specs with expected outputs convert delegation into APIs: typed handoffs the next agent (or test) can consume blind. Every dropped handoff in multi-agent postmortems traces to an unspecified task.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Tasks are APIs between agents" },
+    { "t": "p", "text": "A **task spec** has four slots: **description** (what, concretely), **expected_output** (exact shape — the Ch.3 Prompt-101 contract), **context** (named inputs from prior tasks, nothing more), **agent** (exactly one owner). Real CrewAI mirrors this shape (`Task(description=, expected_output=, agent=)`): the framework already thinks in contracts — this lesson teaches writing them well." },
+    { "t": "code", "lang": "js", "code": "// Task spec as data: handoff contract, testable blind (plain JS)\nconst triageTask = {\n  description: \"Classify the ticket into exactly one of [billing, shipping, returns].\",\n  expected_output: '{\"category\": \"<label>\", \"confidence\": 0..1}',\n  contextFrom: [],                       // first task: raw ticket only\n  agent: \"triage-specialist\",\n};\nconst decideTask = {\n  description: \"Apply POLICY TEXT to the triaged facts; approve or deny.\",\n  expected_output: '{\"approved\": bool, \"reason\": \"<=12 words\"}',\n  contextFrom: [\"triageTask.category\", \"triageTask.confidence\"], // named, minimal\n  agent: \"policy-decider\",\n};\n// Downstream consumes triageTask.category blind — shape guaranteed by spec.", "caption": "contextFrom names the contract: minimal, explicit, sufficient" },
+    { "t": "h", "text": "Delegate with exactly-sufficient context" },
+    { "t": "p", "text": "Pass **what the task needs, nothing it doesn't**: facts + relevant history, never raw dumps 'just in case'. Over-context bloats cost and invites distraction (models act on incidental details); under-context forces re-fetching and guessing. The test: delete a context item — if the task still completes identically, it never belonged." },
+    { "t": "code", "lang": "js", "code": "// Handoff assembler: contract-checked before downstream starts (plain JS)\nfunction handoff(task, priorOutputs) {\n  const missing = (task.contextFrom || []).filter((k) => !(k in priorOutputs));\n  if (missing.length) return { ok: false, error: \"missing-context:\" + missing.join(\",\") };\n  const input = {};\n  for (const k of task.contextFrom) input[k] = priorOutputs[k];\n  return { ok: true, input };\n}\n// handoff(decideTask, { \"triageTask.category\": \"shipping\" }) → missing confidence!\n// Mechanical gate: downstream never starts on incomplete handoffs.", "caption": "Gate handoffs mechanically — missing context fails before work, not during" },
+    { "t": "h", "text": "Real CrewAI shape (for your Python project)" },
+    { "t": "p", "text": "Production CrewAI mirrors these specs directly: `Agent(role=, goal=, backstory=, tools=, verbose=)`, `Task(description=, expected_output=, agent=)`, `Crew(agents=[...], tasks=[...], process=Process.sequential)` — with `Process.hierarchical` + `manager_llm` for Ch.5's pattern. Learn contracts here in JS miniatures; the Python translation is one-to-one because the framework was designed around the same task-as-API insight." },
+    { "t": "practice", "sim": "js-playground", "title": "Gate the handoff", "query": "function handoff(task, priorOutputs) {\n  const missing = (task.contextFrom || []).filter((k) => !(k in priorOutputs));\n  if (missing.length) return { ok: false, error: 'missing-context:' + missing.join(',') };\n  const input = {};\n  for (const k of task.contextFrom) input[k] = priorOutputs[k];\n  return { ok: true, input };\n}\nconst decideTask = { contextFrom: ['triageTask.category', 'triageTask.confidence'] };\nconsole.log(JSON.stringify(handoff(decideTask, {})));\nconsole.log(JSON.stringify(handoff(decideTask, { 'triageTask.category': 'shipping' })));\nconsole.log(JSON.stringify(handoff(decideTask, { 'triageTask.category': 'shipping', 'triageTask.confidence': 0.9 })));\nconsole.log(JSON.stringify(handoff({ contextFrom: [] }, {})));", "note": "Run it: expect missing-both, missing-confidence, then ok with the two-field input, then ok-empty. Handoffs gate mechanically — downstream starts only on complete contracts, never on hope." },
+    { "t": "keytakeaways", "items": ["Task specs: description + expected_output + contextFrom + exactly one owner — delegation as API", "Context exactly-sufficient: delete-to-test (removable items never belonged)", "Gate handoffs mechanically: missing context fails before work starts, with named gaps"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice gater on all four cases and map each. (b) Write the draftTask spec (reply ≤60 words from decision + tone rules): description, expected_output, contextFrom, agent — with exactly-sufficient context. (c) State what breaks if draftTask also receives the raw ticket, in one sentence.",
+    "hints": [
+      "Mapping: missing-both / missing-confidence / ok-two-fields / ok-empty (context-free tasks exist).",
+      "draftTask: description (draft reply per decision + tone), expected_output (plain text ≤60 words + offer included), contextFrom [decideTask.approved, decideTask.reason], agent reply-drafter.",
+      "Raw ticket alongside the decision invites contradiction (draft follows ticket mood, not the decision) plus bloat — narrowed handoffs enforce the decision."
+    ],
+    "solution": "// (a) missing-both / missing-confidence / ok / ok-empty (in order).\n// (b) draftTask per hints: decision + reason in, reply text out, drafter owns.\n// (c) Dual sourcing: draft may follow raw-ticket mood over the decided outcome —\n//     narrowed handoffs make the decision authoritative.",
+    "why": "Exactly-sufficient context is enforced scarcity: every included field justified, every excluded field a prevented failure mode. The raw-ticket sentence states the dual-sourcing hazard that handoff discipline exists to kill.",
+    "code": "// contextFrom audit: delete each item, re-run, keep only load-bearing ones.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Look into this ticket' as a task spec fails how?",
+      "options": ["Too short", "No expected output or context contract — downstream can't consume, verify, or test the handoff", "Too polite", "Wrong agent"],
+      "answer": 1,
+      "explain": "Unspecified tasks produce uncheckable prose. Contracts (shape + named inputs + owner) make handoffs APIs."
+    },
+    {
+      "q": "Draft task receives both the decision AND the raw ticket. Risk?",
+      "options": ["None — more context helps", "Dual sourcing: draft may follow ticket mood over the decided outcome — narrowed handoffs keep decisions authoritative", "Slower only", "Cheaper"],
+      "answer": 1,
+      "explain": "Redundant context isn't free: it creates competing authorities. Exactly-sufficient handoffs enforce the decision path."
+    },
+    {
+      "q": "Handoff gate reports missing-context before downstream starts. Value?",
+      "options": ["Bureaucracy", "Fail-fast with named gaps: debugging points at the contract, not mid-run mysteries", "Slower pipelines", "More code"],
+      "answer": 1,
+      "explain": "Mechanical gates convert runtime mysteries into declared shortfalls. Missing context fails at the boundary with names attached."
+    }
+  ],
+  "summary": "Tasks as APIs (description + expected_output + contextFrom + owner), exactly-sufficient context (delete-to-test), mechanical handoff gates. Delegation holds by contract.",
+  "next": "Contracted tasks flow — now run them in order: sequential crews with stage contracts and replay. Next: pipelines of agents."
+}

@@ -1,0 +1,51 @@
+{
+  "title": "Tools Per Role: Least Privilege",
+  "slug": "07-tools-per-role",
+  "objective": "After this lesson you will be able to scope toolsets per role by authority, test tool selection adversarially, and audit any roster for out-of-mandate powers.",
+  "why": "An agent's tools are its powers: read tools leak data, write tools act in the world, money tools move value. Granting every tool everywhere converts every confused agent into a fully-armed one — support drafting with refund execution is how incidents happen. Least privilege (exactly the tools the mandate needs, nothing more) plus selection tests is the access-control discipline of multi-agent systems.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Authority determines toolsets" },
+    { "t": "p", "text": "Map tools to mandates: triage reads tickets; researcher searches catalogs; drafter writes text; finance executes refunds (gated); logger appends records. Each grant answers 'worst misuse?' — read-misuse leaks (scope data narrowly), write-misuse acts (gate + log), money-misuse moves value (approve first). Undifferentiated toolboxes make every agent equally dangerous." },
+    { "t": "code", "lang": "js", "code": "// Role toolsets with authority rationale (plain JS manifest)\nconst TOOLSETS = {\n  triage: [\"read_ticket\"],                                   // reads only\n  researcher: [\"read_ticket\", \"search_catalog\"],              // reads + lookup\n  drafter: [\"read_decision\"],                                 // writes text only\n  finance: [\"read_decision\", \"issue_refund@gated\"],           // money: gated flag\n  logger: [\"append_record\"],                                  // append-only\n};\n// Audit rule: any write/money tool outside its mandate role is a finding.\n// @gated suffix marks tools requiring approval-gate passage.", "caption": "Toolsets as manifests: auditable authority per role" },
+    { "t": "h", "text": "Selection tests: adversarial picks" },
+    { "t": "p", "text": "Agents choose tools from descriptions — test the choosing: present overlapping tools (lookup_order vs search_orders) with tricky tickets and assert correct selection, including refusal-to-act cases (no tool fits → ask/escalate, never force). Selection accuracy is a measured metric per role, re-run on every description edit." },
+    { "t": "code", "lang": "js", "code": "// Toolset audit: out-of-mandate powers flagged (plain JS)\nconst POWERS = { read_ticket: 1, search_catalog: 1, read_decision: 1, append_record: 1, issue_refund: 3, delete_user: 3 };\nfunction auditToolsets(toolsets) {\n  const findings = [];\n  for (const [role, tools] of Object.entries(toolsets)) {\n    for (const t of tools) {\n      const base = t.replace(/@gated$/, \"\");\n      if ((POWERS[base] || 0) >= 3 && !t.endsWith(\"@gated\") && role !== \"finance\")\n        findings.push(`${role} holds ungated power tool: ${base}`);\n      if (role === \"support-drafter\" && base !== \"read_decision\")\n        findings.push(`drafter holds non-draft tool: ${base}`);\n    }\n  }\n  return findings;\n}\n// Power levels + gating suffixes make audits mechanical; judgment stays human.", "caption": "Power-graded tools with gating flags — audit mechanically, judge humanly" },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the toolsets", "query": "const POWERS = { read_ticket: 1, search_catalog: 1, read_decision: 1, append_record: 1, issue_refund: 3 };\nfunction auditToolsets(toolsets) {\n  const findings = [];\n  for (const [role, tools] of Object.entries(toolsets)) {\n    for (const t of tools) {\n      const base = t.replace(/@gated$/, '');\n      if ((POWERS[base] || 0) >= 3 && !t.endsWith('@gated') && role !== 'finance')\n        findings.push(role + ' holds ungated power tool: ' + base);\n    }\n  }\n  return findings;\n}\nconst rosterTools = {\n  triage: ['read_ticket'],\n  drafter: ['read_decision', 'issue_refund'],\n  finance: ['read_decision', 'issue_refund@gated'],\n};\nconst findings = auditToolsets(rosterTools);\nconsole.log('findings: ' + findings.length);\nfor (const f of findings) console.log(f);", "note": "Run it: expect exactly 1 finding — drafter holds ungated issue_refund (triage clean, finance gated-legit). One line of manifest, one incident prevented: least privilege audited, not assumed." },
+    { "t": "keytakeaways", "items": ["Tools follow authority: reads leak (scope data), writes act (gate+log), money moves (approve first)", "Undifferentiated toolboxes make every agent equally dangerous — scope per mandate", "Power-graded manifests + gating flags enable mechanical audits; selection tested adversarially"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice audit and report the finding. (b) Fix the roster (move issuance to finance@gated, drafter to read_decision only) and re-run to zero findings. (c) Add a researcher with search_catalog + read_ticket and prove the audit stays green — then state what new tool class would force a POWERS update.",
+    "hints": [
+      "Baseline: 1 finding (drafter + ungated issue_refund). Fixed roster: drafter ['read_decision'], finance keeps gated issuance → 0 findings.",
+      "Researcher addition: both power-1 tools → audit stays green by construction (low-power reads need no gates).",
+      "POWERS updates when new tool classes appear (delete_user=3, external-send=2): grading is maintained, not one-off."
+    ],
+    "solution": "// (a) 1 finding: drafter holds ungated power tool: issue_refund.\n// (b) fixed roster → 0 findings (issuance gated under finance only).\n// (c) researcher (two power-1 reads) stays green; new classes (delete/send)\n//     force POWERS re-grading with gate decisions.",
+    "why": "Fix-to-green plus extension-proofing practices least-privilege as maintenance: manifests audited on every roster change, power grades evolved with new capabilities. Access control is a process, not a document.",
+    "code": "// Roster-change protocol: edit manifest → run audit → green required to merge.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Support drafter holds issue_refund ungated. Verdict?",
+      "options": ["Efficient", "Least-privilege violation: drafting ≠ executing — issuance belongs gated under finance; audit flags it", "Standard", "Faster refunds"],
+      "answer": 1,
+      "explain": "Tool scope follows role authority. Execution powers in drafting roles convert confusion into incidents."
+    },
+    {
+      "q": "New delete_user tool arrives. Process?",
+      "options": ["Grant everywhere", "Grade its power (3), gate it, assign to exactly one mandated role, extend the audit — new capabilities force re-grading", "Ignore it", "Ban it"],
+      "answer": 1,
+      "explain": "Power grading is maintained: every new tool gets a level, a gate decision, and an owner. Untracked powers accumulate into incidents."
+    },
+    {
+      "q": "Agents choose between lookup_order and search_orders. Testing approach?",
+      "options": ["Trust descriptions", "Adversarial selection tests: tricky tickets asserting correct picks including refuse-to-act cases, re-run per description edit", "Remove one tool", "More tools"],
+      "answer": 1,
+      "explain": "Selection is behavior: overlapping tools need measured pick accuracy, especially the no-fit refusal case. Descriptions are hypotheses; tests are proof."
+    }
+  ],
+  "summary": "Scope tools by authority, grade powers, gate the dangerous, audit mechanically, test selection adversarially. Least privilege maintained per roster change.",
+  "next": "Armed correctly — now prove the team works: gold runs with per-agent attribution. Next: evaluating teams."
+}

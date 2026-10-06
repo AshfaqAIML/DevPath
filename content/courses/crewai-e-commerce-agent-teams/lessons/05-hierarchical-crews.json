@@ -1,0 +1,53 @@
+{
+  "title": "Hierarchical Crews: Managed Delegation",
+  "slug": "05-hierarchical-crews",
+  "objective": "After this lesson you will be able to run hierarchical crews with manager delegation, budget rounds and depth, prove termination, and decide sequential vs hierarchical per workflow with recorded reasons.",
+  "why": "Some work can't be sequenced upfront: fraud checks sometimes, VIP handling on signals, escalation when stuck. Hierarchical crews delegate per-step judgment to a manager — flexible at the price of traceability and termination risk. This lesson makes management explicit (budgets, proofs, audits) instead of emergent and hopeful.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Manager as router with memory" },
+    { "t": "p", "text": "The **manager** observes shared state and assigns the next worker: same routing discipline as LangGraph Ch.4 (enumerated branches, fallbacks, confidence gates), plus delegation history (who did what, already tried). Real CrewAI: `Crew(process=Process.hierarchical, manager_llm=...)` — the manager role exists in-framework; this lesson teaches operating it." },
+    { "t": "code", "lang": "js", "code": "// Managed loop: delegate, execute, record, repeat within budget (plain JS)\nasync function runManaged(workers, manager, initial, budget = { rounds: 6 }) {\n  let state = { ...initial, history: [] };\n  for (let round = 0; round < budget.rounds; round++) {\n    const assignment = manager(state); // { worker, task } | { done: true }\n    if (assignment.done) return { ok: true, state, rounds: round };\n    state.history.push(assignment.worker);\n    const out = await workers[assignment.worker](assignment.task, state);\n    Object.assign(state, out);\n  }\n  return { ok: false, reason: \"budget-exhausted\", state, rounds: budget.rounds };\n}\n// Budget exhaustion is a designed terminal (escalate), never a hang.", "caption": "Rounds-bounded delegation: exhaustion escalates, loops terminate" },
+    { "t": "h", "text": "Budgets and termination proofs" },
+    { "t": "p", "text": "Every managed loop needs **two** terminators: **max rounds** (hard cap — exhaustion escalates to human with full history) and a **done condition** the manager can actually observe (verdict field set, all checklist items passed). Prove termination before running: trace the worst case on paper (each round either sets done or consumes budget). Loops without proofs hang on the first ambiguous case." },
+    { "t": "code", "lang": "js", "code": "// Done-condition patterns (choose per workflow, state explicitly)\n// 1. Verdict set: state.decision != null → done (triage-style)\n// 2. Checklist drained: state.openItems.length === 0 → done (audit-style)\n// 3. Approval recorded: state.approval != null → done (gated flows)\n// Manager prompt MUST quote the active pattern + current values each round:\n// 'Open items: [X]. Rounds left: 3. Assign next worker or set done.'", "caption": "Done-conditions are stated, observable, and quoted back each round" },
+    { "t": "h", "text": "Manager audits: who delegated what, why" },
+    { "t": "p", "text": "Managers need oversight too: log every assignment with its **reason** (state snapshot + chosen worker + why-others-not). Review delegation traces for loops (A→B→A patterns), bias (favorite worker overuse), and budget burn rate. A manager whose reasons don't reference state is improvising — constrain with the routing-table discipline from Ch.4 of LangGraph." },
+    { "t": "practice", "sim": "js-playground", "title": "Budget the manager", "query": "// Sync twin of the lesson runner (same budget logic, no awaits — playground-safe)\nfunction runManaged(workers, manager, initial, budget) {\n  budget = budget || { rounds: 6 };\n  let state = { ...initial, history: [] };\n  for (let round = 0; round < budget.rounds; round++) {\n    const a = manager(state);\n    if (a.done) return { ok: true, rounds: round, state };\n    state.history.push(a.worker);\n    Object.assign(state, workers[a.worker](a.task, state));\n  }\n  return { ok: false, reason: 'budget-exhausted', rounds: budget.rounds };\n}\nconst workers = {\n  checker: () => ({ checked: true }),\n  drafter: () => ({ draft: 'done', done: true }),\n};\nfunction manager(s) {\n  if (!s.checked) return { worker: 'checker' };\n  if (!s.draft) return { worker: 'drafter' };\n  return { done: true };\n}\nconst r1 = runManaged(workers, manager, {});\nconsole.log('ok=' + r1.ok + ' rounds=' + r1.rounds);\nconsole.log('history=' + r1.state.history.join(','));\nconst r2 = runManaged(workers, () => ({ worker: 'checker' }), {}, { rounds: 3 });\nconsole.log('loop guard: ok=' + r2.ok + ' reason=' + r2.reason);", "note": "Run it: expect ok=true rounds=2 with history checker,drafter — then loop guard ok=false budget-exhausted at 3 rounds. Sync twin of production async: identical budget/termination logic. Termination by construction in both directions: done-flags finish work, budgets finish loops." },
+    { "t": "keytakeaways", "items": ["Managers delegate per-step with history; budgets (rounds) + done-conditions terminate every loop", "Done patterns stated and quoted each round; exhaustion escalates with full history, never hangs", "Audit delegation traces for loops, bias, burn rate — managers get oversight too"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice manager and record both outcomes. (b) Remove the done branch from the manager (always return checker) and confirm budget-exhaustion at the cap. (c) Write the done-condition for a returns flow (verdict + draft + log present) and state where the manager reads each signal.",
+    "hints": [
+      "Baseline: ok=true rounds=2 (checker, drafter); broken manager: ok=false reason budget-exhausted rounds=3.",
+      "Done-condition: state.verdict && state.draft && state.logged → done. Signals read from shared state channels (Ch.2 LangGraph state design).",
+      "The broken-manager run proves budgets work independently of manager quality — termination is structural."
+    ],
+    "solution": "// (a) ok=true/2 rounds + history; guard ok=false/budget-exhausted.\n// (b) always-checker → exhaustion at cap (termination despite broken manager).\n// (c) done iff verdict && draft && logged — signals from state channels.",
+    "why": "Breaking the manager on purpose proves termination is structural (budgets), not behavioral (good management). Done-conditions tie completion to observable state, the only kind that works.",
+    "code": "// Termination-proof pattern: cap + observable done-condition, tested both ways.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Manager loops researcher→writer→researcher. Missing?",
+      "options": ["More agents", "Termination: max rounds + observable done-condition — unbounded delegation hangs", "Faster model", "Bigger context"],
+      "answer": 1,
+      "explain": "Dynamic delegation cycles without structural exits. Caps bound damage; done-conditions finish work; both tested."
+    },
+    {
+      "q": "Budget exhausted with full history. Correct handling?",
+      "options": ["Silent retry", "Escalate to human with the complete trail — exhaustion is a designed terminal with evidence", "Delete history", "Increase budget silently"],
+      "answer": 1,
+      "explain": "Exhaustion carries the full delegation history to a human: what was tried, what remains. Designed terminal, not failure."
+    },
+    {
+      "q": "Sequential vs hierarchical for VIP dispute handling?",
+      "options": ["Sequential — simpler", "Hierarchical: per-case routing (fraud check sometimes, VIP handling on signals) needs step judgment — with recorded variability reason", "Neither", "Both simultaneously"],
+      "answer": 1,
+      "explain": "Variability decides: conditional steps need managed delegation. Record the reason — topology choices need justifications."
+    }
+  ],
+  "summary": "Managed delegation with history, budgets + done-conditions as termination proofs, audited assignments. Hierarchy for variability, sequential for fixed flows — decided per workflow, recorded always.",
+  "next": "Managed or pipelined, agents share work through boards: ownership, handoffs, and the states that prevent double-work. Next: the task board."
+}

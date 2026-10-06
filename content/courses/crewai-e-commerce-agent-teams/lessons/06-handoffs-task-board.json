@@ -1,0 +1,52 @@
+{
+  "title": "Handoffs & the Task Board",
+  "slug": "06-handoffs-task-board",
+  "objective": "After this lesson you will be able to run a shared task board (open/claimed/done/skipped with single ownership), enforce handoff contracts between agents, and detect dropped/duplicated work from board state alone.",
+  "why": "Agents sharing nothing duplicate work; sharing everything collide. The task board is the collaboration contract made visible: who owns what, what's done, what was skipped and why. Every 'two agents emailed the customer' and 'nobody validated the amount' incident is a board-design failure — ownership states prevent both by construction.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Ownership states: open, claimed, done, skipped" },
+    { "t": "p", "text": "Every task carries **owner + state**: `open` (unassigned), `claimed` (exactly one agent working), `done` (with output reference), `skipped` (with reason, never silent). Claim-before-work prevents duplication (two agents see claimed, only owner proceeds); completion receipts prevent drops (unclaimed + undone at shift-end is visible backlog, not mystery)." },
+    { "t": "code", "lang": "js", "code": "// Task board: single ownership enforced in code (plain JS)\nfunction makeBoard() {\n  const tasks = new Map();\n  return {\n    add(id, spec) { tasks.set(id, { ...spec, state: \"open\", owner: null }); },\n    claim(id, agent) {\n      const t = tasks.get(id);\n      if (!t || t.state !== \"open\") return { ok: false, error: \"unclaimable:\" + id };\n      t.state = \"claimed\"; t.owner = agent;\n      return { ok: true };\n    },\n    complete(id, agent, outputRef) {\n      const t = tasks.get(id);\n      if (!t || t.owner !== agent) return { ok: false, error: \"not-owner:\" + id };\n      t.state = \"done\"; t.outputRef = outputRef;\n      return { ok: true };\n    },\n    skip(id, agent, reason) {\n      const t = tasks.get(id);\n      if (!t || (t.owner !== agent && t.state !== \"open\")) return { ok: false, error: \"cannot-skip:\" + id };\n      t.state = \"skipped\"; t.owner = agent; t.skipReason = reason;\n      return { ok: true };\n    },\n    backlog() { return [...tasks].filter(([, t]) => t.state === \"open\" || t.state === \"claimed\").map(([id]) => id); },\n  };\n}\n// Claim races resolve in code (first claim wins); skips carry reasons always.", "caption": "Ownership in code: races resolved, skips reasoned, backlog visible" },
+    { "t": "h", "text": "Handoff contracts between agents" },
+    { "t": "p", "text": "Agent-to-agent transfers carry the Ch.3 task contract plus board mechanics: producer marks done *with output reference*, consumer claims *with input validation* (re-validate received shapes — trust boundaries exist between agents too). Failed validation routes to rework (same producer, quoted defect) not forward — defects caught at transfer cost one step; downstream, they cost the run." },
+    { "t": "h", "text": "Reading the board: drops vs dupes" },
+    { "t": "p", "text": "Board state diagnoses team health at a glance: growing `open` + idle agents = routing failure (work unassigned); same task `claimed` twice-attempted = race handling working (second claim refused — by design); `done` without outputRef = protocol violation (completion theater); `skipped` without reason = audit hole. Review boards like logs: patterns, not entries." },
+    { "t": "practice", "sim": "js-playground", "title": "Work the board", "query": "function makeBoard() {\n  const tasks = new Map();\n  return {\n    add(id, spec) { tasks.set(id, { ...spec, state: 'open', owner: null }); },\n    claim(id, agent) {\n      const t = tasks.get(id);\n      if (!t || t.state !== 'open') return { ok: false };\n      t.state = 'claimed'; t.owner = agent; return { ok: true };\n    },\n    complete(id, agent, ref) {\n      const t = tasks.get(id);\n      if (!t || t.owner !== agent) return { ok: false };\n      t.state = 'done'; t.outputRef = ref; return { ok: true };\n    },\n  };\n}\nconst b = makeBoard();\nb.add('t1', {});\nb.add('t2', {});\nconsole.log('a-claims-t1: ' + b.claim('t1', 'a').ok);\nconsole.log('b-claims-t1: ' + b.claim('t1', 'b').ok);\nconsole.log('b-completes-t1: ' + b.complete('t1', 'b', 'r1').ok);\nconsole.log('a-completes-t1: ' + b.complete('t1', 'a', 'r1').ok);", "note": "Run it: expect true, false, false, true — first claim wins, second refused (race handled), wrong-owner completion refused, owner completes. Ownership enforced in code, not hoped in prompts." },
+    { "t": "keytakeaways", "items": ["Board states (open/claimed/done/skipped) with exactly-one-owner enforced in code", "Handoffs contracted + consumer-validated; defects route to rework with quoted defects", "Board patterns diagnose health: unclaimed backlog, refused races (good), theater completions, reasonless skips"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice board and map each boolean to its rule. (b) Extend with skip(id, agent, reason) enforcing reason presence + owner-or-open rule, plus a backlog() listing unfinished ids; test all paths. (c) State what 'done without outputRef' and 'skipped without reason' each indicate about team health.",
+    "hints": [
+      "Mapping: first-claim wins / race refused / non-owner completion refused / owner completes — four rules, four lines.",
+      "skip: reason required (empty → refuse); owner-or-open else refuse; backlog: open + claimed ids (claimed-and-stalled needs heartbeat extension in production — note it).",
+      "done-without-ref = completion theater (unverifiable claims); skip-without-reason = audit hole (unreviewable omission)."
+    ],
+    "solution": "// (a) true/false/false/true per ownership rules.\n// (b) skip + backlog per hints; heartbeat noted as production extension.\n// (c) theater vs audit-hole (see hints) — both protocol violations, different harms.",
+    "why": "Ownership mechanics (claim races, completion rights, reasoned skips) plus health reading (patterns as diagnostics) are the collaboration contract made executable — practiced in code, not described in prose.",
+    "code": "// Board-extension pattern: state machine + rights checks + tests per path.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Two agents email one customer. Board-level root cause?",
+      "options": ["Enthusiasm", "No claimed ownership: unowned shared work duplicates — claim-before-work with exactly-one-owner prevents it", "Slow triggers", "Too few agents"],
+      "answer": 1,
+      "explain": "Without ownership states, shared work forks. First-claim-wins plus completion rights make duplication structurally impossible."
+    },
+    {
+      "q": "Second claim on a claimed task is refused. Correct?",
+      "options": ["Bug — both should work", "Correct by design: races resolve to first-claimer; refusal is the mechanism working, logged for audit", "Deadlock", "Retry forever"],
+      "answer": 1,
+      "explain": "Refused second claims prove the race handler works. Log them (contention signal) but never bypass ownership."
+    },
+    {
+      "q": "'Done' with no output reference means?",
+      "options": ["Efficient", "Completion theater: unverifiable claims — done requires outputRef, enforced in code", "Faster reviews", "Good enough"],
+      "answer": 1,
+      "explain": "Outputs need references for downstream consumption and audit. Ref-less done is a claim without evidence — code must refuse it."
+    }
+  ],
+  "summary": "Boards with enforced ownership (claim/complete/skip + reasons), contracted validated handoffs, and pattern-level health reading. Collaboration by construction, not hope.",
+  "next": "Shared work coordinated — now arm each role correctly: least-privilege tools with selection tests. Next: tool scoping."
+}

@@ -1,0 +1,53 @@
+{
+  "title": "Sequential Crews: Pipelines of Agents",
+  "slug": "04-sequential-crews",
+  "objective": "After this lesson you will be able to run sequential agent crews with stage contracts, replay any stage from logged handoffs, and decide when sequential suffices versus hierarchical routing.",
+  "why": "Not every team needs a manager: catalog pipelines (research → write → review), triage flows, and audit chains run fixed order with full determinism of structure. Sequential crews are the multi-agent default — cheaper, traceable, replayable — and the baseline every fancier topology must beat. Start here; escalate to hierarchy on measured need, never ambition.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Fixed order, contracted stages" },
+    { "t": "p", "text": "A **sequential crew** runs tasks in declared order, each consuming the prior handoff: research output feeds writer, writer output feeds reviewer. Every stage holds its Ch.3 contract, so the pipeline is verifiable joint-by-joint. Real CrewAI: `Crew(agents=[...], tasks=[...], process=Process.sequential)` — tasks execute in list order with outputs passed as context." },
+    { "t": "code", "lang": "js", "code": "// Sequential runner: contracted stages, logged handoffs, replayable (plain JS)\nasync function runSequential(stages, runStage, initial) {\n  const log = [];\n  let carry = initial;\n  for (const stage of stages) {\n    const gate = handoff(stage.needs, carry); // Ch.3 mechanical gate\n    if (!gate.ok) return { ok: false, failedAt: stage.name, error: gate.error, log };\n    carry = await runStage(stage, gate.input);\n    log.push([stage.name, carry]);\n  }\n  return { ok: true, result: carry, log };\n}\n// Failure names its stage with the log proving every prior handoff.", "caption": "Gated stages in order; failures name stages with evidence" },
+    { "t": "h", "text": "Replay from any handoff" },
+    { "t": "p", "text": "Logged handoffs make every stage re-runnable in isolation: replay reviewer with writer's logged output (no re-running research), test writer variants against frozen inputs, bisect failures to stages. Replayability is sequential crews' superpower over tangled graphs — structure simplicity pays in debuggability." },
+    { "t": "code", "lang": "js", "code": "// Stage replay: frozen logged input, variant stage fn (plain JS pattern)\n// replay(runner, stages, log, fromIndex, variantFn):\n//   carry = log[fromIndex - 1][1] (last good handoff)\n//   run stages[fromIndex..] with variantFn swapped in\n//   compare outputs: variant effects isolated, upstream untouched.", "caption": "Logged handoffs are time machines for stages" },
+    { "t": "h", "text": "When sequential breaks (escalation criteria)" },
+    { "t": "p", "text": "Escalate to hierarchical when: steps need **skipping** by judgment (fraud check only sometimes), **ordering** varies per case, or **parallel** branches must join. Symptoms in a sequential crew: conditional hacks inside stages ('if VIP skip'), growing context dumps 'just in case', re-runs of whole pipelines for one stage's fix. Each symptom names the missing dynamicism — escalate on evidence, Ch.5 builds the pattern." },
+    { "t": "practice", "sim": "js-playground", "title": "Run the pipeline", "query": "// Sync twin (same gating logic, no awaits — playground-safe)\nfunction runSequential(stages, runStage, initial) {\n  const log = [];\n  let carry = initial;\n  for (const stage of stages) {\n    const need = stage.needs || [];\n    const missing = need.filter((k) => !(k in carry));\n    if (missing.length) return { ok: false, failedAt: stage.name, log };\n    const input = {};\n    for (const k of need) input[k] = carry[k];\n    Object.assign(carry, runStage(stage, input));\n    log.push(stage.name);\n  }\n  return { ok: true, result: carry, log };\n}\nconst stages = [\n  { name: 'research', needs: [] },\n  { name: 'write', needs: ['facts'] },\n  { name: 'review', needs: ['draft'] },\n];\nfunction fakeStage(stage, input) {\n  if (stage.name === 'research') return { facts: '30-day window' };\n  if (stage.name === 'write') return { draft: 'Draft re ' + input.facts };\n  return { verdict: 'pass' };\n}\nconst r = runSequential(stages, fakeStage, {});\nconsole.log('ok=' + r.ok);\nconsole.log('stages=' + r.log.join(','));\nconsole.log('draft=' + r.result.draft);", "note": "Run it: expect ok=true, stages research,write,review, and the draft carrying the facts forward. Then delete 'facts' from research's return and re-run: failure names stage 'write' with the log proving research's shortfall." },
+    { "t": "keytakeaways", "items": ["Sequential crews: fixed order, contracted stages, gated handoffs — the multi-agent default", "Logged handoffs enable stage replay: isolate variants, bisect failures, freeze inputs", "Escalate on evidence (skips, ordering variance, parallelism) — symptoms name the missing dynamicism"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice pipeline and record the draft. (b) Break research's output (drop facts) and record the failure shape. (c) Replay review with a frozen writer output and a variant reviewer (strict vs lenient) — state what replay proves that re-running cannot.",
+    "hints": [
+      "Baseline: ok=true, three stages, draft references facts. Breakage: ok=false, failedAt write, log shows research's empty handoff.",
+      "Replay: carry = logged writer output, run variant reviewers only — upstream untouched, variant effects isolated.",
+      "Replay proves stage-local causality (reviewer differences with identical inputs); re-running confounds stage noise with input noise."
+    ],
+    "solution": "// (a) ok=true, research/write/review, draft carries facts.\n// (b) ok=false, failedAt=write, log indicts research's handoff.\n// (c) replay isolates reviewer variance on frozen inputs — causal proof re-runs can't give.",
+    "why": "Failure naming (stage + evidence) plus replay causality are sequential crews' debugging superpowers — practiced on breakage, not just success paths.",
+    "code": "// Break-and-replay pattern: mutate one stage, read failure shape, replay variants.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Catalog pipeline (research→write→review), fixed order. Topology?",
+      "options": ["Supervisor swarm", "Sequential crew: fixed pipeline, no dynamicism needed — cheaper, traceable, replayable", "Single monolith prompt", "No agents"],
+      "answer": 1,
+      "explain": "Fixed order with contracted stages is sequential's home turf. Fancier topologies add cost without function."
+    },
+    {
+      "q": "Writer variant test without re-running research. Mechanism?",
+      "options": ["Impossible", "Replay from logged handoffs: frozen writer inputs, variant reviewer — upstream untouched", "Re-run everything", "Guess"],
+      "answer": 1,
+      "explain": "Logged handoffs are time machines: isolate stage variants on frozen inputs for causal proof."
+    },
+    {
+      "q": "Stages sprout 'if VIP skip' hacks. Meaning?",
+      "options": ["Clever optimization", "Escalation symptom: conditional flow needs hierarchical routing — hacks signal missing dynamicism", "Fine permanently", "Add more hacks"],
+      "answer": 1,
+      "explain": "Conditionals inside fixed stages fight the topology. Symptoms prescribe: skip/order variance → hierarchical (Ch.5)."
+    }
+  ],
+  "summary": "Sequential crews run contracted stages in fixed order with gated handoffs and full replay. Default choice; escalate on measured dynamicism.",
+  "next": "Fixed flows handled — now judgment calls: manager delegation, budgets, and termination proofs. Next: hierarchical crews."
+}

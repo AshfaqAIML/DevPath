@@ -1,0 +1,53 @@
+{
+  "title": "From Graphs to Teams",
+  "slug": "01-from-graphs-to-teams",
+  "objective": "After this lesson you will be able to decide single-graph vs multi-agent by coordination needs, name the coordination costs teams pay (handoff formats, delegation logic, compounded errors, context growth), and draw team boundaries that justify themselves.",
+  "why": "The LangGraph course ended at subgraphs and supervisors — this course starts where composition becomes collaboration: multiple specialized agents with distinct mandates, tools, and authority. Teams are not 'more agents' but a different coordination regime with its own economics. Choosing it for fixed pipelines buys overhead; refusing it for variable specialist work buys monoliths that can't delegate.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Coordination needs decide, headcount doesn't" },
+    { "t": "p", "text": "Field a team when work needs **variable delegation** (who handles this ticket? depends), **distinct authority** (pricing vs support vs fraud touch different powers), or **parallelizable specialties** (research while drafting). Keep a single graph when the pipeline is fixed, authority is uniform, and one specialty suffices. The test from LangGraph Ch.1 generalizes: delete the delegation — collapse means the team earns its keep." },
+    { "t": "table", "headers": ["Signal", "Single graph", "Agent team"], "rows": [["Pipeline shape", "Fixed A→B→C", "Variable per case"], ["Authority", "Uniform (one trust level)", "Distinct (pricing vs support vs fraud)"], ["Specialties", "One skill suffices", "Research + pricing + support differ"], ["Failure cost", "One path to verify", "Handoffs multiply failure points"]] },
+    { "t": "h", "text": "The coordination bill (price it upfront)" },
+    { "t": "p", "text": "Teams charge four taxes: **handoff formats** (every transfer needs contracted shapes), **delegation logic** (routers/managers with their own tests), **compounded errors** (three 95% agents ≈ 86% pipeline — multiply, don't average), and **context growth** (each agent adds its slice). Price the bill before staffing: if specialization gains don't exceed coordination taxes, the team is theater with latency." },
+    { "t": "code", "lang": "js", "code": "// Coordination math: reliability multiplies, context adds (plain JS)\nfunction teamReliability(agentAccuracies) {\n  return agentAccuracies.reduce((p, a) => p * a, 1);\n}\nfunction contextBill(perAgentTokens, agents, sharedTokens) {\n  return sharedTokens + perAgentTokens * agents; // linear per added agent\n}\nconsole.log(teamReliability([0.95, 0.95, 0.95])); // 0.857: three 95s ≈ 86%\n// Lesson: each handoff must EARN its error share via specialization gains.", "caption": "Multiplicative reliability, additive context — the team P&L" },
+    { "t": "h", "text": "Boundary drawing: what becomes a team" },
+    { "t": "p", "text": "Draw boundaries at **authority and specialty seams**: pricing decisions (money authority) separate from support drafting (communication skill) separate from fraud review (risk authority). Never split by *steps* of one specialty (research-1, research-2) — that multiplies handoffs without specialization gains. One team per bounded context; subgraphs (LangGraph Ch.8) for reuse *within* a context." },
+    { "t": "practice", "sim": "js-playground", "title": "Price the team", "query": "function teamReliability(accs) { return accs.reduce((p, a) => p * a, 1); }\nfunction contextBill(perAgent, n, shared) { return shared + perAgent * n; }\nconst solo = { acc: 0.9, ctx: 2000 };\nconst team = { accs: [0.97, 0.97, 0.97], perAgent: 1200, n: 3, shared: 800 };\nconsole.log('solo acc=' + solo.acc + ' ctx=' + solo.ctx);\nconsole.log('team acc=' + Math.round(teamReliability(team.accs) * 1000) / 1000);\nconsole.log('team ctx=' + contextBill(team.perAgent, team.n, team.shared));\nconsole.log('verdict=' + (teamReliability(team.accs) > solo.acc ? 'team wins' : 'solo wins'));", "note": "Run it: team acc 0.913 vs solo 0.9 (marginal gain) at 4400 vs 2000 tokens (2.2x cost). Verdict says team — barely. Change one agent to 0.9 and re-run: the verdict flips, proving coordination math decides, not enthusiasm." },
+    { "t": "keytakeaways", "items": ["Teams for variable delegation, distinct authority, parallelizable specialties — graphs for fixed uniform pipelines", "Price coordination: multiplicative reliability, additive context, handoff formats, delegation tests", "Boundaries at authority/specialty seams; subgraphs for reuse within contexts"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice pricer and record the verdict. (b) Drop one team agent to 0.9 accuracy and re-run; record the flip. (c) Decide team-vs-graph for: nightly catalog audit (fixed checks) vs dispute desk (refunds/fraud/VIP mix) — with the deletion/coordinator test applied to each.",
+    "hints": [
+      "Baseline: team 0.913 > solo 0.9 (verdict team). One weak link (0.9): 0.97×0.97×0.9 ≈ 0.847 < 0.9 (verdict flips to solo).",
+      "Catalog audit: fixed checks, uniform authority → single graph (delete delegation: nothing breaks). Dispute desk: variable routing across authorities → team (deletion collapses behavior).",
+      "State the coordination bill each choice pays: audit pays nothing; desk pays handoffs+tests for specialization gains."
+    ],
+    "solution": "// (a) team wins 0.913 vs 0.9 at 2.2x context.\n// (b) 0.847 < 0.9 → solo wins: weakest link dominates multiplicative math.\n// (c) audit: graph (fixed, uniform); desk: team (variable, multi-authority).",
+    "why": "Sensitivity analysis (one weak agent flips the verdict) teaches that team reliability is a weakest-link game — composition demands per-agent bars, not averages. The two decisions practice boundary drawing on opposite archetypes.",
+    "code": "// Sensitivity pattern: vary one accuracy, watch the verdict flip.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Fixed triage→decide→draft pipeline, uniform authority. Team or graph?",
+      "options": ["Five-agent team", "Single graph: fixed pipeline pays zero coordination bill — teams add handoffs for no gain", "Supervisor swarm", "Monolith"],
+      "answer": 1,
+      "explain": "No variability, no authority split, no parallel specialties: coordination taxes buy nothing. Graph it."
+    },
+    {
+      "q": "Three 95% agents in sequence yield?",
+      "options": ["95% (average)", "≈86% (multiplicative: 0.95³) — each handoff must earn its error share", "100% (redundancy)", "285%"],
+      "answer": 1,
+      "explain": "Series reliability multiplies. Team design must beat solo accuracy *after* compounding — per-agent bars, not averages."
+    },
+    {
+      "q": "Where do you split one team into two?",
+      "options": ["At step count limits", "At authority/specialty seams (pricing vs support) — never by subdividing one specialty's steps", "Randomly", "By token budget only"],
+      "answer": 1,
+      "explain": "Seams follow authority and skill boundaries: independent mandates, distinct powers, separate eval. Step-splitting multiplies handoffs without gains."
+    }
+  ],
+  "summary": "Teams for variability, authority splits, parallel specialties — priced in multiplicative reliability and additive context. Boundaries at seams; deletion test decides.",
+  "next": "Teams justified — now staff them: role cards with testable mandates that partition accountability. Next: role design."
+}
