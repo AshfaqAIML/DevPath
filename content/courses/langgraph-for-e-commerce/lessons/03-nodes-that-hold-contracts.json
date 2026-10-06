@@ -1,0 +1,53 @@
+{
+  "title": "Nodes That Hold Contracts",
+  "slug": "03-nodes-that-hold-contracts",
+  "objective": "After this lesson you will be able to write node functions with typed inputs and contract-shaped outputs, validate at node boundaries with quarantine discipline, and handle node failure (retry, fallback, escalate) explicitly.",
+  "why": "Nodes are where prompts meet production: a triage node returns a *string* instead of the enum, a draft node exceeds length, a lookup returns null. Unvalidated node outputs corrupt shared state silently — every downstream node inherits the lie. Contract-holding nodes (validate in, validate out, fail loudly with evidence) turn integration bugs into caught exceptions.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Nodes are functions with contracts, not prompts with hopes" },
+    { "t": "p", "text": "A production node has three parts: **prompt** (the Prompt 101 pack piece), **call** (model with bounded retries/timeouts), **validate** (schema-check the output before it touches state). The validate step is non-negotiable: node outputs are untrusted input to the graph, exactly like user input to an API. Zod-style schemas (or hand validators in the playground) enforce enums, types, and bounds at the boundary." },
+    { "t": "code", "lang": "js", "code": "// Node skeleton: prompt → call → validate → update-or-quarantine\nasync function triageNode(callModel, state) {\n  const raw = await callModel(TRIAGE_PROMPT + state.ticket); // bounded retries/timeout inside callModel\n  const parsed = extractJSON(raw);                            // Ch.3 Prompt-101 parser\n  if (!parsed.ok) return { _quarantined: { node: \"triage\", raw } };\n  const { category, confidence } = parsed.value;\n  if (![\"billing\", \"shipping\", \"returns\"].includes(category))\n    return { _quarantined: { node: \"triage\", reason: \"bad enum\", raw } };\n  return { category, triageConfidence: confidence };           // clean partial update\n}\n// Downstream reads category only when no _quarantined flag exists.", "caption": "Validate out: enums, types, bounds — quarantine with evidence on violation" },
+    { "t": "h", "text": "Failure behavior: retry, fallback, escalate" },
+    { "t": "p", "text": "Nodes fail three ways, each with a designed response. **Transient** (timeout, rate limit): bounded retries with backoff, then escalate — never infinite loops. **Invalid output** (schema violation): one repair retry with the error quoted back, then quarantine. **Downstream missing** (lookup null): fallback values or explicit unknown-paths, never invented data. Undesigned failure modes become silent corruption; designed ones become log entries." },
+    { "t": "code", "lang": "js", "code": "// Bounded retry with quoted-error repair (plain JS pattern)\nasync function callWithRepair(callModel, prompt, validate, maxTries = 2) {\n  let lastError = null;\n  for (let i = 0; i < maxTries; i++) {\n    const raw = await callModel(prompt + (lastError ? `\\nPrevious output was invalid: ${lastError}. Fix it.` : \"\"));\n    const v = validate(raw);\n    if (v.ok) return v;\n    lastError = v.error;\n  }\n  return { ok: false, error: lastError, quarantined: true };\n}\n// Repair quotes the violation back — models fix stated errors far better than vibes.", "caption": "Two tries with evidence, then quarantine — bounded, never infinite" },
+    { "t": "h", "text": "Idempotency: safe to re-run" },
+    { "t": "p", "text": "Retries, replays, and resume-after-crash re-execute nodes — so nodes must be **idempotent**: same state in, same update out, no duplicate side effects. Pure compute nodes (classify, draft) are naturally safe; side-effecting nodes (send email, issue refund) need idempotency keys and check-before-act guards. A node unsafe to re-run is a node unsafe to operate." },
+    { "t": "practice", "sim": "js-playground", "title": "Validate the node output", "query": "function validateTriage(parsed) {\n  if (!parsed || typeof parsed !== 'object') return { ok: false, error: 'not-an-object' };\n  if (!['billing', 'shipping', 'returns'].includes(parsed.category)) return { ok: false, error: 'bad-enum:' + parsed.category };\n  if (typeof parsed.confidence !== 'number' || parsed.confidence < 0 || parsed.confidence > 1) return { ok: false, error: 'bad-confidence' };\n  return { ok: true };\n}\nconst cases = [\n  { category: 'shipping', confidence: 0.9 },\n  { category: 'Exchange', confidence: 0.9 },\n  { category: 'billing', confidence: 'high' },\n  'just a string',\n];\nfor (const c of cases) console.log(JSON.stringify(validateTriage(c)));", "note": "Run it: expect ok, bad-enum, bad-confidence, not-an-object — in order. Each rejection names its rule: validators that explain themselves make quarantine logs self-diagnosing." },
+    { "t": "keytakeaways", "items": ["Nodes = prompt + bounded call + boundary validation; outputs are untrusted input to the graph", "Failures designed: transient→bounded retry, invalid→quoted repair then quarantine, missing→fallback/unknown", "Idempotency required: retries and replays re-execute nodes — side effects need keys and guards"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice validator and map each case to its rule. (b) Extend it with a reason field rule (string, ≤12 words — count words, not chars) plus a test. (c) Sketch the idempotency guard for a refund-issue node (key check + check-before-act) in three lines of pseudocode.",
+    "hints": [
+      "Mapping: ok / bad-enum:Exchange / bad-confidence:'high' / not-an-object. Each names rule + value.",
+      "Reason rule: typeof string, split(/\\s+/).length <= 12, else 'bad-reason-length'. Test with 13-word reason.",
+      "Guard: if (state.refundIssued[key]) return {}; const r = lookup(key); if (r.settled) return {refundIssued:{[key]:true}}; issue(key)."
+    ],
+    "solution": "// (a) ok / bad-enum / bad-confidence / not-an-object (in order).\n// (b) reason rule: string + ≤12 whitespace-separated words + test.\n// (c) key-check → lookup → conditional issue (see hints). Idempotent by key.",
+    "why": "Boundary validation (typed rules with evidence), contract extension (new field, new test), and side-effect safety (keys + guards) are the three node disciplines — each practiced, none merely read.",
+    "code": "// Rule-addition pattern: type check + bound check + named error + test case.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Node returns {category: 'Exchange'}. Correct handling?",
+      "options": ["Accept — close enough", "Quarantine with evidence (bad enum + raw) — downstream reads only validated updates", "Lowercase it silently", "Retry forever"],
+      "answer": 1,
+      "explain": "Boundary validation: unlisted labels corrupt routers and switches. Quarantine preserves evidence for repair-or-escalate; silent coercion lies downstream."
+    },
+    {
+      "q": "Timeout on first call, success on retry. Design principle?",
+      "options": ["Infinite retries", "Bounded retries with backoff, then escalate — transient failures get chances, not eternities", "Fail immediately", "Skip the node"],
+      "answer": 1,
+      "explain": "Bounded retry converts transients into successes and persistents into logged escalations. Unbounded retry converts incidents into hangs."
+    },
+    {
+      "q": "Refund node re-runs after a crash and double-issues. Missing?",
+      "options": ["Faster model", "Idempotency: keys + check-before-act so re-execution is safe", "More logging", "Bigger timeout"],
+      "answer": 1,
+      "explain": "Retries, replays, and resumes re-execute nodes. Side effects without keys double-apply — idempotency is an operability requirement, not polish."
+    }
+  ],
+  "summary": "Contract-holding nodes validate in and out, fail by design (retry/fallback/escalate with evidence), and re-run safely. Integration bugs die at boundaries.",
+  "next": "Workers contracted — now the traffic system: conditional edges, routing tables, and branch coverage for graphs. Next: routers with tests."
+}

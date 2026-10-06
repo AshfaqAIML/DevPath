@@ -1,0 +1,53 @@
+{
+  "title": "Tools & Structured Output",
+  "slug": "07-tools-structured-output",
+  "objective": "After this lesson you will be able to expose functions as model-callable tools with JSON schemas, validate tool arguments at the boundary, handle tool errors without breaking runs, and choose tool-calling vs direct code correctly.",
+  "why": "Agents that can't act are chatbots with diagrams: order lookup, refund issuance, ticket updates all happen through tools. Tool design is API design under uncertainty — the model chooses arguments, so schemas must be strict, descriptions must disambiguate, and every result (including errors) must route somewhere sane. Most agent incidents are tool-boundary incidents.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Tools are contracts with descriptions" },
+    { "t": "p", "text": "A **tool** exposes a function: name, human description (the model reads this to decide *when*), and a **JSON schema** for arguments (types, enums, required, bounds). Descriptions disambiguate siblings (`lookup_order` vs `search_orders` — when each); schemas constrain choices. Undescribed tools get misused; unstrict schemas get creative arguments." },
+    { "t": "code", "lang": "js", "code": "// Tool definition: description decides selection, schema constrains args\nconst lookupOrderTool = {\n  name: \"lookup_order\",\n  description: \"Fetch ONE order by exact ID. Use when the ticket names an order. For browsing many orders use search_orders instead.\",\n  schema: {\n    type: \"object\",\n    properties: { orderId: { type: \"string\", pattern: \"^ORD-[0-9]+$\" } },\n    required: [\"orderId\"],\n    additionalProperties: false,\n  },\n  run: (db) => (args) => db.orders[args.orderId] || { error: \"not-found\" },\n};\n// Pattern-constrained IDs, closed schemas, documented siblings.", "caption": "Describe selection, constrain arguments, close the schema" },
+    { "t": "h", "text": "Validate args, route results (including errors)" },
+    { "t": "p", "text": "Tool arguments arrive model-written: **validate against the schema at the boundary**, quarantine violations with evidence (Ch.3 nodes, same discipline), and coerce nothing silently (`'ten'` for a number is a repair-or-escalate event). Tool *results* need routing too: `{error: not-found}` flows to a clarification node, not into the draft as 'undefined'. Every tool outcome — value, empty, error — maps to an edge." },
+    { "t": "code", "lang": "js", "code": "// Tool-call executor: validate args, run, route outcomes (plain JS)\nfunction execTool(tool, args, state) {\n  const problems = [];\n  for (const key of tool.schema.required || [])\n    if (!(key in args)) problems.push(\"missing:\" + key);\n  if (tool.schema.properties?.orderId?.pattern) {\n    const re = new RegExp(tool.schema.properties.orderId.pattern);\n    if (args.orderId && !re.test(args.orderId)) problems.push(\"bad-format:orderId\");\n  }\n  if (problems.length) return { next: \"quarantine\", update: { toolError: problems } };\n  const result = tool.run(state.db)(args);\n  if (result && result.error) return { next: \"clarify\", update: { toolError: result.error } };\n  return { next: \"continue\", update: { toolResult: result } };\n}\n// Three exits: continue (value), clarify (empty/error), quarantine (invalid args).", "caption": "Args validated, outcomes routed — tools never throw into the void" },
+    { "t": "h", "text": "Tools vs code: who decides?" },
+    { "t": "p", "text": "Let the **model** choose tools when the choice needs judgment (which of twelve tools fits this ticket?). Let **code** call functions directly when the step is deterministic (validate, compute, route on decided state — Ch.4). Model-chosen tools need descriptions + tests of selection accuracy; code-called functions need unit tests. Blurring the two (model 'deciding' a fixed step) buys flakiness at full price." },
+    { "t": "practice", "sim": "js-playground", "title": "Guard the tool boundary", "query": "function execToolCall(args) {\n  const problems = [];\n  if (!('orderId' in args)) problems.push('missing:orderId');\n  else if (!/^ORD-[0-9]+$/.test(args.orderId)) problems.push('bad-format:orderId');\n  if (problems.length) return { next: 'quarantine', problems };\n  const db = { 'ORD-4821': { total: 129 } };\n  const hit = db[args.orderId];\n  if (!hit) return { next: 'clarify', problems: ['not-found'] };\n  return { next: 'continue', result: hit };\n}\nconst cases = [\n  [{ orderId: 'ORD-4821' }, 'continue'],\n  [{ orderId: 'ORD-9999' }, 'clarify'],\n  [{ orderId: 'ten' }, 'quarantine'],\n  [{}, 'quarantine'],\n];\nlet pass = 0;\nfor (const [args, expected] of cases) {\n  const got = execToolCall(args).next;\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(args) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' tool calls routed');", "note": "Run it: expect 4/4 with zero MISS — valid continues, unknown clarifies, malformed/missing quarantine. Every tool outcome lands somewhere designed; nothing throws into the void." },
+    { "t": "keytakeaways", "items": ["Tools = name + selection-guiding description + strict closed schema; describe siblings apart", "Validate args at the boundary (quarantine with evidence); route all outcomes (value/empty/error) to edges", "Model chooses tools under judgment; code calls functions under determinism — never blur the two"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice executor and confirm 4/4 routing. (b) Add an issueRefundTool (amount: number 1–500, orderId pattern) with description distinguishing it from lookup, plus three tests (valid/over-limit/malformed). (c) State which parts of a refund flow the model chooses vs code executes, with the flakiness argument.",
+    "hints": [
+      "4/4 baseline first; each outcome class (continue/clarify/quarantine) must appear in your new tests too.",
+      "issueRefund schema: {orderId pattern, amount number min 1 max 500}, required both, closed. Description: 'Issue a post-approval refund; only after approval node; lookup first for unknown orders.'",
+      "Model: which tool + free-text reason. Code: validation, limits, execution, logging. Model-decided fixed steps buy flakiness (nondeterministic correctness) at full price."
+    ],
+    "solution": "// (a) 4/4, zero misses (continue/clarify/quarantine/quarantine).\n// (b) issueRefund tool + 3 tests mirroring outcome classes.\n// (c) model: tool selection + reasons (judgment); code: validation, bounds,\n//     execution, logs (determinism). Fixed steps never model-decided.",
+    "why": "Tool authorship (description + schema + tests per outcome class) plus the model/code labor split are the two tool judgments — each practiced concretely, with flakiness priced honestly.",
+    "code": "// Tool template: name + description (selection!) + closed schema + outcome tests.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "lookup_order vs search_orders both exist, undescribed. Predict the failure?",
+      "options": ["None — models infer", "Mis-selection: model picks arbitrarily between overlapping tools — descriptions must disambiguate siblings", "Slower calls", "Schema errors"],
+      "answer": 1,
+      "explain": "Tool choice follows descriptions. Undescribed siblings are a coin flip; state when-each explicitly."
+    },
+    {
+      "q": "Tool receives {amount: 'ten'} for numeric schema. Handling?",
+      "options": ["Coerce to 10 silently", "Quarantine with evidence (bad type + raw) for repair-or-escalate — silent coercion corrupts money flows", "Round it", "Ignore the call"],
+      "answer": 1,
+      "explain": "Boundary validation with evidence, same discipline as node outputs. Money-adjacent coercion is corruption with good intentions."
+    },
+    {
+      "q": "Fixed validation step currently model-decided. Problem?",
+      "options": ["None — models validate well", "Flakiness at full price: deterministic steps belong in code (unit-tested); model judgment is for judgment calls", "Too fast", "Too cheap"],
+      "answer": 1,
+      "explain": "Labor split by determinism: code for fixed steps, models for judgment. Blurring buys nondeterminism where correctness was achievable."
+    }
+  ],
+  "summary": "Described, strict tools; validated args; routed outcomes; model/code split by judgment-vs-determinism. Tool boundaries are where agent incidents live — guard them like APIs.",
+  "next": "Tooled nodes work alone — now compose graphs into teams: subgraphs, supervisors, and the patterns the CrewAI course inherits. Next: composition."
+}

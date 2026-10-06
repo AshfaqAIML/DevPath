@@ -1,0 +1,53 @@
+{
+  "title": "State Schemas & Reducers",
+  "slug": "02-state-schemas-reducers",
+  "objective": "After this lesson you will be able to design state schemas (channels with types, defaults, reducers), predict merge behavior for concurrent and repeated updates, and keep state minimal, typed, and bounded.",
+  "why": "Shared mutable state is where agent bugs breed: two nodes overwriting each other's messages, unbounded histories exploding checkpoints, untyped blobs failing downstream. LangGraph's answer — channels with reducers — makes merging explicit and order-safe. State design is the highest-leverage agent skill after topology: every downstream bug is a state bug wearing a costume.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Channels: typed slots with merge rules" },
+    { "t": "p", "text": "State is a set of **channels**: each has a type, a default, and a **reducer** — the function merging an update into current value. Overwrite (default: last write wins) suits single-writer slots (decision, draft). Append/concat suits multi-writer streams (messages, logs). The reducer is declared once in the schema — every merge, everywhere, follows it." },
+    { "t": "code", "lang": "js", "code": "// Real LangGraph.js state: Annotation channels with reducers\nimport { Annotation } from \"@langchain/langgraph\";\nconst State = Annotation.Root({\n  ticket: Annotation(),                       // overwrite (default)\n  messages: Annotation({                        // append stream\n    reducer: (a, b) => a.concat(b),\n    default: () => [],\n  }),\n  decision: Annotation(),                     // single-writer slot\n  attempts: Annotation({\n    reducer: (a, b) => a + b,                 // counter merge\n    default: () => 0,\n  }),\n});\n// Node updates are partials: { messages: [m] } appends; { decision } overwrites.", "caption": "Declare merge semantics once — order-safe updates everywhere" },
+    { "t": "h", "text": "Minimal, typed, bounded" },
+    { "t": "p", "text": "Three state virtues. **Minimal**: every field must be read by some node — dead fields bloat checkpoints and confuse routers. **Typed**: contracts per channel (Ch.3 enforces them) so nodes can't smuggle shapes. **Bounded**: histories summarize (rolling digest node) instead of growing forever — checkpoint size, cost, and attention all scale with state." },
+    { "t": "code", "lang": "js", "code": "// Reducer lab: overwrite vs append vs counter (runs in playground logic)\nfunction applyUpdate(state, update, reducers) {\n  const next = { ...state };\n  for (const [k, v] of Object.entries(update)) {\n    const reduce = reducers[k] || ((a, b) => b); // default: overwrite\n    next[k] = k in next ? reduce(next[k], v) : v;\n  }\n  return next;\n}\nconst reducers = { messages: (a, b) => a.concat(b), attempts: (a, b) => a + b };\nlet s = { messages: [\"hi\"], attempts: 1, decision: null };\ns = applyUpdate(s, { messages: [\"update\"], attempts: 1, decision: { ok: true } }, reducers);\n// messages: [\"hi\",\"update\"], attempts: 2, decision: {ok:true} — each merged by rule", "caption": "One merge function, per-channel rules — order-safe by construction" },
+    { "t": "h", "text": "The unbounded-history trap" },
+    { "t": "p", "text": "Appending every message forever grows checkpoints linearly with conversation length — slower resumes, pricier calls, blurrier attention. The fix is a **summarizer node** on a schedule (every N steps or K tokens): compress history into a rolling digest, keep recent verbatim, archive the rest outside state. Boundedness is designed, never emergent." },
+    { "t": "practice", "sim": "js-playground", "title": "Merge by rule", "query": "function applyUpdate(state, update, reducers) {\n  const next = { ...state };\n  for (const [k, v] of Object.entries(update)) {\n    const reduce = reducers[k] || ((a, b) => b);\n    next[k] = k in next ? reduce(next[k], v) : v;\n  }\n  return next;\n}\nconst reducers = { messages: (a, b) => a.concat(b), attempts: (a, b) => a + b };\nlet s = { messages: ['hi'], attempts: 1, decision: null };\ns = applyUpdate(s, { messages: ['update'], attempts: 1, decision: { ok: true } }, reducers);\ns = applyUpdate(s, { messages: ['again'], attempts: 1 }, reducers);\nconsole.log(JSON.stringify(s.messages));\nconsole.log('attempts=' + s.attempts);\nconsole.log('decision=' + JSON.stringify(s.decision));", "note": "Run it: expect [\"hi\",\"update\",\"again\"], attempts=3, decision {ok:true}. Then apply the updates in reverse order and confirm identical results — order-independence is the reducer guarantee." },
+    { "t": "keytakeaways", "items": ["Channels carry type + default + reducer; partials merge by rule, not by accident", "Overwrite for single-writer slots, append for streams, counters for tallies — declare once", "Minimal (read by someone), typed (contracted), bounded (summarized) — state virtues that prevent whole bug classes"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice merger, then re-run with the two updates swapped; confirm identical final state. (b) Design the returns-graph state (ticket, facts, decision, draft, approval, log, attempts): assign each channel overwrite/append/counter with one-line reasons. (c) State the summarization trigger (every N steps or K tokens) and what the digest keeps vs archives.",
+    "hints": [
+      "Order-swap proof first: identical JSON both ways is the reducer guarantee made visible.",
+      "ticket/facts/decision/draft/approval: overwrite (single-writer each). log/messages: append. attempts: counter. Reasons name the writer pattern.",
+      "Trigger: every 10 steps or 4k tokens (stated policy); digest keeps decisions + open items, archives verbatim chatter outside state with IDs."
+    ],
+    "solution": "// (a) identical final state both orders (order-safe merges).\n// (b) overwrite: ticket/facts/decision/draft/approval (single writers);\n//     append: log/messages (streams); counter: attempts.\n// (c) every 10 steps / 4k tokens; digest keeps decisions + open loops,\n//     archives verbatim history externally by ID.",
+    "why": "Writer-pattern analysis (who writes what, how often) is the state-design method: channel kinds follow from it mechanically. The swap-proof makes order-safety empirical, not theoretical.",
+    "code": "// Swap-proof pattern (playground): apply A-then-B vs B-then-A, diff JSON.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Two nodes append to messages concurrently. Safe because…",
+      "options": ["Locks serialize them", "The append reducer makes merge order-independent — concurrent and sequential updates compose identically", "Only one node runs", "Messages are small"],
+      "answer": 1,
+      "explain": "Reducers move merging from timing to math: concat commutes for streams. Order-safety by construction beats coordination."
+    },
+    {
+      "q": "Checkpoints balloon as conversations grow. Fix?",
+      "options": ["Bigger storage", "Summarizer node on schedule: rolling digest in state, verbatim archived outside, recent kept — bounded by design", "Delete checkpoints", "Fewer nodes"],
+      "answer": 1,
+      "explain": "Unbounded appends scale cost, latency, and blur linearly. Scheduled summarization bounds state while preserving decisions and open loops."
+    },
+    {
+      "q": "A channel no node reads. Verdict?",
+      "options": ["Harmless", "Dead weight: checkpoint bloat + router confusion — minimality deletes it", "Keep for later", "Log it more"],
+      "answer": 1,
+      "explain": "Minimality: every field earned by a reader. Unread state taxes persistence and misleads debuggers — delete on sight."
+    }
+  ],
+  "summary": "Channels with reducers make merges order-safe; minimal/typed/bounded keeps state honest and cheap. State design prevents agent bugs at the source.",
+  "next": "Blackboard designed — now the workers: node functions with contracts, validation boundaries, and failure behavior. Next: nodes that hold their contracts."
+}

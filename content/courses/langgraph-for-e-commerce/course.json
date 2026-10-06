@@ -1,0 +1,173 @@
+{
+  "courseSlug": "langgraph-for-e-commerce",
+  "subtitle": "Stateful agent graphs on a real domain: nodes, edges, checkpointing, and human-in-the-loop for order flows, returns, and support — LangGraph applied, not toyed",
+  "audience": "Developers who finished Prompt Engineering 101 (prompt packs feed graph nodes directly) and want agents with memory, branches, and approval gates instead of single-shot prompts. All graph machinery is taught twice: once as runnable pure-JS miniatures in the JS Playground, once as real @langchain/langgraph code for your Node project.",
+  "outcomes": [
+    "Model agent work as graphs (nodes, edges, shared state) instead of chains or monolith prompts",
+    "Design state schemas with reducers so parallel and repeated updates merge predictably",
+    "Write node functions (lookup, decide, draft) with typed inputs and contract-shaped outputs",
+    "Route with conditional edges and validate every branch with routing tests",
+    "Persist threads with checkpointers: resume, replay, and time-travel debugging",
+    "Gate risky actions behind human-in-the-loop interrupts with approve/edit/skip flows",
+    "Give nodes tools and structured output with schema-validated arguments",
+    "Compose subgraphs and choose supervisor vs sequential patterns deliberately",
+    "Evaluate graphs with trace replay and conversation gold sets",
+    "Ship a returns-resolution graph: triage → policy → draft → approval → log, measured"
+  ],
+  "prereqSlugs": ["prompt-engineering-101"],
+  "technologies": ["LangGraph.js (@langchain/langgraph)", "JavaScript (ES2020+)", "StateGraph + Annotation", "MemorySaver checkpointing", "Zod output schemas"],
+  "skills": ["agent graphs", "state design", "conditional routing", "checkpointing", "human-in-the-loop", "tool use", "graph evaluation"],
+  "assessment": [
+    {
+      "q": "Chains vs graphs for 'triage → policy → draft → approval' — why graphs?",
+      "options": ["Graphs are newer", "Branches, loops, shared state, and gates need nodes + conditional edges; chains express only fixed sequences", "Chains are deprecated", "Graphs run faster always"],
+      "answer": 1,
+      "explain": "Control flow decides: linear fixed work fits chains; branching/looping/gated work needs graph topology (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Two nodes append messages to state.messages concurrently. Correct design?",
+      "options": ["Last write wins", "A reducer (concat/merge) on the channel so updates compose predictably regardless of order", "Locks around nodes", "Single node only"],
+      "answer": 1,
+      "explain": "Shared mutable state needs merge semantics: reducers make concurrent/sequential updates order-safe (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Node returns {approved: 'yes'} but the contract wants boolean. Where is this caught?",
+      "options": ["Nowhere — truthy suffices", "Schema validation at the node boundary (Zod): quarantine with evidence, never silent coercion downstream", "In the prompt text", "At billing"],
+      "answer": 1,
+      "explain": "Node outputs are untrusted input to the graph: validate at boundaries with the OpenDataLoader discipline applied to agent state (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Router sends 5% of refunds to the wrong branch. First check?",
+      "options": ["Add more branches", "Routing tests: enumerated inputs × expected branch, run on every router edit — branch coverage for graphs", "Bigger model", "Remove the router"],
+      "answer": 1,
+      "explain": "Routers are pure functions of state: test them like functions with branch coverage, not vibes (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Support run must pause for manager approval over $100, then resume exactly. Mechanism?",
+      "options": ["Sleep in the node", "interrupt() before the action + checkpointer persistence: resume re-enters post-approval with full state", "Email polling loop", "Two separate graphs"],
+      "answer": 1,
+      "explain": "HITL = interrupt + durable state. Checkpointing makes resume exact; approval edits state before continuation (Ch.5–6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Checkpoint writes on every step feel expensive. Response?",
+      "options": ["Disable checkpointing", "Checkpoint on thread-scoped, bounded state with per-step writes measured; cost is durability for resume/replay/audit — scope state minimally instead", "Checkpoint yearly", "More threads"],
+      "answer": 1,
+      "explain": "Durability is the product (resume, replay, audit). Control cost by scoping state and measuring, not by dropping persistence (Ch.5).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Tool call ships {amount: 'ten'} for a numeric schema. Handling?",
+      "options": ["Coerce silently", "Schema-validate tool args at the boundary; quarantine failures with evidence for repair-or-escalate", "Retry forever", "Widen schema to any"],
+      "answer": 1,
+      "explain": "Tool args are contracts: validate, quarantine with evidence, repair or escalate explicitly. Silent coercion corrupts money flows (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Returns flow reused by three parent graphs. Shape?",
+      "options": ["Copy-paste the nodes", "Subgraph: named, versioned, independently tested unit composed into parents", "One mega-graph", "External API only"],
+      "answer": 1,
+      "explain": "Subgraphs are functions for graphs: reuse without duplication, tested once, versioned (Ch.8).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Supervisor vs sequential multi-agent for returns + fraud + VIP handling?",
+      "options": ["Always supervisor", "Supervisor when routing needs judgment per step; sequential when the pipeline is fixed — match topology to control-flow needs", "Sequential always", "Neither — monolith"],
+      "answer": 1,
+      "explain": "Topology follows control flow: dynamic delegation → supervisor; fixed pipeline → sequential. (Ch.8; CrewAI course goes deeper on teams.)",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Graph passes unit tests but fails on real tickets. Missing eval layer?",
+      "options": ["More unit tests", "Conversation gold sets + trace replay on real tickets: end-to-end behavior with per-node attribution, not just node correctness", "Bigger checkpoint", "Faster model"],
+      "answer": 1,
+      "explain": "Node tests don't cover composition. Trace replay attributes failures to nodes/routers/state across realistic conversations (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "v2 graph beats v1 overall but regresses VIP handling. Process?",
+      "options": ["Ship it — overall wins", "Per-segment diffs on the same conversation set; fix VIP path before shipping — aggregates hide localized regressions", "Delete VIP tests", "Average the scores"],
+      "answer": 1,
+      "explain": "Segment-level diffs (Prompt 101 Ch.7 discipline applied to graphs): same set, item attribution, no shipping with known regressions (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Human edits state at an interrupt, then resumes. What must hold?",
+      "options": ["Nothing special", "Edits conform to the state schema (validated) and resume continues from the interrupt point with edited state — approval-with-changes as first-class flow", "Restart the thread", "Discard checkpoints"],
+      "answer": 1,
+      "explain": "Edit-and-resume is the HITL power move: validated edits, exact continuation. Design interrupts expecting edits, not just approvals (Ch.6).",
+      "difficulty": "hard"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Returns-Resolution Graph",
+    "summary": "Ship a working returns-resolution agent graph for a shoe store: ticket triage with routing tests, policy-grounded decisions, drafted replies with contracts, human approval over $100, full checkpointing, and an evaluation report with per-segment diffs. The capstone that turns prompt packs into stateful agents.",
+    "requirements": [
+      "State schema: ticket, facts, decision, draft, approval, log — with reducers where updates merge",
+      "Nodes: triage (router-tested), policy lookup, decide (contract-shaped), draft (≤60 words), approval gate (interrupt over $100), logger",
+      "Conditional edges: segment routing with enumerated routing tests (all branches covered)",
+      "Checkpointing: thread-scoped persistence; demonstrate resume + one replayed trace",
+      "HITL: interrupt flow with approve/edit/skip paths demonstrated on a $100+ case",
+      "Evaluation: 12-conversation gold set (happy/edge/attack), baseline scores overall + per-segment, one iterated fix with delta"
+    ],
+    "technical": [
+      "Graph machinery in runnable JS (playground-compatible runner) plus real @langchain/langgraph code for Node",
+      "Node outputs schema-validated (Zod-style) with quarantine on violations",
+      "Threads isolated by ID; checkpoints bounded in size (state scoped minimally)",
+      "All numbers reproducible: gold set + router tests committed"
+    ],
+    "architecture": "Four sections: (1) Graph map — nodes/edges/state diagram with routing table; (2) Runs — three traced conversations (happy, edge, interrupt) with per-node attribution; (3) Evaluation — gold scores, per-segment diffs, iterated fix with delta; (4) Operations — checkpoint policy, approval audit log design, guardrails carried from Prompt 101.",
+    "steps": [
+      "Design state + routing table on paper; write routing tests first",
+      "Build nodes with contracts (reuse Prompt 101 pack pieces as node prompts)",
+      "Wire edges, add interrupt + checkpointer; demonstrate approve/edit/skip",
+      "Build the 12-conversation gold set; baseline; iterate one variable; re-score",
+      "Write the operations section; self-review against failure modes (Prompt 101 Ch.9)"
+    ],
+    "evaluation": [
+      "All branches routing-tested; router coverage 100% on enumerated inputs",
+      "Interrupt demonstrated with state intact across resume; edit path shown",
+      "Gold baseline + one iteration with per-segment diffs on the same set",
+      "No silent defaults anywhere; quarantine paths demonstrated or documented",
+      "State scoped and bounded; checkpoint policy stated"
+    ],
+    "stretch": [
+      "Add a fraud-check subgraph composed into the returns graph with its own tests",
+      "Benchmark checkpointed vs uncheckpointed runs and report the overhead honestly",
+      "Convert one node to tool-calling (order lookup tool) with schema-validated args"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "When do agents need graphs instead of chains?",
+      "a": "When control flow branches (triage routing), loops (verify→redraft), shares evolving state across steps, or gates on humans/tools. Chains express fixed sequences; graphs express decisions, repetition, and collaboration. The test: if you can delete the router and nothing breaks, a chain sufficed — otherwise the topology earns its keep."
+    },
+    {
+      "q": "State design: what goes in, what stays out?",
+      "a": "In: everything downstream steps need (facts, decisions, drafts, approvals, logs) with merge reducers for shared channels. Out: raw bulk (full manuals — pass references/IDs), secrets beyond need, unbounded histories (summarize into rolling state). Bounded, typed, minimal state keeps checkpoints cheap and resumes exact."
+    },
+    {
+      "q": "How do you test a conditional-edge router?",
+      "a": "As a pure function: enumerated inputs × expected branch, covering every edge including fallbacks and adversarial inputs (injection attempts routing to quarantine). Run on every router edit; branch coverage is the metric. Routers are the highest-leverage test target in a graph — small code, total control-flow authority."
+    },
+    {
+      "q": "Interrupt design for a $100+ refund approval?",
+      "a": "interrupt() before the side-effecting node with full checkpointed state; surface ticket+decision+draft to the approver; support approve/edit/skip with validated edits; resume continues exactly; log every path including skips. Design expecting edits (approval-with-changes), not just binary approvals — and never place interrupts after irreversible actions."
+    },
+    {
+      "q": "Checkpointing costs: justify them.",
+      "a": "Per-step writes buy resume-after-failure, exact replay for debugging, time-travel during development, and audit trails for money-adjacent actions. Control cost by scoping state minimally and measuring; never by dropping persistence on stateful flows. Stateless retries re-run blind — checkpoints make failures resumable and debuggable."
+    },
+    {
+      "q": "Supervisor vs sequential agents — decide for order support.",
+      "a": "Sequential for fixed pipelines (triage→decide→draft→log always in order): simpler, cheaper, debuggable. Supervisor when steps need dynamic choice (fraud check sometimes, VIP handling sometimes, escalation on signals). Match topology to control-flow variability; decompose into subgraphs (returns, fraud) either way for reuse and independent testing."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

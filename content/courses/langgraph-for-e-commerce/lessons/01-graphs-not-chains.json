@@ -1,0 +1,53 @@
+{
+  "title": "Graphs, Not Chains",
+  "slug": "01-graphs-not-chains",
+  "objective": "After this lesson you will be able to model agent work as nodes, edges, and shared state; distinguish chains, graphs, and monolith prompts by control-flow needs; and run a miniature graph runner that mirrors LangGraph semantics.",
+  "why": "Single prompts answer; agents *work* — triage, look up, decide, draft, get approval, log. Chains force every run down one fixed path; monolith prompts cram five jobs into one breath (Prompt 101 Ch.5 showed why that fails). Graphs express what real support flows are: branches on ticket type, loops on verification failure, gates before money moves. Topology is the first senior decision in agent design.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Nodes do, edges decide, state remembers" },
+    { "t": "p", "text": "A **node** is one unit of work (triage ticket, fetch order, draft reply) — a function of state returning state updates. An **edge** is a transition: fixed (`triage → decide`) or **conditional** (a router function mapping state to the next node). **State** is the shared blackboard every node reads and writes. Runs are walks: start node, follow edges, stop at END. Three concepts compose every agent in this course." },
+    { "t": "code", "lang": "js", "code": "// Real LangGraph.js shape (runs in your Node project: npm i @langchain/langgraph)\nimport { Annotation, StateGraph, START, END, MemorySaver } from \"@langchain/langgraph\";\nconst State = Annotation.Root({\n  ticket: Annotation(),\n  category: Annotation(),\n  draft: Annotation(),\n});\nconst graph = new StateGraph(State)\n  .addNode(\"triage\", triageFn)     // (state) => ({ category })\n  .addNode(\"draft\", draftFn)       // (state) => ({ draft })\n  .addEdge(START, \"triage\")\n  .addConditionalEdges(\"triage\", (s) => (s.category === \"other\" ? \"human\" : \"draft\"))\n  .addNode(\"human\", humanFn)\n  .addEdge(\"draft\", END)\n  .addEdge(\"human\", END)\n  .compile({ checkpointer: new MemorySaver() });\n// await graph.invoke({ ticket }, { configurable: { thread_id: \"t1\" } });", "caption": "Nodes, conditional edges, END, checkpointer — the canonical skeleton" },
+    { "t": "h", "text": "Chains, graphs, monoliths: the control-flow test" },
+    { "t": "p", "text": "Fixed sequence, no branches, no loops, no gates → **chain** (simpler, cheaper). Any routing, retry, shared evolving state, or human approval → **graph**. Everything in one giant prompt → **monolith** (the failure mode Prompt 101 decomposed). The test is deletion: remove the router — if nothing breaks, a chain sufficed; if behavior collapses, the topology earns its keep." },
+    { "t": "table", "headers": ["Shape", "Expresses", "Use when"], "rows": [["Monolith prompt", "One shot, five jobs", "Never in production — prototype only"], ["Chain", "Fixed A→B→C sequences", "No branches, loops, gates, or shared evolving state"], ["Graph", "Branches, loops, gates, shared state", "Triage, retries, approvals, multi-step tools"]] },
+    { "t": "h", "text": "The miniature runner (your laboratory)" },
+    { "t": "p", "text": "Every lesson's practice runs a tiny faithful runner: nodes as `(state) => partialUpdate`, edges as names or router functions, START/END sentinels, step cap against infinite loops, and a trace log. It mirrors LangGraph semantics closely enough that patterns transfer directly — and simply enough to execute in the playground for verification." },
+    { "t": "practice", "sim": "js-playground", "title": "Walk the triage graph", "query": "function runGraph(nodes, edges, initial) {\n  let state = { ...initial };\n  let current = '__start__';\n  const trace = [];\n  let steps = 0;\n  while (current !== '__end__' && steps++ < 20) {\n    const edge = edges[current];\n    const next = typeof edge === 'function' ? edge(state) : edge;\n    if (next === '__end__') { trace.push(current + ' -> __end__'); break; }\n    Object.assign(state, nodes[next](state));\n    trace.push(current + ' -> ' + next);\n    current = next;\n  }\n  return { state, trace };\n}\nconst nodes = {\n  triage: (s) => ({ category: /late|arrived/i.test(s.ticket) ? 'shipping' : 'other' }),\n  draft: (s) => ({ draft: 'Update on your ' + s.category + ' issue: ' + s.ticket }),\n  human: (s) => ({ draft: 'ESCALATED: ' + s.ticket }),\n};\nconst edges = {\n  __start__: 'triage',\n  triage: (s) => (s.category === 'other' ? 'human' : 'draft'),\n  draft: '__end__',\n  human: '__end__',\n};\nconst r = runGraph(nodes, edges, { ticket: 'My sneakers never arrived.' });\nconsole.log(r.trace.join(' | '));\nconsole.log(JSON.stringify(r.state));", "note": "Run it: expect '__start__ -> triage | triage -> draft | draft -> __end__' with category shipping and a filled draft. Then change the ticket to 'Delete my account' and re-run: the conditional edge should route to human. Topology steering behavior — the whole course in miniature." },
+    { "t": "keytakeaways", "items": ["Nodes compute (state → updates), edges transition (fixed or router functions), state is the shared blackboard", "Chains for fixed sequences; graphs for branches/loops/gates/state; monoliths for prototypes only", "Deletion test: remove the router — collapse means the graph earns its keep"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice graph on both tickets and record traces + final states. (b) Add a third branch: billing tickets (match /refund|charge|billing/i) routing to a billing node that drafts 'Billing team will review: …'. (c) State which shape (chain/graph/monolith) fits a fixed 3-step FAQ answerer vs this triage system, with the deletion test applied.",
+    "hints": [
+      "Ticket 1 → draft path; ticket 2 → human path. Record both traces exactly — traces are the graph's unit of observable behavior.",
+      "Billing node + router branch: order router conditions (billing before other-fallback). Re-run all three tickets: each must hit its own terminal path.",
+      "FAQ answerer (retrieve → answer → log, fixed): chain — no router survives deletion analysis. Triage: graph — deleting the router collapses behavior."
+    ],
+    "solution": "// (b) nodes.billing = (s) => ({ draft: 'Billing team will review: ' + s.ticket });\n// router: billing-match → 'billing', shipping-match → 'draft', else 'human';\n// edges.billing = '__end__'. All three tickets terminate on distinct paths.\n// (c) FAQ: chain (fixed pipeline, router deletion changes nothing).\n//     Triage: graph (router deletion destroys routing behavior).",
+    "why": "Extending the graph (new branch, preserved old paths) practices topology editing safely, and the deletion test converts shape choice from taste to analysis — applied to two systems, not one.",
+    "code": "// Branch-addition pattern: node + router case + terminal edge + full re-run.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Triage → decide → draft → log, always in order, no branches. Shape?",
+      "options": ["Graph with routers", "Chain — fixed sequence, no control-flow needs; routers would be decoration", "Monolith prompt", "Supervisor team"],
+      "answer": 1,
+      "explain": "Topology follows control flow: nothing branches, loops, or gates, so a chain is simpler, cheaper, and more debuggable."
+    },
+    {
+      "q": "The deletion test on a triage router shows behavior collapses without it. Meaning?",
+      "options": ["Delete it anyway", "The graph topology earns its keep — routing is load-bearing behavior, not decoration", "Convert to chain", "Add more nodes"],
+      "answer": 1,
+      "explain": "Collapse-on-deletion proves the router carries behavior. Surviving deletion proves decoration. Test, don't taste."
+    },
+    {
+      "q": "Node functions receive state and return…",
+      "options": ["The next node name", "Partial state updates (merged into shared state) — edges, not nodes, decide transitions", "HTML", "Nothing"],
+      "answer": 1,
+      "explain": "Separation of concerns: nodes compute updates, edges route. A node naming its successor tangles the two and breaks conditional routing."
+    }
+  ],
+  "summary": "Nodes update, edges route, state remembers. Chains for fixed flows, graphs for branching/looping/gated work, monoliths for prototypes. The runner is your laboratory for all nine lessons ahead.",
+  "next": "Walkers need a blackboard that merges sanely: schemas, reducers, and the state design that prevents update chaos. Next: state that survives contact with nodes."
+}

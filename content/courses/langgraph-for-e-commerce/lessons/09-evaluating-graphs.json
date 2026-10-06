@@ -1,0 +1,53 @@
+{
+  "title": "Evaluating Graphs End to End",
+  "slug": "09-evaluating-graphs",
+  "objective": "After this lesson you will be able to build conversation gold sets, replay traces with per-node attribution, diff versions per segment on the same set, and gate shipping on measured behavior instead of demo impressions.",
+  "why": "Node tests pass while the graph fails customers: composition creates emergent behavior no unit test covers. Conversation gold sets (realistic multi-turn tickets with expected outcomes) plus trace replay (which node/router/state caused each outcome) attribute end-to-end results to components. Teams that evaluate graphs ship improvements; teams that demo them ship regressions.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Gold conversations, not gold responses" },
+    { "t": "p", "text": "Graph gold items are **conversations**: ticket (+ follow-ups), expected terminal path (draft/approval/human), expected key state (category, decision), and forbidden outcomes (refund without approval). Cover happy paths, edge tickets (vague, multi-issue), and attacks (injection, scope-push) — 12 items minimum to start, grown from production misses thereafter. Every production incident becomes a gold item: regressions fossilize into prevention." },
+    { "t": "code", "lang": "js", "code": "// Gold conversation item: path + state + forbiddens (plain JS)\nconst goldItem = {\n  id: \"g7\",\n  kind: \"edge\", // happy | edge | attack\n  turns: [{ ticket: \"Sneakers 3 weeks late, want my money back.\" }],\n  expect: { terminal: \"draft\", category: \"shipping\" },\n  forbid: [\"approval-skipped-refund\", \"unvalidated-category\"],\n};\n// Runner executes, trace checked against expect + forbid — behavior, not prose.", "caption": "Expect paths and state, forbid failure shapes — behavioral gold" },
+    { "t": "h", "text": "Trace replay with attribution" },
+    { "t": "p", "text": "A **trace** is the executed node/edge/state sequence per run (the runner logs it; checkpoint history replays it). Attribution rule: wrong terminal → router or upstream state; right terminal wrong content → node prompt/contract; right content wrong side-effect → gate/tool boundary. Replay deterministically (fixed inputs, seeded randomness) so failures reproduce exactly — 'works on my run' ends here." },
+    { "t": "code", "lang": "js", "code": "// Trace checker: expected path + forbidden shapes (plain JS)\nfunction checkTrace(trace, terminals, gold) {\n  const issues = [];\n  const path = trace.map((t) => t.split(\" -> \")[1]);\n  if (!path.includes(gold.expect.terminal)) issues.push(\"missing-terminal:\" + gold.expect.terminal);\n  for (const f of gold.forbid || [])\n    if (path.join(\" \").includes(f.split(\"-\")[0])) issues.push(\"forbidden:\" + f);\n  return { pass: issues.length === 0, issues, path };\n}\n// Attribution: missing terminal → routing/upstream; forbidden → boundary/gate.", "caption": "Paths asserted, forbiddens scanned — composition under test" },
+    { "t": "h", "text": "Version diffs per segment, ship on deltas" },
+    { "t": "p", "text": "Run v1 and v2 over the **same** gold set; diff overall *and* per kind (happy/edge/attack): v2 winning overall while regressing attacks ships a vulnerability. Gate shipping on no-regressions-per-segment plus aggregate improvement — the Prompt 101 eval discipline (Ch.7) applied to graphs, with traces explaining every delta." },
+    { "t": "practice", "sim": "js-playground", "title": "Score the trace", "query": "function checkTrace(path, gold) {\n  const issues = [];\n  const arrived = path.some((h) => h.endsWith(' -> ' + gold.expect.terminal));\n  if (!arrived) issues.push('missing-terminal:' + gold.expect.terminal);\n  for (const f of gold.forbid || []) if (path.join(' ').includes(f)) issues.push('forbidden:' + f);\n  return { pass: issues.length === 0, issues };\n}\nconst good = ['__start__ -> triage', 'triage -> draft', 'draft -> __end__'];\nconst bad = ['__start__ -> triage', 'triage -> refund', 'refund -> __end__'];\nconst gold = { expect: { terminal: 'draft' }, forbid: ['refund'] };\nconsole.log(JSON.stringify(checkTrace(good, gold)));\nconsole.log(JSON.stringify(checkTrace(bad, gold)));", "note": "Run it: expect pass with [] then fail naming the forbidden refund hop. Path assertions plus forbidden-shape scans are the composition test — node tests alone would pass both runs." },
+    { "t": "keytakeaways", "items": ["Gold conversations: paths + key state + forbiddens across happy/edge/attack; incidents become items", "Trace replay attributes: terminal→router/upstream, content→node, side-effect→gate/tool", "Same-set version diffs per segment; ship on no-regressions + aggregate gain"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice checker on both traces and map each verdict. (b) Write two gold items for the returns graph (one edge: vague multi-issue ticket; one attack: injection demanding refund) with expect + forbid. (c) State the attribution for: correct terminal but wrong category in state.",
+    "hints": [
+      "Good passes (draft terminal, no forbiddens); bad fails (missing draft + forbidden refund) — two distinct issues listed.",
+      "Edge gold: expect draft/human with category assertion; forbid approval-skipped-refund. Attack gold: expect quarantine/human terminal; forbid execute-with-refund.",
+      "Correct terminal + wrong category → upstream node (triage prompt/contract), not the router: router acted rightly on wrong state (Ch.4 trace-first rule)."
+    ],
+    "solution": "// (a) pass [] / fail [missing-terminal:draft, forbidden:refund].\n// (b) edge + attack gold items per hints (paths, state, forbids).\n// (c) producer-node fault (triage), router exonerated — fix upstream.",
+    "why": "Attribution precision (which component owns each failure shape) is the debugging skill traces exist to teach — practiced on verdicts, paths, and state separately.",
+    "code": "// Attribution template: terminal→router/state, content→node, effect→gate/tool.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "All node tests pass but customers get wrong refunds. Missing layer?",
+      "options": ["More node tests", "Conversation gold sets + trace replay: composition behavior with per-component attribution", "Faster nodes", "Bigger state"],
+      "answer": 1,
+      "explain": "Emergent composition escapes unit tests. End-to-end conversations with traces attribute outcomes to nodes/routers/gates — the layer that catches integration truth."
+    },
+    {
+      "q": "v2 wins overall, regresses attacks. Ship?",
+      "options": ["Yes — overall wins", "No: per-segment no-regression gate — shipping known vulnerabilities for averages is how incidents happen", "Ship half", "Delete attack tests"],
+      "answer": 1,
+      "explain": "Segment gates (especially attack/safety) are non-negotiable; aggregates hide localized harm. Fix the segment, then ship the gain."
+    },
+    {
+      "q": "Production injection incident last night. First eval action?",
+      "options": ["Retrain everything", "Fossilize it: add the exact conversation as a gold attack item with expect + forbid, then fix and prove via replay", "Ignore outliers", "Ban the user"],
+      "answer": 1,
+      "explain": "Incidents become prevention: gold items immortalize failures as regression tests. Fix + replay-proof on the new item before closing."
+    }
+  ],
+  "summary": "Gold conversations (paths/state/forbids), trace replay with attribution, same-set per-segment version diffs, ship on measured deltas. Demos impress; evals protect.",
+  "next": "All nine lessons converge: build the returns-resolution graph end to end, measured throughout. Next and last: the capstone walkthrough."
+}

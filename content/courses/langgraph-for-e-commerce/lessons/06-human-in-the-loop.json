@@ -1,0 +1,53 @@
+{
+  "title": "Human-in-the-Loop: Gates That Hold",
+  "slug": "06-human-in-the-loop",
+  "objective": "After this lesson you will be able to place interrupts before irreversible actions, implement approve/edit/skip flows with validated edits, resume exactly post-decision, and audit every human path including skips.",
+  "why": "Agents that refund, email, or delete without oversight are incidents waiting for traffic. Human-in-the-loop gates risky actions behind people — but gates must be placed, shaped (approve vs edit vs skip), and audited deliberately, or they become rubber stamps (always-approved) or bottlenecks (everything gated). This lesson designs gates people actually operate.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Interrupt before irreversible, never after" },
+    { "t": "p", "text": "**`interrupt()`** pauses the run with full checkpointed state, surfaces context to a human, and resumes on decision. Placement rule: **before** side effects (refund issued, email sent, account changed) — interrupting after is an autopsy, not a gate. Gate on value and reversibility: money, external messages, deletions get gates; reads, drafts, and internal notes don't (or humans become the bottleneck)." },
+    { "t": "code", "lang": "js", "code": "// Real LangGraph.js interrupt (your Node project)\nimport { interrupt } from \"@langchain/langgraph\";\nfunction approvalNode(state) {\n  if (state.decision.amount > 100) {\n    // Pauses here with full state; resumes with the human's answer value:\n    const review = interrupt({\n      action: \"approve refund\",\n      amount: state.decision.amount,\n      draft: state.draft,\n    });\n    return { approval: review }; // { decision: 'approve' | 'edit' | 'skip', ... }\n  }\n  return { approval: { decision: \"auto-approved\" } };\n}\n// Resume: graph.invoke(null, { configurable: { thread_id } }) continues past the gate.", "caption": "Gate before the money moves; resume continues with the verdict" },
+    { "t": "h", "text": "Approve, edit, skip: three paths, all first-class" },
+    { "t": "p", "text": "Binary approve/reject wastes human judgment. **Approve** continues unchanged. **Edit** modifies state (fix the amount, soften the draft) — then resumes with *validated* edits (Ch.3 schemas apply to humans too). **Skip** bypasses the action with a logged reason (VIP handled by phone). Design all three paths with tests each; untested paths rot, and rot in gates becomes rubber-stamping or silent skips." },
+    { "t": "code", "lang": "js", "code": "// Gate router: three human paths + auto lane (plain JS, playground-runnable)\nfunction routeApproval(state) {\n  const a = state.approval;\n  if (!a || a.decision === \"auto-approved\") return \"execute\";\n  if (a.decision === \"approve\") return \"execute\";\n  if (a.decision === \"edit\") return \"revalidate\"; // edited state re-enters validation\n  return \"log-skip\"; // skip (+ anything unknown): safe terminal, logged\n}\n// Unknown decisions fall to log-skip: fail-closed, never fail-open.", "caption": "Fail-closed routing: unknown verdicts skip safely, loudly logged" },
+    { "t": "h", "text": "Rubber stamps and bottlenecks: gate economics" },
+    { "t": "p", "text": "Two gate diseases. **Rubber-stamping**: 100% approval rates mean the gate adds latency without judgment — raise the auto-approve threshold or enrich the review payload (diffs, history, risk flags) until decisions vary. **Bottlenecks**: gating everything queues humans — gate by value × reversibility, auto-approve the rest, and track queue time as a first-class metric. Approval *rate* and *latency* dashboards keep gates honest." },
+    { "t": "practice", "sim": "js-playground", "title": "Route the verdicts", "query": "function routeApproval(state) {\n  const a = state.approval;\n  if (!a || a.decision === 'auto-approved') return 'execute';\n  if (a.decision === 'approve') return 'execute';\n  if (a.decision === 'edit') return 'revalidate';\n  return 'log-skip';\n}\nconst cases = [\n  [{}, 'execute'],\n  [{ approval: { decision: 'auto-approved' } }, 'execute'],\n  [{ approval: { decision: 'approve' } }, 'execute'],\n  [{ approval: { decision: 'edit', draft: 'softer' } }, 'revalidate'],\n  [{ approval: { decision: 'skip', reason: 'called in' } }, 'log-skip'],\n  [{ approval: { decision: 'maybe??' } }, 'log-skip'],\n];\nlet pass = 0;\nfor (const [s, expected] of cases) {\n  const got = routeApproval(s);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(s) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' verdicts routed');", "note": "Run it: expect 6/6 with zero MISS. Note the last two cases: skip is explicit AND unknown verdicts fail closed to log-skip — gates must be safe under novel inputs, not just tested ones." },
+    { "t": "keytakeaways", "items": ["Interrupt before irreversible actions; gate by value × reversibility, never everything", "Three paths (approve/edit/skip), all tested; edits re-validate; unknowns fail closed to logged skips", "Watch gate health: approval rates (rubber stamps) and queue latency (bottlenecks) as metrics"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice router and confirm 6/6. (b) Add a fourth human path of your design (e.g. 'escalate-to-lead') with routing + test. (c) Write the gate-placement rule for: sending the reply email, issuing the $500 refund, logging the ticket — which get gates and why, in one line each.",
+    "hints": [
+      "6/6 baseline first; unknown-verdict case proves fail-closed design, not just happy paths.",
+      "Escalate path: decision 'escalate' → 'assign-lead' node; test with a reason field. New paths need tests or they rot.",
+      "Email (external, visible): gate. $500 refund (money, irreversible): gate. Logging (internal, reversible): no gate — humans bottleneck otherwise."
+    ],
+    "solution": "// (a) 6/6, zero misses (unknowns fail closed).\n// (b) escalate → assign-lead + test with reason (new path, new test).\n// (c) email: gate (external visibility); refund: gate (money × irreversible);\n//     log: no gate (internal, reversible) — gate economics applied.",
+    "why": "Placement (what gets gates), paths (approve/edit/skip/escalate with tests), and economics (bottleneck avoidance) are the three gate judgments — each practiced on concrete cases, not preached abstractly.",
+    "code": "// New-path pattern: decision value + terminal/handler node + test + log.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Interrupt placed AFTER the refund-issue node. Verdict?",
+      "options": ["Fine — humans review afterward", "Autopsy, not a gate: irreversible action already executed — interrupts belong before side effects", "Faster flow", "Standard practice"],
+      "answer": 1,
+      "explain": "Gates prevent; post-action reviews merely record. Placement before irreversibility is the entire point of interrupting."
+    },
+    {
+      "q": "Approval rate sits at 100% for a month. Diagnosis + fix?",
+      "options": ["Perfect gate", "Rubber stamp: gate adds latency without judgment — raise auto-threshold or enrich review payload until decisions vary", "Remove the gate", "More approvers"],
+      "answer": 1,
+      "explain": "Unvarying approvals signal vacuous review. Either the gate is unnecessary (auto-approve the band) or under-instrumented (add diffs/history/risk flags)."
+    },
+    {
+      "q": "Unknown verdict value arrives at the gate router. Correct behavior?",
+      "options": ["Execute — probably fine", "Fail closed to logged skip: novel inputs must land safe and loud, never execute by default", "Crash", "Ask the model"],
+      "answer": 1,
+      "explain": "Fail-closed design: unknown → safe terminal + log. Fail-open (execute) turns novel inputs into unauthorized actions."
+    }
+  ],
+  "summary": "Gates before irreversibility, three tested paths plus fail-closed unknowns, economics against stamps and bottlenecks. Humans stay in the loop where judgment pays, out where it taxes.",
+  "next": "Gated actions need instruments: tools with validated args and structured outputs that survive contact with models. Next: tool use done safely."
+}

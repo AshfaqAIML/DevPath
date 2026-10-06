@@ -1,0 +1,53 @@
+{
+  "title": "Subgraphs & Composition",
+  "slug": "08-subgraphs-composition",
+  "objective": "After this lesson you will be able to extract reusable flows into tested subgraphs, choose supervisor vs sequential multi-agent topologies, and manage cross-graph state contracts without leakage.",
+  "why": "Single graphs grow into mega-graphs: thirty nodes, inscrutable routing, untestable wholes. Composition (subgraphs as functions, supervisors for dynamic teams, sequential pipelines for fixed flows) restores modularity — and draws the exact boundary the CrewAI multi-agent course starts from. Mega-graphs are monolith prompts at a larger scale.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Subgraphs: functions for graphs" },
+    { "t": "p", "text": "A **subgraph** is a complete graph (own nodes, edges, tests) embedded as one node in a parent: inputs mapped in, outputs mapped out, internals hidden. The returns flow (triage→decide→draft) becomes a callable unit reused by chat, email, and phone parents. Rules: versioned independently, tested standalone *and* composed, state contract explicit at the boundary (which parent fields enter, which child fields exit)." },
+    { "t": "code", "lang": "js", "code": "// Subgraph as a node: mapped inputs, namespaced outputs (plain JS pattern)\nfunction asSubgraph(graph, mapIn, mapOut) {\n  return (parentState) => {\n    const childState = mapIn(parentState);          // parent -> child contract\n    const result = runGraph(graph.nodes, graph.edges, childState);\n    return mapOut(result.state, parentState);       // child -> parent contract\n  };\n}\n// Returns flow reused by chat + email parents: tested once (standalone),\n// trusted twice (composed) — duplication deleted, contracts explicit.", "caption": "mapIn/mapOut are the API signatures of embedded graphs" },
+    { "t": "h", "text": "Supervisor vs sequential: topology by variability" },
+    { "t": "p", "text": "**Sequential**: fixed pipeline (triage→decide→draft→log) — simple, cheap, debuggable; breaks when steps need skipping. **Supervisor**: a router-agent delegating to specialists per step (fraud check sometimes, VIP handling sometimes, escalation on signals) — flexible, costlier, harder to trace. Choose by control-flow variability: fixed → sequential, dynamic → supervisor. Hybrids (sequential backbone, supervisor for exceptions) are the production norm, not a compromise." },
+    { "t": "code", "lang": "js", "code": "// Supervisor skeleton: delegate by judgment, specialists execute (pattern)\n// supervisor node: given state, returns next specialist name\n// specialists: fraudCheck, vipHandle, returnsFlow(subgraph!), draftsReply\n// edges: supervisor -(conditional)-> specialists -(always)-> supervisor\n// exit: supervisor -> END when state.done (loop with a termination proof!)\n// Termination: max-rounds cap + done-flag — unbounded delegation loops hang.", "caption": "Supervisor loops need termination proofs: caps + done-flags" },
+    { "t": "h", "text": "State contracts across boundaries" },
+    { "t": "p", "text": "Composition leaks without contracts: parent fields drifting into child logic, child internals depending on parent extras. Enforce **narrow interfaces** (mapIn picks exactly the needed fields; mapOut returns exactly the promised ones), **namespace child outputs** (`returns.decision`, not bare `decision`), and test composition (parent + real subgraph, not mocks) for contract drift on every version bump." },
+    { "t": "practice", "sim": "js-playground", "title": "Compose the returns unit", "query": "function asSubgraph(graph, mapIn, mapOut) {\n  return (parentState) => mapOut({ decision: parentState.ticket.includes('refund') ? 'refund-path' : 'info-path' });\n}\nconst returnsFlow = { name: 'returns-subgraph-v1' };\nconst node = asSubgraph(returnsFlow, (p) => ({ ticket: p.ticket }), (child) => ({ returnsDecision: child.decision }));\nconst fromChat = node({ ticket: 'I want a refund please', channel: 'chat' });\nconst fromEmail = node({ ticket: 'Where is my order?', channel: 'email' });\nconsole.log(JSON.stringify(fromChat));\nconsole.log(JSON.stringify(fromEmail));\nconsole.log('namespaced: ' + ('returnsDecision' in fromChat && !('decision' in fromChat)));", "note": "Run it: expect namespaced outputs per channel with correct paths, and the namespace check true. Same subgraph, two parents, zero leakage — composition without contracts would smear 'decision' across both." },
+    { "t": "keytakeaways", "items": ["Subgraphs = versioned, twice-tested (standalone + composed) reusable flows with explicit mapIn/mapOut", "Sequential for fixed pipelines; supervisor for dynamic delegation (with termination proofs); hybrids in production", "Narrow namespaced interfaces prevent cross-graph leakage; test composition on version bumps"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice composition and confirm namespacing. (b) Sketch the fraud-check subgraph (inputs: orderId, amount; outputs: risk {low/high}, reasons) with its own routing test. (c) Decide supervisor vs sequential for: order-status lookup bot vs mixed returns+fraud+VIP desk — with the variability argument and termination proof for any loop.",
+    "hints": [
+      "Namespace proof first: returnsDecision present, bare decision absent — leakage check passes.",
+      "Fraud subgraph: mapIn picks orderId+amount; outputs risk+reasons namespaced (fraud.risk); standalone tests: low/high/adversarial.",
+      "Lookup bot: sequential (fixed: fetch→format→reply). Mixed desk: supervisor (per-ticket delegation varies) with max-rounds + done-flag termination."
+    ],
+    "solution": "// (a) namespaced outputs, correct per-channel paths (see practice).\n// (b) fraud subgraph: narrow in/out, own routing tests, fraud.* namespace.\n// (c) lookup: sequential (fixed flow); mixed desk: supervisor (variable\n//     delegation) + max-rounds/done-flag termination proof.",
+    "why": "Reuse (subgraph extraction), topology choice (variability analysis), and loop safety (termination proofs) are the three composition judgments — each decided on concrete systems, with contracts preventing the leakage that kills modular designs.",
+    "code": "// Composition checklist: mapIn/mapOut narrow + namespaced, tested standalone + composed.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Same returns flow needed in chat, email, phone bots. Approach?",
+      "options": ["Copy-paste nodes thrice", "Subgraph: versioned, tested standalone + composed, mapped in/out with namespaced outputs", "One mega-graph for all channels", "External microservice only"],
+      "answer": 1,
+      "explain": "Subgraphs are reuse without duplication: test once, compose thrice, contracts prevent leakage. Copies diverge; mega-graphs tangle."
+    },
+    {
+      "q": "Supervisor loop without max-rounds or done-flag. Risk?",
+      "options": ["None — supervisors terminate naturally", "Unbounded delegation loops hang: termination needs caps + done-flags by construction", "Slower responses only", "Higher cost only"],
+      "answer": 1,
+      "explain": "Dynamic delegation can cycle (A→B→A). Termination proofs (caps, flags) are structural requirements, not optimizations."
+    },
+    {
+      "q": "Child graph reads parent's raw ticket directly instead of mapped inputs. Problem?",
+      "options": ["Efficiency win", "Contract leakage: undeclared coupling breaks reuse and versioning — narrow mapIn/mapOut interfaces only", "Faster development", "Better context"],
+      "answer": 1,
+      "explain": "Undeclared reads couple child to parent internals: reuse elsewhere breaks silently. Narrow explicit interfaces keep composition modular."
+    }
+  ],
+  "summary": "Subgraphs for reuse (tested twice, versioned, namespaced), supervisor vs sequential by variability (termination proved), contracts against leakage. Composition turns graphs into teams — the CrewAI course continues here.",
+  "next": "Composed teams need proof: traces, gold conversations, and per-segment diffs. Next: evaluating graphs end to end."
+}

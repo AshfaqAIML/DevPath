@@ -1,0 +1,52 @@
+{
+  "title": "Conditional Edges & Routing Tests",
+  "slug": "04-conditional-edges-routing",
+  "objective": "After this lesson you will be able to write router functions over state, build routing tables with fallbacks, achieve branch coverage with enumerated tests, and debug misroutes by tracing state at the branch point.",
+  "why": "Routers hold total control-flow authority in small code: one wrong branch sends refunds down the shipping path. Yet teams test nodes heavily and routers never. Routing tests — enumerated inputs × expected branch, run on every edit — are the highest-ROI tests in agent engineering, and this lesson makes them habitual.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Routers are pure functions — test them purely" },
+    { "t": "p", "text": "A router maps state → next node: no I/O, no model calls in the ideal case (route on *decided* state like category/confidence, not raw text). Pure functions test trivially: enumerate (state → expected node) pairs covering every branch, the fallback, and adversarial inputs. Run on every router edit — branch coverage for graphs, measured, not hoped." },
+    { "t": "code", "lang": "js", "code": "// Router + its test table: same file, same review (plain JS)\nfunction routeTriage(s) {\n  if (s.category === \"other\" || s.triageConfidence < 0.5) return \"human\";\n  if (s.category === \"billing\" && s.amount > 100) return \"approval\";\n  return \"draft\";\n}\nconst ROUTING_TESTS = [\n  [{ category: \"shipping\", triageConfidence: 0.9, amount: 20 }, \"draft\"],\n  [{ category: \"other\", triageConfidence: 0.9, amount: 20 }, \"human\"],\n  [{ category: \"shipping\", triageConfidence: 0.3, amount: 20 }, \"human\"],\n  [{ category: \"billing\", triageConfidence: 0.9, amount: 500 }, \"approval\"],\n  [{ category: \"billing\", triageConfidence: 0.9, amount: 20 }, \"draft\"],\n];\n// Every branch + fallback + low-confidence + adversarial: enumerated, runnable.", "caption": "Router and tests co-located: five cases covering all four outcomes" },
+    { "t": "h", "text": "Fallbacks and confidence gates" },
+    { "t": "p", "text": "Every router needs a **fallback** branch (human/unknown) for states matching nothing — unrouted states must not fall off the graph (infinite loops) or crash. **Confidence gates** (`confidence < 0.5 → human`) route uncertainty to people, not errors: the router trusts the triage node's self-assessment, calibrated by evals (Prompt 101 Ch.7/9). Fallback + gates make routing total: every state maps somewhere sane." },
+    { "t": "h", "text": "Debug misroutes at the branch point" },
+    { "t": "p", "text": "Wrong branch? Inspect **state at the branch**, not the router code: log the deciding fields (category, confidence, amount) per traversal. Nine times in ten the router is correct and the *state* is wrong (bad triage label, missing amount) — fix the producer node, not the router. Trace-first debugging (state snapshots per edge) beats code-staring, which is why the runner logs traces." },
+    { "t": "practice", "sim": "js-playground", "title": "Cover every branch", "query": "function routeTriage(s) {\n  if (s.category === 'other' || s.triageConfidence < 0.5) return 'human';\n  if (s.category === 'billing' && s.amount > 100) return 'approval';\n  return 'draft';\n}\nconst tests = [\n  [{ category: 'shipping', triageConfidence: 0.9, amount: 20 }, 'draft'],\n  [{ category: 'other', triageConfidence: 0.9, amount: 20 }, 'human'],\n  [{ category: 'shipping', triageConfidence: 0.3, amount: 20 }, 'human'],\n  [{ category: 'billing', triageConfidence: 0.9, amount: 500 }, 'approval'],\n  [{ category: 'billing', triageConfidence: 0.9, amount: 20 }, 'draft'],\n];\nlet pass = 0;\nfor (const [input, expected] of tests) {\n  const got = routeTriage(input);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(input) + ' -> ' + got);\n}\nconsole.log(pass + '/' + tests.length + ' branches covered');", "note": "Run it: expect 5/5 branches covered, zero MISS lines. Then break it deliberately: change 0.5 to 0.9 and watch low-confidence cases misroute — routing tests catch router edits instantly, which is their entire job." },
+    { "t": "keytakeaways", "items": ["Routers map state → node purely: enumerate inputs × branches, cover fallbacks + adversarial, run on every edit", "Fallback branch + confidence gates make routing total — every state lands somewhere sane", "Debug misroutes via state-at-branch (producer fault, usually), not router code first"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice suite and report coverage. (b) Break the router (threshold 0.5 → 0.9) and record which cases miss. (c) Add a sixth case (adversarial: category 'shipping', confidence 0.95, amount 10000) stating the expected branch and whether current logic handles high-amount non-billing correctly — then fix the router if not.",
+    "hints": [
+      "Baseline 5/5; broken threshold misroutes the 0.3-confidence case (and any 0.5–0.9 states) — record exactly.",
+      "Case six exposes a gap: amount gate applies to billing only; $10k shipping sails to draft. Decide: extend the amount gate to all categories (>$100 → approval regardless) and add the test.",
+      "Fixed router: if (s.amount > 100 && s.category !== 'other') return 'approval' before category routing — with updated tests proving it."
+    ],
+    "solution": "// (a) 5/5 covered, zero misses.\n// (b) threshold 0.9 misroutes confidence 0.3 (and 0.5–0.9 band): 4/5.\n// (c) $10k shipping → draft under current logic (gap!): extend amount gate\n//     across categories; suite grows to 6/6 with the adversarial case.",
+    "why": "Breaking then extending routers practices the full lifecycle: coverage proves, breakage localizes, adversarial cases generalize. The amount-gate gap is the lesson's sting — routers encode policy completely or not at all.",
+    "code": "// Adversarial-case pattern: high-stakes variant per branch + policy fix + test.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Router with no fallback branch receives an unlisted category. Likely outcome?",
+      "options": ["Graceful handling", "Falls off the graph (undefined transition → loop/crash) — every router needs a total fallback", "Auto-human", "Retries"],
+      "answer": 1,
+      "explain": "Partial routing is a crash waiting for novel input. Fallback branches (human/unknown) make routing total over all states."
+    },
+    {
+      "q": "Misroute traced: state shows category 'other' with confidence 0.9, correct per triage tests. Fix location?",
+      "options": ["Router code", "Producer/tests: state-at-branch is right per current rules — the routing *policy* needs the new case (extend + test), not a code fix", "Delete the router", "More nodes"],
+      "answer": 1,
+      "explain": "Trace-first debugging separates router bugs from policy gaps: correct-state misroutes mean the table needs a row, not the function a patch."
+    },
+    {
+      "q": "Why route on decided state (category/confidence) rather than raw ticket text?",
+      "options": ["Speed only", "Purity and testability: decided state enumerates finitely; raw text makes the router untestable and duplicates triage work", "Text is forbidden", "No reason"],
+      "answer": 1,
+      "explain": "Routers over raw text are untestable second classifiers. Decided-state routing keeps classification in nodes (tested) and branching in routers (tested) — separation of testable concerns."
+    }
+  ],
+  "summary": "Pure routers, enumerated tests, total fallbacks, confidence gates, trace-first debugging. Branch coverage for graphs is the highest-ROI testing in agent work.",
+  "next": "Traffic controlled — now memory: threads, checkpointers, resume, and replay. Next: persistence that survives crashes."
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Capstone Walkthrough: Returns Graph",
+  "slug": "10-returns-graph-capstone",
+  "objective": "After this lesson you will be able to assemble the full returns-resolution graph (state, nodes, routers, gates, checkpointing, tools) from the course's pieces, evaluate it on a gold set with per-segment diffs, and present it as traced runs plus a findings memo — ready for the final assessment and your capstone project.",
+  "why": "Nine lessons of pieces; one lesson of assembly. The capstone walkthrough performs the complete build once — state design, contracted nodes, tested routers, approval gates, checkpointed threads, tool boundaries, gold evaluation — so your project repeats a demonstrated shape instead of inventing one. Assembly is itself the final skill.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The build order (gates at every arrow)" },
+    { "t": "p", "text": "Assemble in dependency order, verifying each arrow: (1) **state + routing table** on paper with routing tests first (Ch.2+4); (2) **nodes with contracts** reusing Prompt 101 pack pieces (Ch.3); (3) **edges + interrupt + checkpointer**, demonstrating approve/edit/skip (Ch.5–6); (4) **tools** for order lookup with validated args (Ch.7); (5) **gold set + baseline** with per-segment scores (Ch.9); (6) **one iteration** with measured delta. Each stage runs before the next begins — integration surprises surface early, not at demo time." },
+    { "t": "code", "lang": "js", "code": "// Assembly manifest: the capstone's bill of materials (checklist as code)\nconst manifest = {\n  state: [\"ticket\", \"facts\", \"decision\", \"draft\", \"approval\", \"log\"],\n  reducers: { log: \"append\", attempts: \"counter\", rest: \"overwrite\" },\n  nodes: [\"triage\", \"lookup\", \"decide\", \"draft\", \"approval\", \"execute\", \"revalidate\", \"log-skip\", \"log\"],\n  routers: { triage: [\"decide\", \"human\"], approval: [\"execute\", \"revalidate\", \"log-skip\"] },\n  gates: [{ before: \"execute\", when: \"amount>100\", paths: [\"approve\", \"edit\", \"skip\"] }],\n  persistence: { threads: \"per-ticket\", checkpoints: \"per-step\", replay: true },\n  eval: { gold: 12, segments: [\"happy\", \"edge\", \"attack\"], gate: \"no-regressions\" },\n};\n// Every entry traces to a lesson; every lesson earned its entry by verification.", "caption": "Manifest-first assembly: declare the whole, then build arrow by arrow" },
+    { "t": "h", "text": "Three traced runs (the demo that proves)" },
+    { "t": "p", "text": "Present three runs with full traces: **happy** (late parcel → shipping → draft → log, 4 steps, no gates); **edge** (vague multi-issue → human → clarified → decide → draft); **interrupt** ($500 refund → approval gate → edited amount → revalidated → executed). Each run shows trace + key state + timing: the happy proves flow, the edge proves routing, the interrupt proves governance. Demos without traces are theater; with traces, evidence." },
+    { "t": "h", "text": "Findings memo (your project's shape)" },
+    { "t": "p", "text": "Close with the memo: baseline scores (overall + per-segment), the one iterated fix with its delta, router coverage numbers, gate health (approval rate, queue latency design), checkpoint cost measurement, and deferred list (fraud subgraph next, trigram-equivalent prompt work). Measured, cited, improvable — the artifact that survives contact with stakeholders." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the manifest", "query": "const manifest = {\n  state: ['ticket', 'facts', 'decision', 'draft', 'approval', 'log'],\n  nodes: ['triage', 'lookup', 'decide', 'draft', 'approval', 'execute', 'revalidate', 'log-skip', 'log'],\n  routers: { triage: ['decide', 'human'], approval: ['execute', 'revalidate', 'log-skip'] },\n  gates: [{ before: 'execute', paths: ['approve', 'edit', 'skip'] }],\n};\nconst checks = [\n  ['state covers log', manifest.state.includes('log')],\n  ['every router target is a node', Object.values(manifest.routers).flat().every((n) => manifest.nodes.includes(n) || n === 'human')],\n  ['gate precedes execute', manifest.gates.every((g) => g.before === 'execute')],\n  ['edit path tested', manifest.routers.approval.includes('revalidate')],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'manifest sound' : 'manifest BROKEN');", "note": "Run it: expect four PASS lines then 'manifest sound'. Structural audits like this catch dangling edges and untested paths before runtime does — manifest-first means machine-checkable architecture." },
+    { "t": "keytakeaways", "items": ["Assemble in dependency order with verification per arrow: state/routes → nodes → edges/gates → tools → eval → iterate", "Present three traced runs (happy/edge/interrupt) with state + timing — evidence, not theater", "Memo: baselines, per-segment diffs, gate health, checkpoint costs, deferred list"]} ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm soundness. (b) Break it deliberately (point one router at a nonexistent node) and record the audit output. (c) Draft your capstone manifest (same shape, your domain's nodes/routers/gates) with one entry per lesson Ch.1–9 represented.",
+    "hints": [
+      "Baseline sound first; broken manifest must print FAIL + BROKEN — the audit's value proven by catching.",
+      "Your manifest needs: state list, node list, ≥2 routers with tested branches, ≥1 gate with 3 paths, persistence line, eval line.",
+      "Map entries to lessons explicitly (state→Ch.2, routers→Ch.4, gates→Ch.6…): coverage thinking for architecture."
+    ],
+    "solution": "// (a) 4× PASS + sound. (b) dangling target → FAIL + BROKEN (audit works).\n// (c) domain manifest with lesson-mapped entries (coverage thinking).",
+    "why": "Manifest auditing makes architecture machine-checkable; deliberate breakage proves the checker's worth; lesson-mapped manifests prove course coverage. Assembly verified three ways.",
+    "code": "// Manifest-audit pattern: structural invariants as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the capstone graph?",
+      "options": ["Nodes first, state later", "State + routing tests → contracted nodes → edges/gates/checkpointing → tools → gold eval → one iteration — dependencies first, verified per arrow", "Eval first", "Gates last (optional)"],
+      "answer": 1,
+      "explain": "Dependency order with per-arrow verification surfaces integration surprises early. State and routing tests precede everything they govern."
+    },
+    {
+      "q": "Which three runs prove the graph, and what does each prove?",
+      "options": ["Any three happy paths", "Happy (flow), edge (routing), interrupt (governance) — with traces, state, timing each", "Longest three", "Cheapest three"],
+      "answer": 1,
+      "explain": "Coverage by run-kind: flow, routing-under-uncertainty, human governance. Traces make each run evidence rather than theater."
+    },
+    {
+      "q": "Manifest audit flags a router target missing from nodes. Meaning?",
+      "options": ["Cosmetic", "Dangling edge: runtime crash/loop on that branch — architecture checked before execution", "Performance hint", "Rename suggestion"],
+      "answer": 1,
+      "explain": "Structural audits catch what tests miss when coverage is partial: unroutable branches. Machine-checkable architecture beats hopeful assembly."
+    }
+  ],
+  "summary": "Manifest, dependency-ordered assembly, three traced runs, findings memo with per-segment truth. The course's nine lessons become one operating graph — assessment next, capstone after.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship the Returns-Resolution Graph capstone — and step into the CrewAI team course."
+}

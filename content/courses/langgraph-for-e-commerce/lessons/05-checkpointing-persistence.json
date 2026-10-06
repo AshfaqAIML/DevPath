@@ -1,0 +1,53 @@
+{
+  "title": "Checkpointing & Persistence",
+  "slug": "05-checkpointing-persistence",
+  "objective": "After this lesson you will be able to scope threads, persist checkpoints per step, resume interrupted runs exactly, replay traces for debugging, and bound checkpoint cost by scoping state.",
+  "why": "Crashes, deploys, approvals, and lunch all interrupt runs. Without persistence, every interruption restarts blind — re-sending emails, re-charging cards, losing the thread. Checkpointing (state snapshots per step, keyed by thread) converts interruptions into pauses: resume re-enters exactly, replay reproduces bugs deterministically, and audit trails write themselves.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Threads: conversations as keys" },
+    { "t": "p", "text": "A **thread** (`thread_id`) scopes one conversation's state across calls, crashes, and days. Same thread + same graph = continuing conversation; new thread = fresh state. Thread IDs are your design surface: per-ticket threads isolate customers, per-user threads carry history, and ID choice determines what 'remember me' even means." },
+    { "t": "code", "lang": "js", "code": "// Real LangGraph.js: thread-scoped persistence (your Node project)\nimport { MemorySaver } from \"@langchain/langgraph\";\n// const checkpointer = new MemorySaver(); // dev: in-memory\n// Production: durable saver (e.g. Postgres-backed) — same API, survives restarts.\n// const graph = builder.compile({ checkpointer });\n// await graph.invoke({ ticket }, { configurable: { thread_id: \"ticket-4821\" } });\n// …crash, deploy, lunch…\n// await graph.invoke({ followup: \"any update?\" }, { configurable: { thread_id: \"ticket-4821\" } });\n// Second call resumes with FULL prior state — no rework, no repeats.", "caption": "Threads make interruptions into pauses — same ID, full memory" },
+    { "t": "h", "text": "What gets saved, when, and how big" },
+    { "t": "p", "text": "Checkpoints snapshot **state per step** (values + which node runs next + step number). Cost scales with state size × steps × threads — which is why Ch.2's minimal/bounded virtues are economic, not aesthetic. Scope ruthlessly: decisions and digests persist; raw bulk lives outside with references. Measure checkpoint bytes per thread in development; surprise sizes mean state-design debt." },
+    { "t": "code", "lang": "js", "code": "// Miniature checkpointer: snapshots per step, resume by thread (playground logic)\nfunction makeCheckpointer() {\n  const store = new Map(); // thread_id -> array of {step, state, next}\n  return {\n    save(thread, step, state, next) {\n      if (!store.has(thread)) store.set(thread, []);\n      store.get(thread).push({ step, state: JSON.parse(JSON.stringify(state)), next });\n    },\n    load(thread) { return store.get(thread) || []; },\n    resumeState(thread) {\n      const hist = store.get(thread) || [];\n      return hist.length ? hist[hist.length - 1] : null;\n    },\n  };\n}\n// Deep-copy on save: later mutations must not rewrite history.", "caption": "Save deep copies per step; resume reads the latest; history enables replay" },
+    { "t": "h", "text": "Resume, replay, time-travel" },
+    { "t": "p", "text": "Three operations on history: **resume** (continue from latest after interruption), **replay** (re-run from step N with same inputs — deterministic debugging), **time-travel/fork** (resume from an earlier checkpoint with edited state — 'what if the approval differed?'). Replay needs deterministic nodes (same state → same outputs); time-travel needs validated edits (Ch.6). Together they make agent bugs reproducible — the end of 'works on my run'." },
+    { "t": "practice", "sim": "js-playground", "title": "Crash, then resume", "query": "function makeCheckpointer() {\n  const store = new Map();\n  return {\n    save(thread, step, state, next) {\n      if (!store.has(thread)) store.set(thread, []);\n      store.get(thread).push({ step, state: JSON.parse(JSON.stringify(state)), next });\n    },\n    resumeState(thread) {\n      const h = store.get(thread) || [];\n      return h.length ? h[h.length - 1] : null;\n    },\n  };\n}\nconst cp = makeCheckpointer();\ncp.save('t-1', 0, { ticket: 'late parcel', category: null }, 'triage');\ncp.save('t-1', 1, { ticket: 'late parcel', category: 'shipping' }, 'draft');\nconst resumed = cp.resumeState('t-1');\nconsole.log('resume at step ' + resumed.step + ' -> ' + resumed.next);\nconsole.log('category=' + resumed.state.category);\nconsole.log('missing thread: ' + JSON.stringify(cp.resumeState('nope')));\n// Deep-copy proof: mutate original, history unchanged\nconst s = { n: 1 };\ncp.save('t-2', 0, s, 'x');\ns.n = 999;\nconsole.log('history intact: ' + (cp.resumeState('t-2').state.n === 1));", "note": "Run it: expect resume at step 1 -> draft, category shipping, missing thread null, history intact true. Deep-copy-on-save is the line that prevents history corruption — verify it, don't trust it." },
+    { "t": "keytakeaways", "items": ["Threads scope conversations: ID design defines what remembering means", "Checkpoints snapshot state per step; cost scales with state size — minimal/bounded state is economic", "Resume continues, replay reproduces, time-travel forks — deterministic nodes + validated edits required", "Deep-copy on save; measure bytes per thread in development"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice checkpointer and confirm all four outputs. (b) Extend it with a history(thread) accessor returning step numbers, and a fork(thread, fromStep, edits) that resumes from an earlier checkpoint with validated edits. (c) State the production saver swap (MemorySaver → durable) and what survives a process restart in each case.",
+    "hints": [
+      "Four outputs: step-1/draft resume, shipping category, null missing thread, deep-copy proof true.",
+      "history: map checkpoints to steps. fork: slice history to fromStep, merge validated edits over that state, continue — document that edits need schema validation (Ch.3).",
+      "MemorySaver dies with the process (dev only); durable savers (Postgres-backed) survive restarts — same compile() API, different durability."
+    ],
+    "solution": "// (a) step 1 -> draft; shipping; null; true (in order).\n// (b) history(thread) → steps array; fork(thread, k, edits) →\n//     validated-edits over checkpoint k, resume from k+1.\n// (c) MemorySaver: process-local (dev). Durable saver: survives restarts;\n//     swap at compile() — code unchanged, durability upgraded.",
+    "why": "History access plus validated forking completes the persistence toolkit: resume (operations), replay (debugging), fork (what-if). The saver swap teaches the dev/prod boundary — same API, different survival.",
+    "code": "// history/fork pattern: slice checkpoints, validate edits, resume forward.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Same thread ID across two days of follow-ups gives…",
+      "options": ["A fresh conversation", "Continuing state: full memory of prior steps — thread IDs define remembered scope", "An error", "Merged billing"],
+      "answer": 1,
+      "explain": "Threads scope memory across time and crashes. ID design (per-ticket vs per-user) is a product decision about what continuity means."
+    },
+    {
+      "q": "Checkpoints grow 2MB per thread. First response?",
+      "options": ["Bigger disks", "Scope state minimally (Ch.2 virtues) and measure per-thread bytes — cost scales with state size × steps × threads", "Fewer threads", "Delete history"],
+      "answer": 1,
+      "explain": "Checkpoint economics trace to state design: raw bulk referenced outside, digests inside, bounded always. Size surprises are state-design debt surfacing."
+    },
+    {
+      "q": "Why deep-copy state on checkpoint save?",
+      "options": ["Performance", "Later mutations would otherwise rewrite history — replay and audit need immutable snapshots", "JSON requirement", "Smaller size"],
+      "answer": 1,
+      "explain": "Shared references corrupt the past: resume/replay/audit read history expecting truth. Copy-on-save freezes each step faithfully."
+    }
+  ],
+  "summary": "Threads scope, checkpoints snapshot (deep-copied), resume continues, replay reproduces, forks explore. Persistence converts interruptions to pauses — designed via minimal state, verified via resume proofs.",
+  "next": "Memory survives crashes — now pause deliberately for humans: approval gates, edit-and-resume, and interrupt placement. Next: human-in-the-loop."
+}
