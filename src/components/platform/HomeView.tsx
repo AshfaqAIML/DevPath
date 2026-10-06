@@ -6,11 +6,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowRight, Flame, History, Search, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, Flame, History, Play, Search, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getAccent } from "@/lib/accent";
 import { cn } from "@/lib/utils";
+import { isPlayableSimulator, simulatorViewHref } from "@/lib/simulators";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
 import type { ResourceItemView } from "@/lib/platform";
 import { CategoryHub } from "./CategoryHub";
@@ -157,6 +158,27 @@ export function HomeView({ categoriesData, featuredItems, trendingItems, onOpenS
               </kbd>
             </Button>
           </motion.div>
+
+          {/* Spotlight: the newly shipped interactive sandbox */}
+          {isPlayableSimulator("css-flexbox-simulator") && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
+              <Link
+                href={simulatorViewHref("css-flexbox-simulator")}
+                onClick={() => trackEvent("card_click", "simulators", "hero-spotlight")}
+                className="group inline-flex items-center gap-2 rounded-full border border-teal-500/30 bg-teal-500/[0.07] py-1 pl-1 pr-3 text-xs font-medium text-teal-700 transition-all hover:border-teal-500/50 hover:bg-teal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-teal-300"
+              >
+                <span className="flex size-5 items-center justify-center rounded-full bg-teal-500 text-teal-50 transition-transform duration-300 group-hover:scale-110" aria-hidden>
+                  <Play className="size-2.5 fill-current" />
+                </span>
+                New: the interactive CSS Flexbox Simulator
+                <ArrowRight aria-hidden className="size-3 transition-transform duration-300 group-hover:translate-x-0.5" />
+              </Link>
+            </motion.div>
+          )}
 
           <motion.dl
             initial={{ opacity: 0 }}

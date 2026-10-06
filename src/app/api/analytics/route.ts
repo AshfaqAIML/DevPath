@@ -11,7 +11,14 @@ import {
 export const dynamic = "force-dynamic";
 
 const eventSchema = z.object({
-  type: z.enum(["category_view", "card_click", "item_view", "search"]),
+  type: z.enum([
+    "category_view",
+    "card_click",
+    "item_view",
+    "search",
+    "simulator_view",
+    "challenge_complete",
+  ]),
   slug: z.string().max(80).optional().nullable(),
   label: z.string().max(120).optional().nullable(),
 });

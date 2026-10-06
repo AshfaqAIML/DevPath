@@ -1,0 +1,972 @@
+     1→"use client";
+     2→
+     3→// AdminPanel — the platform's content management layer. Categories can be
+     4→// reordered, enabled/disabled, retitled and re-badged; the count wording is
+     5→// editable; items can be created, published/unpublished, featured and
+     6→// deleted; engagement analytics are summarized. Everything here flows
+     7→// through the admin-authenticated API and immediately updates the hub.
+     8→import * as React from "react";
+     9→import Link from "next/link";
+    10→import { useRouter } from "next/navigation";
+    11→import { useQuery, useQueryClient } from "@tanstack/react-query";
+    12→import Image from "next/image";
+    13→import { formatDistanceToNow } from "date-fns";
+    14→import {
+    15→  Activity,
+    16→  ArrowDown,
+    17→  ArrowLeft,
+    18→  ArrowUp,
+    19→  Loader2,
+    20→  Lock,
+    21→  LogOut,
+    22→  MousePointerClick,
+    23→  Plus,
+    24→  Save,
+    25→  Search,
+    26→  Star,
+    27→  Trash2,
+    28→  Eye,
+    29→} from "lucide-react";
+    30→
+    31→import { Badge } from "@/components/ui/badge";
+    32→import { Button } from "@/components/ui/button";
+    33→import {
+    34→  Dialog,
+    35→  DialogContent,
+    36→  DialogDescription,
+    37→  DialogFooter,
+    38→  DialogHeader,
+    39→  DialogTitle,
+    40→  DialogTrigger,
+    41→} from "@/components/ui/dialog";
+    42→import {
+    43→  AlertDialog,
+    44→  AlertDialogAction,
+    45→  AlertDialogCancel,
+    46→  AlertDialogContent,
+    47→  AlertDialogDescription,
+    48→  AlertDialogFooter,
+    49→  AlertDialogHeader,
+    50→  AlertDialogTitle,
+    51→  AlertDialogTrigger,
+    52→} from "@/components/ui/alert-dialog";
+    53→import { Input } from "@/components/ui/input";
+    54→import { Label } from "@/components/ui/label";
+    55→import {
+    56→  Select,
+    57→  SelectContent,
+    58→  SelectItem,
+    59→  SelectTrigger,
+    60→  SelectValue,
+    61→} from "@/components/ui/select";
+    62→import { Switch } from "@/components/ui/switch";
+    63→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    64→import {
+    65→  Table,
+    66→  TableBody,
+    67→  TableCell,
+    68→  TableHead,
+    69→  TableHeader,
+    70→  TableRow,
+    71→} from "@/components/ui/table";
+    72→import { useToast } from "@/hooks/use-toast";
+    73→import { cn } from "@/lib/utils";
+    74→import { getAccent } from "@/lib/accent";
+    75→import type { CategoryView, ResourceItemView } from "@/lib/platform";
+    76→import { fetchItems, type CategoriesPayload } from "./platform-data";
+    77→
+    78→type AnalyticsSummary = {
+    79→  categoryViews: { slug: string | null; views: number }[];
+    80→  typeCounts: { type: string; count: number }[];
+    81→  recent: { id: string; type: string; slug: string | null; label: string | null; createdAt: string }[];
+    82→  totalEvents: number;
+    83→};
+    84→
+    85→const ADMIN_KEY_STORAGE = "devpath-admin-key";
+    86→
+    87→// ---------------------------------------------------------------- auth gate
+    88→
+    89→function AuthGate({ onAuthorized }: { onAuthorized: (key: string) => void }) {
+    90→  const { toast } = useToast();
+    91→  const [password, setPassword] = React.useState("");
+    92→  const [loading, setLoading] = React.useState(false);
+    93→
+    94→  const submit = async (e: React.FormEvent) => {
+    95→    e.preventDefault();
+    96→    if (!password) return;
+    97→    setLoading(true);
+    98→    try {
+    99→      const res = await fetch("/api/admin/auth", {
+   100→        method: "POST",
+   101→        headers: { "Content-Type": "application/json" },
+   102→        body: JSON.stringify({ password }),
+   103→      });
+   104→      if (!res.ok) throw new Error("Invalid password");
+   105→      const data = (await res.json()) as { token: string };
+   106→      sessionStorage.setItem(ADMIN_KEY_STORAGE, data.token);
+   107→      onAuthorized(data.token);
+   108→      toast({ title: "Welcome back", description: "Admin console unlocked." });
+   109→    } catch {
+   110→      toast({
+   111→        title: "Authentication failed",
+   112→        description: "That password doesn’t match the admin credential.",
+   113→        variant: "destructive",
+   114→      });
+   115→    } finally {
+   116→      setLoading(false);
+   117→    }
+   118→  };
+   119→
+   120→  return (
+   121→    <div className="mx-auto max-w-sm py-16">
+   122→      <form
+   123→        onSubmit={submit}
+   124→        className="space-y-5 rounded-2xl border bg-card p-8 shadow-sm"
+   125→      >
+   126→        <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-muted">
+   127→          <Lock aria-hidden className="size-5 text-muted-foreground" />
+   128→        </span>
+   129→        <div className="space-y-1.5 text-center">
+   130→          <h1 className="text-lg font-bold">Admin console</h1>
+   131→          <p className="text-sm text-muted-foreground">
+   132→            Manage categories, content and wording — the hub updates live.
+   133→          </p>
+   134→        </div>
+   135→        <div className="space-y-2">
+   136→          <Label htmlFor="admin-password">Password</Label>
+   137→          <Input
+   138→            id="admin-password"
+   139→            type="password"
+   140→            value={password}
+   141→            onChange={(e) => setPassword(e.target.value)}
+   142→            placeholder="••••••••"
+   143→            autoComplete="current-password"
+   144→          />
+   145→        </div>
+   146→        <Button type="submit" className="w-full gap-2" disabled={loading || !password}>
+   147→          {loading && <Loader2 aria-hidden className="size-4 animate-spin" />}
+   148→          Unlock console
+   149→        </Button>
+   150→        <p className="text-center text-xs text-muted-foreground">
+   151→          Demo credential: <code className="font-mono">devpath-admin</code>
+   152→        </p>
+   153→      </form>
+   154→    </div>
+   155→  );
+   156→}
+   157→
+   158→// ------------------------------------------------------------- console root
+   159→
+   160→export function AdminPanel({ categoriesData }: { categoriesData: CategoriesPayload }) {
+   161→  const [adminKey, setAdminKey] = React.useState<string | null>(null);
+   162→  const [checked, setChecked] = React.useState(false);
+   163→
+   164→  React.useEffect(() => {
+   165→    const k = sessionStorage.getItem(ADMIN_KEY_STORAGE);
+   166→    if (k) setAdminKey(k);
+   167→    setChecked(true);
+   168→  }, []);
+   169→
+   170→  if (!checked) {
+   171→    return (
+   172→      <div className="flex justify-center py-24">
+   173→        <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
+   174→      </div>
+   175→    );
+   176→  }
+   177→
+   178→  if (!adminKey) return <AuthGate onAuthorized={setAdminKey} />;
+   179→
+   180→  return (
+   181→    <AdminConsole
+   182→      adminKey={adminKey}
+   183→      categoriesData={categoriesData}
+   184→      onLogout={() => {
+   185→        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+   186→        setAdminKey(null);
+   187→      }}
+   188→    />
+   189→  );
+   190→}
+   191→
+   192→function AdminConsole({
+   193→  adminKey,
+   194→  categoriesData,
+   195→  onLogout,
+   196→}: {
+   197→  adminKey: string;
+   198→  categoriesData: CategoriesPayload;
+   199→  onLogout: () => void;
+   200→}) {
+   201→  const router = useRouter();
+   202→  const queryClient = useQueryClient();
+   203→  const { toast } = useToast();
+   204→
+   205→  const authedFetch = React.useCallback(
+   206→    (path: string, init?: RequestInit) =>
+   207→      fetch(path, {
+   208→        ...init,
+   209→        headers: {
+   210→          "Content-Type": "application/json",
+   211→          "x-admin-key": adminKey,
+   212→          ...(init?.headers ?? {}),
+   213→        },
+   214→      }),
+   215→    [adminKey]
+   216→  );
+   217→
+   218→  const invalidate = React.useCallback(() => {
+   219→    void queryClient.invalidateQueries({ queryKey: ["categories"] });
+   220→    void queryClient.invalidateQueries({ queryKey: ["items"] });
+   221→  }, [queryClient]);
+   222→
+   223→  const notify = (ok: boolean, action: string) =>
+   224→    toast(
+   225→      ok
+   226→        ? { title: `${action} saved`, description: "The hub and counts updated live." }
+   227→        : {
+   228→            title: `Failed: ${action.toLowerCase()}`,
+   229→            description: "Check the console for details.",
+   230→            variant: "destructive",
+   231→          }
+   232→    );
+   233→
+   234→  return (
+   235→    <div className="space-y-6">
+   236→      {/* Console header */}
+   237→      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-5">
+   238→        <div className="flex items-center gap-3">
+   239→          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+   240→            <Activity aria-hidden className="size-5" />
+   241→          </span>
+   242→          <div>
+   243→            <h1 className="text-lg font-bold tracking-tight">Admin console</h1>
+   244→            <p className="text-xs text-muted-foreground">
+   245→              Content &amp; configuration management for the category hub
+   246→            </p>
+   247→          </div>
+   248→        </div>
+   249→        <div className="flex items-center gap-2">
+   250→          <Button asChild variant="outline" size="sm" className="gap-2">
+   251→            <Link href="/">
+   252→              <ArrowLeft aria-hidden className="size-4" />
+   253→              Back to platform
+   254→            </Link>
+   255→          </Button>
+   256→          <Button
+   257→            variant="outline"
+   258→            size="sm"
+   259→            className="gap-2"
+   260→            onClick={() => {
+   261→              onLogout();
+   262→              router.push("/");
+   263→            }}
+   264→          >
+   265→            <LogOut aria-hidden className="size-4" />
+   266→            Log out
+   267→          </Button>
+   268→        </div>
+   269→      </div>
+   270→
+   271→      <Tabs defaultValue="categories">
+   272→        <TabsList className="h-11 rounded-xl p-1">
+   273→          <TabsTrigger value="categories" className="rounded-lg px-4 text-sm">
+   274→            Categories
+   275→          </TabsTrigger>
+   276→          <TabsTrigger value="content" className="rounded-lg px-4 text-sm">
+   277→            Content
+   278→          </TabsTrigger>
+   279→          <TabsTrigger value="analytics" className="rounded-lg px-4 text-sm">
+   280→            Analytics
+   281→          </TabsTrigger>
+   282→        </TabsList>
+   283→
+   284→        <TabsContent value="categories" className="mt-6">
+   285→          <CategoryManager
+   286→            categories={categoriesData.categories}
+   287→            authedFetch={authedFetch}
+   288→            invalidate={invalidate}
+   289→            notify={notify}
+   290→          />
+   291→        </TabsContent>
+   292→
+   293→        <TabsContent value="content" className="mt-6">
+   294→          <ContentManager
+   295→            categories={categoriesData.categories}
+   296→            adminKey={adminKey}
+   297→            authedFetch={authedFetch}
+   298→            invalidate={invalidate}
+   299→            notify={notify}
+   300→          />
+   301→        </TabsContent>
+   302→
+   303→        <TabsContent value="analytics" className="mt-6">
+   304→          <AnalyticsTab adminKey={adminKey} categories={categoriesData.categories} />
+   305→        </TabsContent>
+   306→      </Tabs>
+   307→    </div>
+   308→  );
+   309→}
+   310→
+   311→// --------------------------------------------------------- category manager
+   312→
+   313→function CategoryManager({
+   314→  categories,
+   315→  authedFetch,
+   316→  invalidate,
+   317→  notify,
+   318→}: {
+   319→  categories: CategoryView[];
+   320→  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+   321→  invalidate: () => void;
+   322→  notify: (ok: boolean, action: string) => void;
+   323→}) {
+   324→  const patch = async (id: string, data: Record<string, unknown>, action: string) => {
+   325→    const res = await authedFetch(`/api/categories/${id}`, {
+   326→      method: "PATCH",
+   327→      body: JSON.stringify(data),
+   328→    });
+   329→    notify(res.ok, action);
+   330→    if (res.ok) invalidate();
+   331→  };
+   332→
+   333→  const move = async (index: number, dir: -1 | 1) => {
+   334→    const a = categories[index];
+   335→    const b = categories[index + dir];
+   336→    if (!a || !b) return;
+   337→    await Promise.all([
+   338→      authedFetch(`/api/categories/${a.id}`, {
+   339→        method: "PATCH",
+   340→        body: JSON.stringify({ order: b.order }),
+   341→      }),
+   342→      authedFetch(`/api/categories/${b.id}`, {
+   343→        method: "PATCH",
+   344→        body: JSON.stringify({ order: a.order }),
+   345→      }),
+   346→    ]);
+   347→    notify(true, "Reorder");
+   348→    invalidate();
+   349→  };
+   350→
+   351→  return (
+   352→    <div className="space-y-4">
+   353→      <p className="text-sm text-muted-foreground">
+   354→        Reorder, enable/disable, and edit the count wording or badge for each
+   355→        category. Edits apply to the hub immediately — no frontend deploys.
+   356→      </p>
+   357→      <div className="rounded-2xl border bg-card">
+   358→        <Table>
+   359→          <TableHeader>
+   360→            <TableRow>
+   361→              <TableHead className="w-20">Order</TableHead>
+   362→              <TableHead>Category</TableHead>
+   363→              <TableHead className="w-44">Count label</TableHead>
+   364→              <TableHead className="w-40">Badge</TableHead>
+   365→              <TableHead className="w-28">Live count</TableHead>
+   366→              <TableHead className="w-24">Visible</TableHead>
+   367→            </TableRow>
+   368→          </TableHeader>
+   369→          <TableBody>
+   370→            {categories.map((c, i) => (
+   371→              <CategoryRow
+   372→                key={c.id}
+   373→                category={c}
+   374→                first={i === 0}
+   375→                last={i === categories.length - 1}
+   376→                onMove={(dir) => void move(i, dir)}
+   377→                onPatch={(data, action) => void patch(c.id, data, action)}
+   378→              />
+   379→            ))}
+   380→          </TableBody>
+   381→        </Table>
+   382→      </div>
+   383→    </div>
+   384→  );
+   385→}
+   386→
+   387→function CategoryRow({
+   388→  category: c,
+   389→  first,
+   390→  last,
+   391→  onMove,
+   392→  onPatch,
+   393→}: {
+   394→  category: CategoryView;
+   395→  first: boolean;
+   396→  last: boolean;
+   397→  onMove: (dir: -1 | 1) => void;
+   398→  onPatch: (data: Record<string, unknown>, action: string) => void;
+   399→}) {
+   400→  const [countLabel, setCountLabel] = React.useState(c.countLabel);
+   401→  const [badge, setBadge] = React.useState(c.badge ?? "");
+   402→  React.useEffect(() => {
+   403→    setCountLabel(c.countLabel);
+   404→    setBadge(c.badge ?? "");
+   405→  }, [c.countLabel, c.badge]);
+   406→
+   407→  const a = getAccent(c.accent);
+   408→  const saveCountLabel = () => {
+   409→    if (countLabel !== c.countLabel && countLabel.trim()) {
+   410→      onPatch({ countLabel: countLabel.trim() }, "Count wording");
+   411→    }
+   412→  };
+   413→  const saveBadge = () => {
+   414→    if (badge !== (c.badge ?? "")) {
+   415→      onPatch({ badge: badge.trim() || null }, "Badge");
+   416→    }
+   417→  };
+   418→
+   419→  return (
+   420→    <TableRow>
+   421→      <TableCell>
+   422→        <div className="flex items-center gap-1">
+   423→          <Button
+   424→            variant="ghost"
+   425→            size="icon"
+   426→            className="size-7 disabled:opacity-30"
+   427→            disabled={first}
+   428→            onClick={() => onMove(-1)}
+   429→            aria-label={`Move ${c.title} up`}
+   430→          >
+   431→            <ArrowUp aria-hidden className="size-3.5" />
+   432→          </Button>
+   433→          <Button
+   434→            variant="ghost"
+   435→            size="icon"
+   436→            className="size-7 disabled:opacity-30"
+   437→            disabled={last}
+   438→            onClick={() => onMove(1)}
+   439→            aria-label={`Move ${c.title} down`}
+   440→          >
+   441→            <ArrowDown aria-hidden className="size-3.5" />
+   442→          </Button>
+   443→        </div>
+   444→      </TableCell>
+   445→      <TableCell>
+   446→        <div className="flex items-center gap-3">
+   447→          <span className={cn("relative size-9 shrink-0 overflow-hidden rounded-lg ring-1", a.iconWrap)}>
+   448→            <Image src={c.icon} alt="" fill sizes="36px" className="object-cover" />
+   449→          </span>
+   450→          <div className="min-w-0">
+   451→            <p className="truncate text-sm font-semibold">{c.title}</p>
+   452→            <p className="truncate text-xs text-muted-foreground">{c.route}</p>
+   453→          </div>
+   454→        </div>
+   455→      </TableCell>
+   456→      <TableCell>
+   457→        <Input
+   458→          value={countLabel}
+   459→          onChange={(e) => setCountLabel(e.target.value)}
+   460→          onBlur={saveCountLabel}
+   461→          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+   462→          className="h-8 text-xs"
+   463→          aria-label={`Count label for ${c.title}`}
+   464→        />
+   465→      </TableCell>
+   466→      <TableCell>
+   467→        <Input
+   468→          value={badge}
+   469→          onChange={(e) => setBadge(e.target.value)}
+   470→          onBlur={saveBadge}
+   471→          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+   472→          placeholder="—"
+   473→          className="h-8 text-xs"
+   474→          aria-label={`Badge for ${c.title}`}
+   475→        />
+   476→      </TableCell>
+   477→      <TableCell>
+   478→        <span className="text-sm tabular-nums">
+   479→          <span className={cn("font-semibold", a.text)}>{c.count}</span>
+   480→          <span className="text-muted-foreground"> / {c.totalItems}</span>
+   481→        </span>
+   482→      </TableCell>
+   483→      <TableCell>
+   484→        <Switch
+   485→          checked={c.enabled}
+   486→          onCheckedChange={(v) => onPatch({ enabled: v }, v ? "Visibility" : "Visibility")}
+   487→          aria-label={`${c.title} visible in hub`}
+   488→        />
+   489→      </TableCell>
+   490→    </TableRow>
+   491→  );
+   492→}
+   493→
+   494→// ---------------------------------------------------------- content manager
+   495→
+   496→function ContentManager({
+   497→  categories,
+   498→  adminKey,
+   499→  authedFetch,
+   500→  invalidate,
+   501→  notify,
+   502→}: {
+   503→  categories: CategoryView[];
+   504→  adminKey: string;
+   505→  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+   506→  invalidate: () => void;
+   507→  notify: (ok: boolean, action: string) => void;
+   508→}) {
+   509→  const [filter, setFilter] = React.useState("all");
+   510→  const [q, setQ] = React.useState("");
+   511→  const [addOpen, setAddOpen] = React.useState(false);
+   512→
+   513→  const { data, isLoading } = useQuery({
+   514→    queryKey: ["items", "admin", filter, q],
+   515→    queryFn: () => fetchItems({ category: filter === "all" ? undefined : filter, q, all: true, adminKey }),
+   516→  });
+   517→
+   518→  const items = data?.items ?? [];
+   519→
+   520→  const patchItem = async (id: string, body: Record<string, unknown>, action: string) => {
+   521→    const res = await authedFetch(`/api/resources/${id}`, {
+   522→      method: "PATCH",
+   523→      body: JSON.stringify(body),
+   524→    });
+   525→    notify(res.ok, action);
+   526→    if (res.ok) invalidate();
+   527→  };
+   528→
+   529→  const deleteItem = async (id: string, title: string) => {
+   530→    const res = await authedFetch(`/api/resources/${id}`, { method: "DELETE" });
+   531→    notify(res.ok, `Delete “${title}”`);
+   532→    if (res.ok) invalidate();
+   533→  };
+   534→
+   535→  return (
+   536→    <div className="space-y-4">
+   537→      <div className="flex flex-wrap items-center gap-3">
+   538→        <div className="relative flex-1 min-w-52">
+   539→          <Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+   540→          <Input
+   541→            value={q}
+   542→            onChange={(e) => setQ(e.target.value)}
+   543→            placeholder="Search content…"
+   544→            className="h-10 pl-9"
+   545→            aria-label="Search content"
+   546→          />
+   547→        </div>
+   548→        <Select value={filter} onValueChange={setFilter}>
+   549→          <SelectTrigger className="h-10 w-44 rounded-lg" aria-label="Filter by category">
+   550→            <SelectValue />
+   551→          </SelectTrigger>
+   552→          <SelectContent>
+   553→            <SelectItem value="all">All categories</SelectItem>
+   554→            {categories.map((c) => (
+   555→              <SelectItem key={c.slug} value={c.slug}>
+   556→                {c.title}
+   557→              </SelectItem>
+   558→            ))}
+   559→          </SelectContent>
+   560→        </Select>
+   561→        <Button className="h-10 gap-2 rounded-lg" onClick={() => setAddOpen(true)}>
+   562→          <Plus aria-hidden className="size-4" />
+   563→          Add content
+   564→        </Button>
+   565→      </div>
+   566→
+   567→      <div className="max-h-[560px] overflow-y-auto rounded-2xl border bg-card">
+   568→        <Table>
+   569→          <TableHeader className="sticky top-0 z-10 bg-card">
+   570→            <TableRow>
+   571→              <TableHead>Title</TableHead>
+   572→              <TableHead className="w-28">Category</TableHead>
+   573→              <TableHead className="w-32">Level</TableHead>
+   574→              <TableHead className="w-24">Published</TableHead>
+   575→              <TableHead className="w-20">Featured</TableHead>
+   576→              <TableHead className="w-12" />
+   577→            </TableRow>
+   578→          </TableHeader>
+   579→          <TableBody>
+   580→            {isLoading ? (
+   581→              <TableRow>
+   582→                <TableCell colSpan={6} className="py-10 text-center">
+   583→                  <Loader2 aria-hidden className="mx-auto size-5 animate-spin text-muted-foreground" />
+   584→                </TableCell>
+   585→              </TableRow>
+   586→            ) : items.length === 0 ? (
+   587→              <TableRow>
+   588→                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+   589→                  No content matches.
+   590→                </TableCell>
+   591→              </TableRow>
+   592→            ) : (
+   593→              items.map((item) => {
+   594→                const a = getAccent(item.categoryAccent);
+   595→                return (
+   596→                  <TableRow key={item.id}>
+   597→                    <TableCell className="max-w-72">
+   598→                      <p className="truncate text-sm font-medium">{item.title}</p>
+   599→                      <p className="truncate text-xs text-muted-foreground">
+   600→                        {item.duration ?? item.tags.slice(0, 2).join(", ")}
+   601→                      </p>
+   602→                    </TableCell>
+   603→                    <TableCell>
+   604→                      <span className="inline-flex items-center gap-1.5 text-xs">
+   605→                        <span aria-hidden className={cn("size-1.5 rounded-full", a.dot)} />
+   606→                        {item.categoryTitle}
+   607→                      </span>
+   608→                    </TableCell>
+   609→                    <TableCell>
+   610→                      <Badge variant="outline" className="text-[11px] font-normal">
+   611→                        {item.level}
+   612→                      </Badge>
+   613→                    </TableCell>
+   614→                    <TableCell>
+   615→                      <Switch
+   616→                        checked={item.published}
+   617→                        onCheckedChange={(v) =>
+   618→                          void patchItem(item.id, { published: v }, `Publish “${item.title}”`)
+   619→                        }
+   620→                        aria-label={`Publish ${item.title}`}
+   621→                      />
+   622→                    </TableCell>
+   623→                    <TableCell>
+   624→                      <Button
+   625→                        variant="ghost"
+   626→                        size="icon"
+   627→                        className={cn(
+   628→                          "size-8",
+   629→                          item.featured ? "text-amber-500" : "text-muted-foreground"
+   630→                        )}
+   631→                        onClick={() =>
+   632→                          void patchItem(item.id, { featured: !item.featured }, "Featured")
+   633→                        }
+   634→                        aria-label={`Toggle featured for ${item.title}`}
+   635→                      >
+   636→                        <Star
+   637→                          aria-hidden
+   638→                          className={cn("size-4", item.featured && "fill-amber-500")}
+   639→                        />
+   640→                      </Button>
+   641→                    </TableCell>
+   642→                    <TableCell>
+   643→                      <AlertDialog>
+   644→                        <AlertDialogTrigger asChild>
+   645→                          <Button
+   646→                            variant="ghost"
+   647→                            size="icon"
+   648→                            className="size-8 text-muted-foreground hover:text-destructive"
+   649→                            aria-label={`Delete ${item.title}`}
+   650→                          >
+   651→                            <Trash2 aria-hidden className="size-4" />
+   652→                          </Button>
+   653→                        </AlertDialogTrigger>
+   654→                        <AlertDialogContent>
+   655→                          <AlertDialogHeader>
+   656→                            <AlertDialogTitle>Delete “{item.title}”?</AlertDialogTitle>
+   657→                            <AlertDialogDescription>
+   658→                              This permanently removes the item and lowers the
+   659→                              category count in the hub.
+   660→                            </AlertDialogDescription>
+   661→                          </AlertDialogHeader>
+   662→                          <AlertDialogFooter>
+   663→                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   664→                            <AlertDialogAction
+   665→                              onClick={() => void deleteItem(item.id, item.title)}
+   666→                            >
+   667→                              Delete
+   668→                            </AlertDialogAction>
+   669→                          </AlertDialogFooter>
+   670→                        </AlertDialogContent>
+   671→                      </AlertDialog>
+   672→                    </TableCell>
+   673→                  </TableRow>
+   674→                );
+   675→              })
+   676→            )}
+   677→          </TableBody>
+   678→        </Table>
+   679→      </div>
+   680→
+   681→      <AddItemDialog
+   682→        open={addOpen}
+   683→        onOpenChange={setAddOpen}
+   684→        categories={categories}
+   685→        authedFetch={authedFetch}
+   686→        invalidate={invalidate}
+   687→        notify={notify}
+   688→      />
+   689→    </div>
+   690→  );
+   691→}
+   692→
+   693→function AddItemDialog({
+   694→  open,
+   695→  onOpenChange,
+   696→  categories,
+   697→  authedFetch,
+   698→  invalidate,
+   699→  notify,
+   700→}: {
+   701→  open: boolean;
+   702→  onOpenChange: (open: boolean) => void;
+   703→  categories: CategoryView[];
+   704→  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+   705→  invalidate: () => void;
+   706→  notify: (ok: boolean, action: string) => void;
+   707→}) {
+   708→  const [title, setTitle] = React.useState("");
+   709→  const [description, setDescription] = React.useState("");
+   710→  const [categorySlug, setCategorySlug] = React.useState(categories[0]?.slug ?? "");
+   711→  const [level, setLevel] = React.useState("Beginner");
+   712→  const [duration, setDuration] = React.useState("");
+   713→  const [tags, setTags] = React.useState("");
+   714→  const [published, setPublished] = React.useState(true);
+   715→  const [saving, setSaving] = React.useState(false);
+   716→
+   717→  const submit = async (e: React.FormEvent) => {
+   718→    e.preventDefault();
+   719→    if (!title.trim() || !categorySlug) return;
+   720→    setSaving(true);
+   721→    try {
+   722→      const res = await authedFetch("/api/resources", {
+   723→        method: "POST",
+   724→        body: JSON.stringify({
+   725→          title: title.trim(),
+   726→          description: description.trim(),
+   727→          categorySlug,
+   728→          level,
+   729→          duration: duration.trim() || undefined,
+   730→          tags: tags.trim(),
+   731→          published,
+   732→        }),
+   733→      });
+   734→      notify(res.ok, `Create “${title.trim()}”`);
+   735→      if (res.ok) {
+   736→        invalidate();
+   737→        onOpenChange(false);
+   738→        setTitle("");
+   739→        setDescription("");
+   740→        setDuration("");
+   741→        setTags("");
+   742→        setPublished(true);
+   743→      }
+   744→    } finally {
+   745→      setSaving(false);
+   746→    }
+   747→  };
+   748→
+   749→  return (
+   750→    <Dialog open={open} onOpenChange={onOpenChange}>
+   751→      <DialogContent className="max-w-md">
+   752→        <DialogHeader>
+   753→          <DialogTitle>Add new content</DialogTitle>
+   754→          <DialogDescription>
+   755→            Publishing immediately updates the live category count in the hub.
+   756→          </DialogDescription>
+   757→        </DialogHeader>
+   758→        <form onSubmit={submit} className="space-y-4">
+   759→          <div className="space-y-2">
+   760→            <Label htmlFor="new-title">Title</Label>
+   761→            <Input
+   762→              id="new-title"
+   763→              value={title}
+   764→              onChange={(e) => setTitle(e.target.value)}
+   765→              placeholder="e.g. WebAssembly Deep Dive"
+   766→              required
+   767→            />
+   768→          </div>
+   769→          <div className="space-y-2">
+   770→            <Label htmlFor="new-desc">Description</Label>
+   771→            <Input
+   772→              id="new-desc"
+   773→              value={description}
+   774→              onChange={(e) => setDescription(e.target.value)}
+   775→              placeholder="One-line description"
+   776→            />
+   777→          </div>
+   778→          <div className="grid grid-cols-2 gap-3">
+   779→            <div className="space-y-2">
+   780→              <Label>Category</Label>
+   781→              <Select value={categorySlug} onValueChange={setCategorySlug}>
+   782→                <SelectTrigger aria-label="Category">
+   783→                  <SelectValue />
+   784→                </SelectTrigger>
+   785→                <SelectContent>
+   786→                  {categories.map((c) => (
+   787→                    <SelectItem key={c.slug} value={c.slug}>
+   788→                      {c.title}
+   789→                    </SelectItem>
+   790→                  ))}
+   791→                </SelectContent>
+   792→              </Select>
+   793→            </div>
+   794→            <div className="space-y-2">
+   795→              <Label>Level</Label>
+   796→              <Select value={level} onValueChange={setLevel}>
+   797→                <SelectTrigger aria-label="Level">
+   798→                  <SelectValue />
+   799→                </SelectTrigger>
+   800→                <SelectContent>
+   801→                  {["Beginner", "Intermediate", "Advanced"].map((l) => (
+   802→                    <SelectItem key={l} value={l}>
+   803→                      {l}
+   804→                    </SelectItem>
+   805→                  ))}
+   806→                </SelectContent>
+   807→              </Select>
+   808→            </div>
+   809→          </div>
+   810→          <div className="grid grid-cols-2 gap-3">
+   811→            <div className="space-y-2">
+   812→              <Label htmlFor="new-duration">Duration</Label>
+   813→              <Input
+   814→                id="new-duration"
+   815→                value={duration}
+   816→                onChange={(e) => setDuration(e.target.value)}
+   817→                placeholder="2h 15m"
+   818→              />
+   819→            </div>
+   820→            <div className="space-y-2">
+   821→              <Label htmlFor="new-tags">Tags</Label>
+   822→              <Input
+   823→                id="new-tags"
+   824→                value={tags}
+   825→                onChange={(e) => setTags(e.target.value)}
+   826→                placeholder="wasm,systems"
+   827→              />
+   828→            </div>
+   829→          </div>
+   830→          <div className="flex items-center justify-between rounded-lg border p-3">
+   831→            <div>
+   832→              <Label htmlFor="new-published">Publish immediately</Label>
+   833→              <p className="text-xs text-muted-foreground">
+   834→                Unchecked creates a draft (hidden from the public count).
+   835→              </p>
+   836→            </div>
+   837→            <Switch
+   838→              id="new-published"
+   839→              checked={published}
+   840→              onCheckedChange={setPublished}
+   841→            />
+   842→          </div>
+   843→          <DialogFooter>
+   844→            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+   845→              Cancel
+   846→            </Button>
+   847→            <Button type="submit" className="gap-2" disabled={saving || !title.trim()}>
+   848→              {saving ? (
+   849→                <Loader2 aria-hidden className="size-4 animate-spin" />
+   850→              ) : (
+   851→                <Save aria-hidden className="size-4" />
+   852→              )}
+   853→              Create
+   854→            </Button>
+   855→          </DialogFooter>
+   856→        </form>
+   857→      </DialogContent>
+   858→    </Dialog>
+   859→  );
+   860→}
+   861→
+   862→// ------------------------------------------------------------- analytics tab
+   863→
+   864→function AnalyticsTab({
+   865→  adminKey,
+   866→  categories,
+   867→}: {
+   868→  adminKey: string;
+   869→  categories: CategoryView[];
+   870→}) {
+   871→  const { data } = useQuery<AnalyticsSummary>({
+   872→    queryKey: ["analytics", adminKey],
+   873→    queryFn: async () => {
+   874→      const res = await fetch("/api/analytics", {
+   875→        headers: { "x-admin-key": adminKey },
+   876→      });
+   877→      if (!res.ok) throw new Error("Failed to load analytics");
+   878→      return res.json();
+   879→    },
+   880→    refetchInterval: 15_000,
+   881→  });
+   882→
+   883→  const typeCount = (type: string) =>
+   884→    data?.typeCounts.find((t) => t.type === type)?.count ?? 0;
+   885→  const maxViews = Math.max(1, ...(data?.categoryViews.map((v) => v.views) ?? [1]));
+   886→
+   887→  const stats = [
+   888→    { label: "Total events", value: data?.totalEvents ?? 0, icon: Activity },
+   889→    { label: "Category views", value: typeCount("category_view"), icon: Eye },
+   890→    { label: "Card clicks", value: typeCount("card_click"), icon: MousePointerClick },
+   891→    { label: "Searches", value: typeCount("search"), icon: Search },
+   892→  ];
+   893→
+   894→  return (
+   895→    <div className="space-y-6">
+   896→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   897→        {stats.map((s) => (
+   898→          <div key={s.label} className="rounded-2xl border bg-card p-5">
+   899→            <div className="flex items-center justify-between">
+   900→              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+   901→                {s.label}
+   902→              </p>
+   903→              <s.icon aria-hidden className="size-4 text-muted-foreground" />
+   904→            </div>
+   905→            <p className="mt-2 text-2xl font-bold tabular-nums">{s.value}</p>
+   906→          </div>
+   907→        ))}
+   908→      </div>
+   909→
+   910→      <div className="grid gap-6 lg:grid-cols-2">
+   911→        {/* Views by category */}
+   912→        <div className="rounded-2xl border bg-card p-5">
+   913→          <h3 className="text-sm font-semibold">Category views</h3>
+   914→          <ul className="mt-4 space-y-3">
+   915→            {categories.map((c) => {
+   916→              const views =
+   917→                data?.categoryViews.find((v) => v.slug === c.slug)?.views ?? 0;
+   918→              const a = getAccent(c.accent);
+   919→              return (
+   920→                <li key={c.slug} className="space-y-1.5">
+   921→                  <div className="flex items-center justify-between text-xs">
+   922→                    <span className="flex items-center gap-1.5 font-medium">
+   923→                      <span aria-hidden className={cn("size-1.5 rounded-full", a.dot)} />
+   924→                      {c.title}
+   925→                    </span>
+   926→                    <span className="tabular-nums text-muted-foreground">{views}</span>
+   927→                  </div>
+   928→                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+   929→                    <div
+   930→                      className={cn("h-full rounded-full transition-all duration-500", a.dot)}
+   931→                      style={{ width: `${Math.max(2, (views / maxViews) * 100)}%` }}
+   932→                    />
+   933→                  </div>
+   934→                </li>
+   935→              );
+   936→            })}
+   937→          </ul>
+   938→        </div>
+   939→
+   940→        {/* Recent events */}
+   941→        <div className="rounded-2xl border bg-card p-5">
+   942→          <h3 className="text-sm font-semibold">Recent events</h3>
+   943→          <div className="mt-4 max-h-72 space-y-2.5 overflow-y-auto pr-1">
+   944→            {(data?.recent ?? []).length === 0 ? (
+   945→              <p className="py-8 text-center text-xs text-muted-foreground">
+   946→                No events recorded yet — browse the platform to generate some.
+   947→              </p>
+   948→            ) : (
+   949→              data?.recent.map((e) => (
+   950→                <div
+   951→                  key={e.id}
+   952→                  className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 text-xs"
+   953→                >
+   954→                  <span className="flex min-w-0 items-center gap-2">
+   955→                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+   956→                      {e.type}
+   957→                    </span>
+   958→                    <span className="truncate font-medium">{e.label ?? e.slug ?? "—"}</span>
+   959→                  </span>
+   960→                  <time className="shrink-0 text-muted-foreground" dateTime={e.createdAt}>
+   961→                    {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+   962→                  </time>
+   963→                </div>
+   964→              ))
+   965→            )}
+   966→          </div>
+   967→        </div>
+   968→      </div>
+   969→    </div>
+   970→  );
+   971→}
+   972→

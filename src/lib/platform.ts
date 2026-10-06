@@ -26,6 +26,12 @@ export type CategoryView = {
   totalItems: number;
 };
 
+export type StepView = {
+  title: string;
+  detail: string;
+  hours?: number;
+};
+
 export type ResourceItemView = {
   id: string;
   slug: string;
@@ -34,6 +40,8 @@ export type ResourceItemView = {
   level: string;
   duration: string | null;
   tags: string[];
+  /** Structured roadmap milestones (empty for non-roadmap content) */
+  steps: StepView[];
   published: boolean;
   featured: boolean;
   views: number;
@@ -91,6 +99,23 @@ export async function getCategoriesWithCounts(): Promise<CategoryView[]> {
   );
 }
 
+function parseSteps(raw: string): StepView[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as StepView[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((s) => s && typeof s.title === "string")
+      .map((s) => ({
+        title: s.title,
+        detail: typeof s.detail === "string" ? s.detail : "",
+        hours: typeof s.hours === "number" ? s.hours : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemView => ({
   id: i.id,
   slug: i.slug,
@@ -99,6 +124,7 @@ const toResourceItemView = (i: ResourceItem, c: Category): ResourceItemView => (
   level: i.level,
   duration: i.duration,
   tags: i.tags ? i.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+  steps: parseSteps(i.steps),
   published: i.published,
   featured: i.featured,
   views: i.views,

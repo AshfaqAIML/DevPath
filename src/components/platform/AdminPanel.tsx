@@ -16,6 +16,9 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Download,
+  Eye,
+  EyeOff,
   Loader2,
   Lock,
   LogOut,
@@ -24,8 +27,8 @@ import {
   Save,
   Search,
   Star,
+  StarOff,
   Trash2,
-  Eye,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +55,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -509,6 +513,8 @@ function ContentManager({
   const [filter, setFilter] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [addOpen, setAddOpen] = React.useState(false);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["items", "admin", filter, q],
@@ -516,6 +522,78 @@ function ContentManager({
   });
 
   const items = data?.items ?? [];
+  const selectableIds = items.map((i) => i.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+
+  const toggleAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        selectableIds.forEach((id) => next.delete(id));
+      } else {
+        selectableIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const runBulk = async (action: "publish" | "unpublish" | "feature" | "unfeature" | "delete") => {
+    if (selected.size === 0 || bulkBusy) return;
+    if (action === "delete" && !window.confirm(`Delete ${selected.size} item(s)? This cannot be undone.`)) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await authedFetch("/api/resources/bulk", {
+        method: "POST",
+        body: JSON.stringify({ ids: [...selected], action }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { affected?: number };
+      notify(
+        res.ok,
+        `${action} ${payload.affected ?? selected.size} item(s)`
+      );
+      if (res.ok) {
+        setSelected(new Set());
+        invalidate();
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const exportCsv = () => {
+    const header = ["title", "category", "level", "duration", "published", "featured", "views", "tags", "slug"];
+    const rows = items.map((i) => [
+      i.title,
+      i.categoryTitle,
+      i.level,
+      i.duration ?? "",
+      i.published ? "yes" : "no",
+      i.featured ? "yes" : "no",
+      String(i.views),
+      i.tags.join(" "),
+      i.slug,
+    ]);
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [header.join(","), ...rows.map((r) => r.map(esc).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `devpath-content-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const patchItem = async (id: string, body: Record<string, unknown>, action: string) => {
     const res = await authedFetch(`/api/resources/${id}`, {
@@ -558,16 +636,97 @@ function ContentManager({
             ))}
           </SelectContent>
         </Select>
+        <Button variant="outline" className="h-10 gap-2 rounded-lg" onClick={exportCsv} disabled={items.length === 0}>
+          <Download aria-hidden className="size-4" />
+          Export CSV
+        </Button>
         <Button className="h-10 gap-2 rounded-lg" onClick={() => setAddOpen(true)}>
           <Plus aria-hidden className="size-4" />
           Add content
         </Button>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5">
+          <span className="text-sm font-medium tabular-nums">
+            {selected.size} selected
+          </span>
+          <span aria-hidden className="h-4 w-px bg-border" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg text-xs"
+            disabled={bulkBusy}
+            onClick={() => void runBulk("publish")}
+          >
+            <Eye aria-hidden className="size-3.5" />
+            Publish
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg text-xs"
+            disabled={bulkBusy}
+            onClick={() => void runBulk("unpublish")}
+          >
+            <EyeOff aria-hidden className="size-3.5" />
+            Unpublish
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg text-xs"
+            disabled={bulkBusy}
+            onClick={() => void runBulk("feature")}
+          >
+            <Star aria-hidden className="size-3.5" />
+            Feature
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg text-xs"
+            disabled={bulkBusy}
+            onClick={() => void runBulk("unfeature")}
+          >
+            <StarOff aria-hidden className="size-3.5" />
+            Unfeature
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg text-xs text-destructive hover:text-destructive"
+            disabled={bulkBusy}
+            onClick={() => void runBulk("delete")}
+          >
+            <Trash2 aria-hidden className="size-3.5" />
+            Delete
+          </Button>
+          {bulkBusy && <Loader2 aria-hidden className="size-4 animate-spin text-muted-foreground" />}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-8 rounded-lg text-xs"
+            onClick={() => setSelected(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       <div className="max-h-[560px] overflow-y-auto rounded-2xl border bg-card">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={toggleAll}
+                  aria-label="Select all rows"
+                  disabled={items.length === 0}
+                />
+              </TableHead>
               <TableHead>Title</TableHead>
               <TableHead className="w-28">Category</TableHead>
               <TableHead className="w-32">Level</TableHead>
@@ -579,21 +738,29 @@ function ContentManager({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center">
+                <TableCell colSpan={7} className="py-10 text-center">
                   <Loader2 aria-hidden className="mx-auto size-5 animate-spin text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   No content matches.
                 </TableCell>
               </TableRow>
             ) : (
               items.map((item) => {
                 const a = getAccent(item.categoryAccent);
+                const isSel = selected.has(item.id);
                 return (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.id} className={cn(isSel && "bg-muted/50")}>
+                    <TableCell>
+                      <Checkbox
+                        checked={isSel}
+                        onCheckedChange={() => toggleOne(item.id)}
+                        aria-label={`Select ${item.title}`}
+                      />
+                    </TableCell>
                     <TableCell className="max-w-72">
                       <p className="truncate text-sm font-medium">{item.title}</p>
                       <p className="truncate text-xs text-muted-foreground">

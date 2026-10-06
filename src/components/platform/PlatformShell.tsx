@@ -2,29 +2,37 @@
 
 // PlatformShell — the client root of the single-page resources experience.
 // View routing is URL-driven via query params:
-//   /                → landing + category hub
-//   /?category=slug  → the category's real application section
-//   /?view=admin     → the admin console
+//   /                       → landing + category hub
+//   /?category=slug         → the category's real application section
+//   /?view=simulator&sim=x → a playable simulator sandbox
+//   /?view=library          → personal library
+//   /?view=admin            → the admin console
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 
 import { GlobalSearch } from "./GlobalSearch";
 import { HomeView } from "./HomeView";
 import { CategoryExplorer } from "./CategoryExplorer";
 import { AdminPanel } from "./AdminPanel";
 import { MyLibraryView } from "./MyLibraryView";
+import { FlexboxSimulator } from "./FlexboxSimulator";
+import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
-import { trackEvent, useCategories, type CategoriesPayload } from "./platform-data";
-import type { ResourceItemView } from "@/lib/platform";
+import { categoryHref, trackEvent, useCategories, type CategoriesPayload } from "./platform-data";
+import type { CategoryView, ResourceItemView } from "@/lib/platform";
 
 interface PlatformShellProps {
   initialCategories: CategoriesPayload;
   initialItems: ResourceItemView[];
   initialCategorySlug: string | null;
   initialItemSlug?: string;
-  view: "hub" | "admin" | "library";
+  view: "hub" | "admin" | "library" | "simulator";
   featuredItems: ResourceItemView[];
   trendingItems: ResourceItemView[];
+  simulatorItem?: ResourceItemView | null;
+  simulatorCategory?: CategoryView | null;
 }
 
 export function PlatformShell({
@@ -35,9 +43,14 @@ export function PlatformShell({
   view,
   featuredItems,
   trendingItems,
+  simulatorItem,
+  simulatorCategory,
 }: PlatformShellProps) {
+  const router = useRouter();
+  const { setTheme, theme } = useTheme();
   const { data: categoriesData } = useCategories(initialCategories);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [helpOpen, setHelpOpen] = React.useState(false);
 
   // First-party analytics: log every category view
   React.useEffect(() => {
@@ -45,6 +58,60 @@ export function PlatformShell({
       trackEvent("category_view", initialCategorySlug, null);
     }
   }, [initialCategorySlug]);
+
+  // Global keyboard shortcuts:
+  //   ⌘K / Ctrl+K → search   ? → help   1–5 → category   l → library
+  //   h → home   t → theme toggle. Skips while typing or when a dialog is open.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      const overlayOpen =
+        searchOpen || helpOpen || document.querySelector("[role=dialog]") !== null;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (typing || overlayOpen) return;
+
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+      if (e.key.toLowerCase() === "t") {
+        setTheme(theme === "dark" ? "light" : "dark");
+        return;
+      }
+      if (e.key.toLowerCase() === "l") {
+        router.push("/?view=library");
+        return;
+      }
+      if (e.key.toLowerCase() === "h") {
+        router.push("/");
+        return;
+      }
+      // 1–5 jump straight into the enabled categories (IA order)
+      const n = Number(e.key);
+      if (n >= 1 && n <= 5) {
+        const enabled = categoriesData.categories.filter((c) => c.enabled);
+        const cat = enabled[n - 1];
+        if (cat) {
+          trackEvent("card_click", cat.slug, `keyboard-${n}`);
+          router.push(categoryHref(cat.slug));
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [categoriesData, helpOpen, router, searchOpen, setTheme, theme]);
 
   const activeCategory = initialCategorySlug
     ? categoriesData.categories.find((c) => c.slug === initialCategorySlug) ?? null
@@ -56,6 +123,7 @@ export function PlatformShell({
         data={categoriesData}
         onOpenSearch={() => setSearchOpen(true)}
         activeCategory={initialCategorySlug}
+        onOpenShortcuts={() => setHelpOpen(true)}
       />
 
       <main className="flex-1" id="main-content">
@@ -64,6 +132,8 @@ export function PlatformShell({
             <AdminPanel categoriesData={categoriesData} />
           ) : view === "library" ? (
             <MyLibraryView categoriesData={categoriesData} />
+          ) : view === "simulator" && simulatorItem && simulatorCategory ? (
+            <FlexboxSimulator item={simulatorItem} category={simulatorCategory} />
           ) : activeCategory ? (
             <CategoryExplorer
               key={activeCategory.slug}
@@ -90,6 +160,7 @@ export function PlatformShell({
         onOpenChange={setSearchOpen}
         categoriesData={categoriesData}
       />
+      <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} categoriesData={categoriesData} />
     </div>
   );
 }

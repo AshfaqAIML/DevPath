@@ -24,10 +24,17 @@ interface LibraryState {
   saved: string[];
   completed: string[];
   recent: RecentEntry[];
+  /** Roadmap step progress: item slug → set of completed step indices */
+  stepProgress: Record<string, number[]>;
+  /** Simulator challenge progress: sim slug → completed challenge ids */
+  simProgress: Record<string, string[]>;
   toggleSaved: (slug: string) => boolean;
   toggleCompleted: (slug: string) => boolean;
   isSaved: (slug: string) => boolean;
   isCompleted: (slug: string) => boolean;
+  toggleStep: (slug: string, index: number) => boolean;
+  getStepProgress: (slug: string) => number[];
+  completeChallenge: (simSlug: string, challengeId: string) => void;
   pushRecent: (entry: Omit<RecentEntry, "at">) => void;
   clearRecent: () => void;
 }
@@ -40,6 +47,8 @@ export const useLibrary = create<LibraryState>()(
       saved: [],
       completed: [],
       recent: [],
+      stepProgress: {},
+      simProgress: {},
       toggleSaved: (slug) => {
         const has = get().saved.includes(slug);
         set({
@@ -58,6 +67,23 @@ export const useLibrary = create<LibraryState>()(
       },
       isSaved: (slug) => get().saved.includes(slug),
       isCompleted: (slug) => get().completed.includes(slug),
+      toggleStep: (slug, index) => {
+        const current = get().stepProgress[slug] ?? [];
+        const has = current.includes(index);
+        const next = has
+          ? current.filter((i) => i !== index)
+          : [...current, index];
+        set({ stepProgress: { ...get().stepProgress, [slug]: next } });
+        return !has;
+      },
+      getStepProgress: (slug) => get().stepProgress[slug] ?? [],
+      completeChallenge: (simSlug, challengeId) => {
+        const current = get().simProgress[simSlug] ?? [];
+        if (current.includes(challengeId)) return;
+        set({
+          simProgress: { ...get().simProgress, [simSlug]: [...current, challengeId] },
+        });
+      },
       pushRecent: (entry) =>
         set({
           recent: [

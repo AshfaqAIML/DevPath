@@ -92,3 +92,70 @@ Unresolved issues / risks & priority recommendations for next phase:
 - Single-route constraint unchanged (query-param routing; canonical routes in DB ready).
 - Recommended next features: (1) item detail "pages" with rich bodies (markdown) + progress steps; (2) roadmap step-graph visualization; (3) one playable simulator embed (e.g., CSS Flexbox sandbox) to activate the Simulators category; (4) sitemap.xml + OG images; (5) admin bulk publish/unpublish + CSV export; (6) keyboard shortcut help overlay (?).
 - localStorage library is device-local; if cross-device sync is desired later, lift saved/completed into a User model via authenticated API.
+---
+Task ID: 3
+Agent: Z.ai Code (main agent, scheduled dev round)
+Task: Assess project status, QA via agent-browser, then continue development with new features + styling polish per the standing mandate (fix bugs first, else add features).
+
+Work Log:
+- Read worklog; assessed status: dev server healthy, all views 200, zero console errors, VLM homepage QA 9.2/10 — platform stable, so this round delivered the worklog's recommended next features.
+- STATUS ASSESSMENT (pre-work): homepage / simulators / library / admin all render clean; rate limiter verified (429 fires); no bugs found → feature round.
+
+NEW FEATURE 1 — Interactive CSS Flexbox Simulator (activates the Simulators category):
+- Prisma: added `steps String @default("")` (JSON milestones) to ResourceItem; pushed schema; reseeded.
+- Seed: published "CSS Flexbox Simulator" (featured, real description) → hub now shows "1 simulators" alongside the "New" badge; other 3 sims remain drafts. Total published: 98.
+- `src/lib/simulators.ts`: playable-sim registry (slug → sandbox kind) + `simulatorViewHref`.
+- `FlexboxSimulator.tsx` (~700 lines): two modes —
+  - Free play: full control panel (flex-direction, justify-content, align-items, flex-wrap, conditional align-content, gap slider, item count slider), live animated stage with dot grid, generated-CSS panel with per-prop "changed" highlighting + copy-to-clipboard.
+  - Challenges: 6 challenges (dead center / push to end / navbar space-between / column / row-reverse / wrap+gap) with Target-vs-Yours side-by-side stages, per-challenge check validation, hint reveal (AnimatePresence), mismatch feedback toast listing wrong props, auto-advance on solve, trophy progress chip in header.
+- Routing: `/?view=simulator&sim=css-flexbox-simulator` — page.tsx resolves the sim server-side (falls back to hub for unknown/non-playable sims), per-view metadata (noindex), PlatformShell renders FlexboxSimulator.
+- Integration: ItemDetailDialog primary CTA becomes "Launch sandbox" for playable sims (demo toast for unbuilt ones); ResourceItemCard shows a teal Play halo on playable sims; GlobalSearch shows Play icon + "Play" chip and deep-links straight into the sandbox; My Library recent strip links playable sims directly.
+- Analytics: new event types `simulator_view`, `challenge_complete` (had to extend the zod enum in /api/analytics — found via a 400 in dev.log during QA).
+
+NEW FEATURE 2 — Roadmap step-graph with progress tracking:
+- Seed: all 11 roadmaps now carry 8–12 realistic structured steps (title, detail, hours) — e.g. Frontend: 10 steps/~400h.
+- platform.ts: `StepView` type + `parseSteps`; steps flow through ResourceItemView → all APIs.
+- ItemDetailDialog: renders a "Learning path" section — vertical timeline (numbered nodes → check circles, connector line colored per accent when done), live progress bar with aria, "~Nh" total, "Next up" chip, checkable steps persisted to library store (`stepProgress`).
+- MyLibraryView: new "Learning paths in motion" section (progress cards per started roadmap) + stats card changed to "Steps completed" total.
+
+NEW FEATURE 3 — Keyboard shortcuts + help overlay:
+- PlatformShell global keydown handler: ⌘K/Ctrl+K search, `?` help, `1`–`5` category jump (IA order), `l` library, `h` home, `t` theme toggle; suppressed while typing in inputs or when any dialog is open (verified: keys during dialog exit animation are correctly ignored).
+- ShortcutsHelpDialog: styled kbd rows, live category-number mapping, header keyboard button added (hidden on mobile).
+
+NEW FEATURE 4 — Admin bulk actions + CSV export:
+- New API: `POST /api/resources/bulk` (admin key, zod-validated ids ≤200, actions publish/unpublish/feature/unfeature/delete via updateMany/deleteMany).
+- ContentManager: checkbox column + select-all, floating bulk action bar (5 actions + clear), selected-row highlight, per-row state preserved; "Export CSV" button generates proper quoted CSV client-side (verified blob type text/csv).
+
+BUGS FOUND & FIXED DURING QA:
+1. `simProgress` missing from zustand initial state (SSR crash: "Cannot read properties of undefined") — added `simProgress: {}`.
+2. Unstable zustand selectors (`s.simProgress[slug] ?? []` returns fresh [] each call) triggered React 19 useSyncExternalStore infinite-loop guard — now select the stable record reference and derive arrays outside the selector (both FlexboxSimulator + StepGraph).
+3. Stale Prisma client in the running dev server after schema push (server kept the pre-`steps` client in Turbopack's module cache; `touch`-ing files didn't reload node_modules): rewrote `src/lib/db.ts` with a versioned global cache key (prisma-dev-v2) AND performed a controlled dev-server restart (killed tree, relaunched `bun run dev` in background exactly as start.sh does). Steps now flow; counts verified (15/11/44/27/1).
+4. Analytics zod enum rejected new event types (400s) — extended enum + trackEvent type union.
+
+STYLING POLISH:
+- Hero: teal "New: the interactive CSS Flexbox Simulator" spotlight pill (play icon, hover scale/slide, analytics-tracked) — registry-driven so it disappears if the sim is unpublished.
+- Simulator stage compacted (min-h-44/56) so the generated-CSS panel is above the fold (VLM feedback addressed).
+- Step-graph: accent-aware nodes/connector, line-through completed steps, emerald complete toast on full path.
+- Library: roadmap progress cards with accent progress bars + "N steps to go".
+
+Stage Summary (verification results):
+- ESLint clean; dev.log zero runtime errors (all 200s; one expected 400 from malformed analytics POST now fixed).
+- Simulator: view renders 200 with metadata; challenge 1 & 2 solved via real UI clicks — progress persists (2/6), auto-advance to challenge 3, challenge_complete analytics event confirmed in admin API; CSS copy toast; VLM QA: explore 7.5→(post-compaction) challenge mode 9/10, light theme 9/10, mobile 390px challenge mode 8/10 with no horizontal overflow.
+- Roadmap step-graph: deep-link opens dialog with 10 steps, 2/10 done + progress bar 20% after clicking steps, VLM QA 9/10.
+- Keyboard: ? overlay renders (12 rows, 16 kbd), 3 → /?category=courses, h → /, l → /?view=library (all via real key presses).
+- Admin: bulk select-all → unfeature verified against API (featured courses 0), targeted re-feature restored seed state via bulk endpoint; CSV export verified.
+- Hub: "1 simulators" on home card + mobile sheet + footer; total 98 published resources; hero stats dl shows all five categories.
+- Known test-scripting note: raw JS .click() doesn't fire pointer events Radix needs — use agent-browser's click command for Radix controls (documented for future QA).
+
+Key artifacts added/changed this round:
+- NEW: `src/components/platform/FlexboxSimulator.tsx`, `src/components/platform/ShortcutsHelpDialog.tsx`, `src/lib/simulators.ts`, `src/app/api/resources/bulk/route.ts`.
+- UPDATED: `prisma/schema.prisma` (+steps), `prisma/seed.ts` (roadmap steps + published flexbox sim), `src/lib/platform.ts` (StepView/parseSteps), `src/lib/library-store.ts` (stepProgress/simProgress/completeChallenge), `src/lib/db.ts` (versioned client cache), `src/app/page.tsx` (simulator view + metadata), `src/app/api/analytics/route.ts` (event types), `src/components/platform/{PlatformShell,ItemDetailDialog,ResourceItemCard,GlobalSearch,MyLibraryView,HomeView,SiteHeader,AdminPanel}.tsx`.
+
+Unresolved issues / risks & priority recommendations for next phase:
+- Admin auth still demo-grade (shared password + header key) → NextAuth credentials + httpOnly session cookies remains the top upgrade.
+- localStorage library is device-local → lift saved/completed/stepProgress/simProgress behind a User model if cross-device sync is wanted.
+- Single-route constraint unchanged; canonical routes (/masterclass etc.) still DB-stored, query-param routing in-app.
+- Next simulator candidates from the registry pattern: SQL Query Sandbox (real SQLite mini-service or in-browser SQL engine), HTTP Request/Response Lab (request builder + visual exchange timeline). The registry + dialog CTA + search integration make each new sandbox ~1 component away.
+- Roadmap steps are admin-editable only via DB/seed today; an admin steps editor (drag-to-reorder, per-step CRUD) would complete the content lifecycle.
+- Analytics: consider aggregating simulator_view/challenge_complete in the admin analytics tab charts (events are recorded; the tab currently groups by type only).
+- Dev-server note for future agents: after `bun run db:push`, the running server needs its Prisma client reloaded — bump the PRISMA_CACHE_KEY in src/lib/db.ts (and restart if schema types changed) before assuming code bugs.

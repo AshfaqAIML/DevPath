@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getItems, isAdminRequest } from "@/lib/platform";
-
 export const dynamic = "force-dynamic";
-
 // GET /api/resources?category=&q=&level=&sort=&all=1 — search / filter layer
 export async function GET(req: NextRequest) {
   try {
@@ -26,7 +24,6 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-
 const createSchema = z.object({
   title: z.string().min(2).max(120),
   description: z.string().max(600).default(""),
@@ -37,7 +34,6 @@ const createSchema = z.object({
   published: z.boolean().default(false),
   featured: z.boolean().default(false),
 });
-
 // POST /api/resources — admin creates new content (drives live counts)
 export async function POST(req: NextRequest) {
   if (!isAdminRequest(req)) {

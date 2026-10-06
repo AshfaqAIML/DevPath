@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { getCategoriesWithCounts, getItems } from "@/lib/platform";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { PLAYABLE_SIMULATORS, isPlayableSimulator } from "@/lib/simulators";
 
 type SP = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -32,6 +33,21 @@ export async function generateMetadata({
       title: "Admin console — DevPath",
       robots: { index: false, follow: false },
     };
+  }
+
+  if (sp.view === "simulator" && typeof sp.sim === "string" && isPlayableSimulator(sp.sim)) {
+    const [categories, items] = await Promise.all([
+      getCategoriesWithCounts(),
+      getItems({ category: "simulators" }),
+    ]);
+    const item = items.find((i) => i.slug === sp.sim);
+    if (item) {
+      return {
+        title: `${item.title} — DevPath`,
+        description: item.description,
+        robots: { index: false, follow: true },
+      };
+    }
   }
 
   if (categorySlug) {
@@ -81,8 +97,15 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const categorySlug =
     typeof sp.category === "string" && sp.category.length > 0 ? sp.category : null;
+  const simSlug = typeof sp.sim === "string" ? sp.sim : null;
   const view =
-    sp.view === "admin" ? "admin" : sp.view === "library" ? "library" : "hub";
+    sp.view === "admin"
+      ? "admin"
+      : sp.view === "library"
+        ? "library"
+        : sp.view === "simulator" && simSlug && isPlayableSimulator(simSlug)
+          ? "simulator"
+          : "hub";
   const itemSlug = typeof sp.item === "string" ? sp.item : undefined;
 
   const categories = await getCategoriesWithCounts();
@@ -101,6 +124,17 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
   const trendingItems = view === "hub" && !activeCategory
     ? await getItems({ sort: "popular", limit: 6 })
     : [];
+
+  // Simulator view: resolve the requested sandbox (only playable sims render it)
+  const simulatorItem =
+    view === "simulator" && simSlug && PLAYABLE_SIMULATORS[simSlug]
+      ? (await getItems({ category: "simulators", limit: 100 })).find((i) => i.slug === simSlug) ?? null
+      : null;
+  const simulatorCategory = simulatorItem
+    ? categories.find((c) => c.slug === "simulators") ?? null
+    : null;
+  // If the sim isn't playable/resolvable, fall back to the hub view
+  const effectiveView = view === "simulator" && !simulatorItem ? "hub" : view;
 
   // JSON-LD: the five-category information architecture as structured data
   const jsonLd = {
@@ -130,9 +164,11 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
         initialItems={items}
         initialCategorySlug={activeCategory?.slug ?? null}
         initialItemSlug={itemSlug}
-        view={view}
+        view={effectiveView}
         featuredItems={featuredItems}
         trendingItems={trendingItems}
+        simulatorItem={simulatorItem}
+        simulatorCategory={simulatorCategory}
       />
     </>
   );

@@ -54,7 +54,13 @@ export function useCategories(initialData: CategoriesPayload) {
 
 /** Fire-and-forget first-party analytics. */
 export function trackEvent(
-  type: "category_view" | "card_click" | "item_view" | "search",
+  type:
+    | "category_view"
+    | "card_click"
+    | "item_view"
+    | "search"
+    | "simulator_view"
+    | "challenge_complete",
   slug?: string | null,
   label?: string | null
 ) {

@@ -53,6 +53,9 @@ model ResourceItem {
   level       String    @default("Beginner")
   duration    String?
   tags        String    @default("")
+  // JSON array of structured steps for roadmap-style items:
+  // [{ "title": "...", "detail": "...", "hours": 12 }]
+  steps       String    @default("")
   published   Boolean   @default(false)
   featured    Boolean   @default(false)
   order       Int       @default(0)

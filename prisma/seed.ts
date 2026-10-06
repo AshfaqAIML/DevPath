@@ -19,6 +19,9 @@ type SeedItem = {
   tags?: string;
   featured?: boolean;
   published?: boolean;
+  description?: string;
+  /** Roadmap milestones rendered as the step-graph in the item dialog */
+  steps?: { title: string; detail: string; hours?: number }[];
 };
 
 const masterclassItems: SeedItem[] = [
@@ -39,18 +42,134 @@ const masterclassItems: SeedItem[] = [
   { title: "AI-Native Product Engineering", level: "Advanced", duration: "5h 30m", tags: "ai,llm,product" },
 ];
 
+const roadmapSteps = {
+  frontend: [
+    { title: "Web foundations", detail: "How the browser works, HTML semantics, CSS syntax and the box model.", hours: 30 },
+    { title: "CSS layout", detail: "Flexbox, Grid, responsive design and mobile-first thinking.", hours: 35 },
+    { title: "JavaScript essentials", detail: "Types, functions, arrays, objects, DOM manipulation and events.", hours: 60 },
+    { title: "Modern JavaScript", detail: "ES2024 features, modules, async/await and fetch.", hours: 40 },
+    { title: "Version control", detail: "Git, branching, pull requests and collaborating on GitHub.", hours: 15 },
+    { title: "A framework", detail: "Pick React (or Vue/Svelte) — components, state, routing, data fetching.", hours: 80 },
+    { title: "TypeScript", detail: "Types, generics and typing your framework code end to end.", hours: 35 },
+    { title: "Testing", detail: "Vitest unit tests, Testing Library, Playwright smoke tests.", hours: 25 },
+    { title: "Performance & a11y", detail: "Web Vitals, Lighthouse, WCAG basics, semantic markup.", hours: 20 },
+    { title: "Portfolio projects", detail: "Ship 2–3 polished apps: CRUD app, API-consuming SPA, passion project.", hours: 60 },
+  ],
+  backend: [
+    { title: "One language deeply", detail: "Node.js or Go/Python — syntax, stdlib, idioms, package ecosystem.", hours: 50 },
+    { title: "HTTP & the web", detail: "Methods, status codes, headers, cookies, CORS, REST conventions.", hours: 20 },
+    { title: "Framework basics", detail: "Express/FastAPI/Fiber: routing, middleware, validation.", hours: 35 },
+    { title: "Databases", detail: "Relational modeling, SQL joins & indexes; when to reach for NoSQL.", hours: 45 },
+    { title: "ORM & data access", detail: "Prisma or equivalent: migrations, relations, query patterns.", hours: 25 },
+    { title: "Auth & security", detail: "Sessions vs JWT, hashing, OWASP top 10, rate limiting.", hours: 30 },
+    { title: "Caching", detail: "Redis patterns: cache-aside, TTLs, invalidation, idempotency.", hours: 20 },
+    { title: "APIs at scale", detail: "Pagination, filtering, versioning, GraphQL, webhooks.", hours: 30 },
+    { title: "Observability", detail: "Structured logging, metrics, tracing and production debugging.", hours: 20 },
+    { title: "Ship a service", detail: "Build + deploy a real API with auth, DB, tests and CI.", hours: 50 },
+  ],
+};
+
 const roadmapItems: SeedItem[] = [
-  { title: "Frontend Developer Roadmap", level: "Beginner", duration: "32 steps", tags: "frontend,html,css,javascript", featured: true },
-  { title: "Backend Developer Roadmap", level: "Beginner", duration: "34 steps", tags: "backend,nodejs,api" },
-  { title: "Full-Stack Developer Roadmap", level: "Beginner", duration: "45 steps", tags: "fullstack,frontend,backend", featured: true },
-  { title: "DevOps / Platform Roadmap", level: "Intermediate", duration: "28 steps", tags: "devops,docker,kubernetes" },
-  { title: "AI / LLM Engineer Roadmap", level: "Intermediate", duration: "24 steps", tags: "ai,llm,python" },
-  { title: "Data Scientist Roadmap", level: "Intermediate", duration: "30 steps", tags: "data,python,ml" },
-  { title: "Mobile (React Native) Roadmap", level: "Beginner", duration: "22 steps", tags: "mobile,react-native" },
-  { title: "Cyber Security Roadmap", level: "Intermediate", duration: "26 steps", tags: "security,offsec" },
-  { title: "Cloud Architect Roadmap", level: "Advanced", duration: "25 steps", tags: "cloud,aws,architecture" },
-  { title: "QA / SDET Roadmap", level: "Beginner", duration: "20 steps", tags: "qa,testing,automation" },
-  { title: "Game Developer Roadmap", level: "Beginner", duration: "21 steps", tags: "game-dev,unity,graphics" },
+  { title: "Frontend Developer Roadmap", level: "Beginner", duration: "10 steps", tags: "frontend,html,css,javascript", featured: true, steps: roadmapSteps.frontend },
+  { title: "Backend Developer Roadmap", level: "Beginner", duration: "10 steps", tags: "backend,nodejs,api", steps: roadmapSteps.backend },
+  { title: "Full-Stack Developer Roadmap", level: "Beginner", duration: "12 steps", tags: "fullstack,frontend,backend", featured: true, steps: [
+    { title: "Pick your stack", detail: "Choose one frontend + one backend framework and commit for 6 months.", hours: 5 },
+    { title: "Web foundations", detail: "HTML, CSS layout, JavaScript fundamentals and the DOM.", hours: 50 },
+    { title: "Frontend framework", detail: "Components, state management, routing and forms.", hours: 60 },
+    { title: "Backend basics", detail: "HTTP servers, REST endpoints, middleware and validation.", hours: 40 },
+    { title: "Databases", detail: "Model real entities, write joins, understand transactions and indexes.", hours: 40 },
+    { title: "Auth end-to-end", detail: "Sessions, JWTs, password hashing and protected routes.", hours: 25 },
+    { title: "Testing pyramid", detail: "Unit, integration and E2E tests on both halves of the stack.", hours: 30 },
+    { title: "CI/CD", detail: "GitHub Actions pipelines, preview deploys, migrations on release.", hours: 20 },
+    { title: "Cloud basics", detail: "Deploy to a PaaS/VPS, env config, custom domain, HTTPS.", hours: 20 },
+    { title: "Observability", detail: "Logs, metrics and error tracking for production apps.", hours: 15 },
+    { title: "Security hardening", detail: "OWASP top 10, dependency scanning, secure headers.", hours: 15 },
+    { title: "Capstone", detail: "Ship a full product: auth, payments, DB, background jobs, tests.", hours: 60 },
+  ] },
+  { title: "DevOps / Platform Roadmap", level: "Intermediate", duration: "9 steps", tags: "devops,docker,kubernetes", steps: [
+    { title: "Linux fluency", detail: "Filesystem, permissions, processes, systemd, shell scripting.", hours: 30 },
+    { title: "Networking", detail: "DNS, TCP/IP, TLS, load balancers, VPNs and firewalls.", hours: 25 },
+    { title: "One cloud", detail: "AWS/GCP core: compute, storage, IAM, VPC basics.", hours: 40 },
+    { title: "Containers", detail: "Docker images, layers, volumes, Compose for local stacks.", hours: 30 },
+    { title: "Kubernetes", detail: "Pods, deployments, services, ingress, config and secrets.", hours: 50 },
+    { title: "IaC", detail: "Terraform modules, state management, plan/apply workflows.", hours: 30 },
+    { title: "CI/CD pipelines", detail: "Build → test → scan → deploy pipelines with rollback.", hours: 25 },
+    { title: "Observability stack", detail: "Prometheus metrics, Grafana dashboards, log aggregation.", hours: 25 },
+    { title: "Incident practice", detail: "Runbooks, on-call, blameless postmortems, SLOs.", hours: 15 },
+  ] },
+  { title: "AI / LLM Engineer Roadmap", level: "Intermediate", duration: "9 steps", tags: "ai,llm,python", steps: [
+    { title: "Python + data basics", detail: "NumPy, pandas and clean Jupyter habits.", hours: 30 },
+    { title: "ML foundations", detail: "Regression, classification, evaluation metrics, overfitting.", hours: 40 },
+    { title: "Deep learning", detail: "PyTorch tensors, training loops, GPUs, checkpoints.", hours: 40 },
+    { title: "NLP & transformers", detail: "Tokenization, attention, embeddings, transfer learning.", hours: 35 },
+    { title: "LLM APIs", detail: "Prompting, structured outputs, function calling, streaming.", hours: 20 },
+    { title: "RAG", detail: "Chunking, vector DBs, retrieval pipelines, reranking.", hours: 30 },
+    { title: "Agents & tools", detail: "Tool use, planning loops, evals for agent behavior.", hours: 25 },
+    { title: "Fine-tuning", detail: "LoRA/QLoRA, datasets, when NOT to fine-tune.", hours: 25 },
+    { title: "Ship an AI product", detail: "Guardrails, cost control, caching, user feedback loops.", hours: 30 },
+  ] },
+  { title: "Data Scientist Roadmap", level: "Intermediate", duration: "9 steps", tags: "data,python,ml", steps: [
+    { title: "SQL mastery", detail: "Joins, window functions, CTEs, query tuning.", hours: 30 },
+    { title: "Python stack", detail: "pandas, matplotlib/seaborn, scikit-learn pipelines.", hours: 35 },
+    { title: "Statistics", detail: "Distributions, hypothesis testing, confidence intervals.", hours: 35 },
+    { title: "Experimentation", detail: "A/B design, power, guardrail metrics, pitfalls.", hours: 20 },
+    { title: "Machine learning", detail: "Supervised/unsupervised, cross-validation, feature work.", hours: 45 },
+    { title: "Data engineering basics", detail: "Airflow-style pipelines, dbt models, data quality.", hours: 30 },
+    { title: "Visualization & storytelling", detail: "Dashboards that answer real product questions.", hours: 20 },
+    { title: "Domain depth", detail: "Pick fintech/health/ecommerce and learn its metrics.", hours: 20 },
+    { title: "Capstone analysis", detail: "End-to-end: raw data → model → decision memo.", hours: 30 },
+  ] },
+  { title: "Mobile (React Native) Roadmap", level: "Beginner", duration: "8 steps", tags: "mobile,react-native", steps: [
+    { title: "React refresher", detail: "Hooks, lists, forms and component composition.", hours: 20 },
+    { title: "React Native basics", detail: "Core components, styling, responsive layouts.", hours: 30 },
+    { title: "Navigation", detail: "Stacks, tabs, deep links and state restoration.", hours: 20 },
+    { title: "Native APIs", detail: "Camera, geolocation, permissions, haptics, storage.", hours: 25 },
+    { title: "Data & sync", detail: "REST/GraphQL clients, offline cache, optimistic UI.", hours: 25 },
+    { title: "Releases", detail: "Expo EAS builds, store submissions, OTA updates.", hours: 20 },
+    { title: "Performance", detail: "FlatList tuning, Hermes, startup time, memory leaks.", hours: 15 },
+    { title: "Ship to stores", detail: "Screenshots, review guidelines, staged rollouts.", hours: 10 },
+  ] },
+  { title: "Cyber Security Roadmap", level: "Intermediate", duration: "9 steps", tags: "security,offsec", steps: [
+    { title: "Networking & Linux", detail: "Packets, protocols, bash fluency and logs.", hours: 30 },
+    { title: "Web app security", detail: "OWASP top 10 hands-on: XSS, SQLi, SSRF, IDOR.", hours: 35 },
+    { title: "Scripting", detail: "Python + Bash for automation and tooling.", hours: 25 },
+    { title: "Cryptography", detail: "Hashing, symmetric/asymmetric, TLS, PKI.", hours: 20 },
+    { title: "Offense", detail: "Recon, exploitation labs, privilege escalation.", hours: 40 },
+    { title: "Defense & blue team", detail: "SIEM, detection engineering, incident response.", hours: 30 },
+    { title: "Cloud security", detail: "IAM misconfigs, container security, CSPM basics.", hours: 25 },
+    { title: "Labs & CTFs", detail: "TryHackMe/HackTheBox paths; build a home lab.", hours: 40 },
+    { title: "Specialize", detail: "Pick appsec, SOC, pentest or GRC — go deep.", hours: 20 },
+  ] },
+  { title: "Cloud Architect Roadmap", level: "Advanced", duration: "8 steps", tags: "cloud,aws,architecture", steps: [
+    { title: "Core services", detail: "Compute, storage, networking, IAM in one cloud.", hours: 40 },
+    { title: "Well-architected", detail: "The five pillars applied to a real system design.", hours: 20 },
+    { title: "Networking deep dive", detail: "VPC design, hybrid connectivity, DNS strategy.", hours: 30 },
+    { title: "Identity & access", detail: "Least privilege, federation, workload identity.", hours: 20 },
+    { title: "Resilience", detail: "Multi-AZ, DR strategies, RTO/RPO trade-offs.", hours: 25 },
+    { title: "Cost engineering", detail: "Tagging, budgets, rightsizing, commit discounts.", hours: 15 },
+    { title: "IaC & automation", detail: "Terraform + pipelines for everything; zero console changes.", hours: 30 },
+    { title: "Certify", detail: "Solutions Architect Associate/Professional as a forcing function.", hours: 40 },
+  ] },
+  { title: "QA / SDET Roadmap", level: "Beginner", duration: "8 steps", tags: "qa,testing,automation", steps: [
+    { title: "Testing theory", detail: "Test pyramid, risk-based testing, bug advocacy.", hours: 15 },
+    { title: "Manual testing craft", detail: "Exploratory charters, bug reports, repro steps.", hours: 20 },
+    { title: "Programming", detail: "JS/TS or Python: functions, async, file/network IO.", hours: 40 },
+    { title: "Unit & integration", detail: "Vitest/Jest, mocking, fixtures, coverage that matters.", hours: 30 },
+    { title: "API testing", detail: "RestAssured/Supertest, contract tests, auth flows.", hours: 25 },
+    { title: "E2E automation", detail: "Playwright: selectors, flakes, parallel CI runs.", hours: 35 },
+    { title: "CI integration", detail: "Gates, parallelization, test reporting, triage.", hours: 15 },
+    { title: "Performance & security", detail: "k6 load scripts, basic security scans.", hours: 20 },
+  ] },
+  { title: "Game Developer Roadmap", level: "Beginner", duration: "8 steps", tags: "game-dev,unity,graphics", steps: [
+    { title: "Pick an engine", detail: "Unity/Godot — learn the editor, scenes and assets.", hours: 25 },
+    { title: "C# or GDScript", detail: "Language fundamentals through small game loops.", hours: 40 },
+    { title: "Math for games", detail: "Vectors, transforms, interpolation, physics.", hours: 25 },
+    { title: "Gameplay systems", detail: "State machines, input, collision, save systems.", hours: 35 },
+    { title: "UI & UX", detail: "Menus, HUDs, accessibility and controller support.", hours: 15 },
+    { title: "Art & audio pipeline", detail: "Sprites, tilesets, SFX/music integration.", hours: 25 },
+    { title: "Polish", detail: "Juice: tweens, particles, screenshake, game feel.", hours: 20 },
+    { title: "Ludum Dare", detail: "Ship 3 game-jam games; publish one on itch.io.", hours: 45 },
+  ] },
 ];
 
 const courseItems: SeedItem[] = [
@@ -97,10 +216,18 @@ const resourceItems: SeedItem[] = [
 }));
 resourceItems.push({ title: "Design Tokens Field Guide", level: "Intermediate", duration: "15 min read", tags: "design,reference", published: false });
 
-// Simulators start unpublished — the hub shows the "New" badge with no count
-// until the admin publishes simulator content from the admin console.
+// The CSS Flexbox Simulator ships as a real playable experience — the other
+// simulators remain drafts until their sandboxes are built.
 const simulatorItems: SeedItem[] = [
-  { title: "CSS Flexbox Simulator", level: "Beginner", tags: "css,layout,interactive", published: false },
+  {
+    title: "CSS Flexbox Simulator",
+    level: "Beginner",
+    tags: "css,layout,interactive",
+    featured: true,
+    published: true,
+    description:
+      "A hands-on flexbox sandbox: flip every axis control, watch the layout react live, then prove it in challenge mode. Generates the exact CSS you built.",
+  },
   { title: "SQL Query Sandbox", level: "Beginner", tags: "sql,database,interactive", published: false },
   { title: "Kubernetes Cluster Simulator", level: "Advanced", tags: "kubernetes,devops,interactive", published: false },
   { title: "HTTP Request/Response Lab", level: "Intermediate", tags: "http,networking,interactive", published: false },
@@ -205,14 +332,16 @@ async function main() {
           slug: slugify(item.title),
           title: item.title,
           description:
-            item.tags?.includes("roadmap") || created.slug === "roadmaps"
+            item.description ??
+            (item.tags?.includes("roadmap") || created.slug === "roadmaps"
               ? `A guided career path covering everything you need to become a confident ${item.title.replace(" Roadmap", "")} — with checkpoints, projects and a clear order of operations.`
               : created.slug === "resources"
                 ? `A dense, practical reference you can scan in minutes: commands, snippets and decision tables for ${item.title.replace(/(Cheatsheet|Cheat Sheet|Reference|Guide|Notes|Checklist)/i, "").trim() || "everyday work"}.`
-                : `A hands-on, focused session on ${item.title}. Learn the mental models, work through graded exercises, and ship something real by the end.`,
+                : `A hands-on, focused session on ${item.title}. Learn the mental models, work through graded exercises, and ship something real by the end.`),
           level: item.level ?? "Beginner",
           duration: item.duration ?? null,
           tags: item.tags ?? "",
+          steps: item.steps ? JSON.stringify(item.steps) : "",
           published: item.published ?? true,
           featured: item.featured ?? false,
           order: i,

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { Compass, Menu, Moon, Search, Settings2, Sun, Bookmark } from "lucide-react";
+import { Compass, Keyboard, Menu, Moon, Search, Settings2, Sun, Bookmark } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +22,10 @@ interface SiteHeaderProps {
   data: CategoriesPayload;
   onOpenSearch: () => void;
   activeCategory?: string | null;
+  onOpenShortcuts?: () => void;
 }
 
-export function SiteHeader({ data, onOpenSearch, activeCategory }: SiteHeaderProps) {
+export function SiteHeader({ data, onOpenSearch, activeCategory, onOpenShortcuts }: SiteHeaderProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -132,6 +133,20 @@ export function SiteHeader({ data, onOpenSearch, activeCategory }: SiteHeaderPro
               )}
             </Link>
           </Button>
+
+          {/* Keyboard shortcuts help */}
+          {onOpenShortcuts && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden size-9 rounded-lg sm:inline-flex"
+              onClick={onOpenShortcuts}
+              aria-label="Show keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="size-4.5" aria-hidden />
+            </Button>
+          )}
 
           {/* Theme toggle */}
           <Button

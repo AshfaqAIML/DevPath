@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Bookmark, Check, Clock, Eye, Sparkles } from "lucide-react";
+import { Bookmark, Check, Clock, Eye, Play, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getAccent } from "@/lib/accent";
 import { useLibrary, useLibraryHydrated } from "@/lib/library-store";
+import { isPlayableSimulator } from "@/lib/simulators";
 import type { ResourceItemView } from "@/lib/platform";
 
 const levelStyles: Record<string, string> = {
@@ -27,6 +28,7 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
   const saved = useLibrary((s) => s.saved.includes(item.slug));
   const completed = useLibrary((s) => s.completed.includes(item.slug));
   const toggleSaved = useLibrary((s) => s.toggleSaved);
+  const isPlayable = item.categorySlug === "simulators" && isPlayableSimulator(item.slug);
 
   return (
     <div
@@ -65,6 +67,16 @@ export function ResourceItemCard({ item, onSelect, index = 0 }: ResourceItemCard
       >
         <div className="absolute -inset-x-full h-full rotate-12 bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
       </div>
+
+      {/* Playable simulator halo */}
+      {isPlayable && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 flex size-7 items-center justify-center rounded-full border border-teal-400/40 bg-teal-500 text-teal-50 shadow-lg shadow-teal-500/30 transition-transform duration-300 group-hover:scale-110"
+        >
+          <Play aria-hidden className="size-3.5 fill-current" />
+        </span>
+      )}
 
       <div className="relative flex items-start justify-between gap-2">
         <span

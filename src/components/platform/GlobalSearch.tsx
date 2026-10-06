@@ -5,7 +5,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { Play, Search } from "lucide-react";
 
 import {
   CommandDialog,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/command";
 import { trackEvent, fetchItems } from "./platform-data";
 import { getAccent } from "@/lib/accent";
+import { isPlayableSimulator, simulatorViewHref } from "@/lib/simulators";
 import { cn } from "@/lib/utils";
 import type { CategoriesPayload } from "./platform-data";
 
@@ -93,23 +94,42 @@ export function GlobalSearch({ open, onOpenChange, categoriesData }: GlobalSearc
           const a = getAccent(c.accent);
           return (
             <CommandGroup key={`group-${c.slug}`} heading={`${c.title} · ${c.count} ${c.countLabel}`}>
-              {catItems.map((i) => (
-                <CommandItem
-                  key={i.id}
-                  value={`${i.title} ${i.tags.join(" ")} ${i.level} ${c.title}`}
-                  onSelect={() => {
-                    trackEvent("item_view", i.slug, i.title);
-                    go(`/?category=${c.slug}&item=${i.slug}`);
-                  }}
-                >
-                  <Search aria-hidden className="size-3.5 text-muted-foreground" />
-                  <span className="truncate">{i.title}</span>
-                  <span
-                    aria-hidden
-                    className={cn("ml-1.5 size-1.5 shrink-0 rounded-full", a.dot)}
-                  />
-                </CommandItem>
-              ))}
+              {catItems.map((i) => {
+                const playable =
+                  i.categorySlug === "simulators" && isPlayableSimulator(i.slug);
+                return (
+                  <CommandItem
+                    key={i.id}
+                    value={`${i.title} ${i.tags.join(" ")} ${i.level} ${c.title}`}
+                    onSelect={() => {
+                      trackEvent("item_view", i.slug, i.title);
+                      go(
+                        playable
+                          ? simulatorViewHref(i.slug)
+                          : `/?category=${c.slug}&item=${i.slug}`
+                      );
+                    }}
+                  >
+                    {playable ? (
+                      <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-teal-500/20 text-teal-600 dark:text-teal-400" aria-hidden>
+                        <Play className="size-2 fill-current" />
+                      </span>
+                    ) : (
+                      <Search aria-hidden className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span className="truncate">{i.title}</span>
+                    <span
+                      aria-hidden
+                      className={cn("ml-1.5 size-1.5 shrink-0 rounded-full", a.dot)}
+                    />
+                    {playable && (
+                      <span className="ml-auto rounded border border-teal-500/40 bg-teal-500/10 px-1.5 py-px text-[10px] font-semibold text-teal-600 dark:text-teal-300">
+                        Play
+                      </span>
+                    )}
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           );
         })}
