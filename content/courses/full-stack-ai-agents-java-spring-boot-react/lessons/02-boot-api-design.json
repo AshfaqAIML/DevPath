@@ -1,0 +1,52 @@
+{
+  "title": "Boot API Design: Controllers That Hold",
+  "slug": "02-boot-api-design",
+  "objective": "After this lesson you will be able to design sync JSON endpoints, SSE streaming endpoints with event shapes, and validated tool endpoints with idempotency and audit — following HTTP semantics strictly.",
+  "why": "The API is the product seam every client (web, mobile, future integrations) builds against: method semantics, streaming shapes, validation errors, and idempotency determine whether clients are robust or brittle. Mutations on GET, unvalidated bodies, and unkeyed money endpoints are contract violations with production consequences — designed here, enforced always.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Sync JSON: validated in, shaped out" },
+    { "t": "p", "text": "Controllers validate bodies (Jakarta constraints + explicit checks), return contract-shaped entities (Ch.4 Spring course), and error with structured envelopes (code/message/details, never stacks). Validation failures are 400s with field-level reasons — clients fix requests instead of guessing. OpenAPI generated from code (springdoc) keeps docs truthful by construction." },
+    { "t": "code", "lang": "java", "code": "@RestController\n@RequestMapping(\"/api/chat\")\nclass ChatController {\n    // POST (never GET): creates conversation state, has side effects\n    // @PostMapping(consumes = APPLICATION_JSON_VALUE)\n    // ResponseEntity<ResponseDto> send(@Valid @RequestBody ChatRequest req)\n    // SSE endpoint: produces TEXT_EVENT_STREAM_VALUE, Flux<String> frames\n}" },
+    { "t": "h", "text": "SSE streaming: frames with contracts" },
+    { "t": "p", "text": "Streaming endpoints emit **typed frames** (`token`, `citations`, `done`, `error`) as Server-Sent Events with Last-Event-ID resume support: versioned event names (Ch.1 contracts), heartbeat comments for proxy survival, and completion envelopes (final entity + usage). Untyped newline streams force clients to guess framing — frames make streaming a protocol, not a hope." },
+    { "t": "h", "text": "Tool endpoints: POST, validated, keyed, audited" },
+    { "t": "p", "text": "Mutations ride **POST** (never GET — crawlers/prefetch trigger GETs): validated bodies, idempotency keys required on money paths, audit entries per call (who/args/verdict/outcome). Reads stay GET (cacheable, safe). Method semantics protect against the entire class of accidental invocation — REST constraints as safety features." },
+    { "t": "practice", "sim": "js-playground", "title": "Classify the endpoints", "query": "function classifyEndpoint(m) {\n  if (m.method === 'GET' && m.mutates) return 'VIOLATION: mutation on GET';\n  if (m.method === 'POST' && m.money && !m.idempotencyKey) return 'VIOLATION: unkeyed money';\n  if (m.streams && !m.frames) return 'VIOLATION: untyped stream';\n  return 'sound';\n}\nconst eps = [\n  { method: 'GET', mutates: false },\n  { method: 'GET', mutates: true },\n  { method: 'POST', money: true, idempotencyKey: false },\n  { method: 'POST', money: true, idempotencyKey: true },\n  { streams: true },\n];\nfor (const e of eps) console.log(JSON.stringify(e) + ' => ' + classifyEndpoint(e));", "note": "Run it: expect sound, then three violations named precisely (GET-mutation, unkeyed-money, untyped-stream). Method semantics audited mechanically per endpoint." },
+    { "t": "keytakeaways", "items": ["Sync: validated bodies, shaped entities, structured errors, OpenAPI-generated docs", "SSE: versioned typed frames + resume + heartbeats + completion envelopes", "Mutations on POST with keys + audit; reads on GET; violations named per endpoint"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice classifier on all five endpoints and map verdicts. (b) Write the SSE frame list for a chat reply (token/citations/done/error) with one field each. (c) State the idempotency-key rule for refunds vs reads in one sentence each.",
+    "hints": [
+      "Verdicts: sound / GET-mutation / unkeyed-money / sound-keyed / untyped-stream (in order).",
+      "Frames: token{text}, citations[list], done{entity, usage}, error{code, message} — versioned names.",
+      "Refunds: keys required (recovery duplicates); reads: keyless (safe by method)."
+    ],
+    "solution": "// (a) sound / 3 violations named / sound-keyed (in order).\n// (b) token/citations/done/error frames with versioned names.\n// (c) money keyed (duplicates charge); reads keyless (GET-safe).",
+    "why": "Method-semantics auditing (per-endpoint verdicts), frame design (versioned typed events), and key rules (money keyed, reads free) are the three API judgments.",
+    "code": "// Endpoint-audit pattern: method × mutation × keys × frames checked.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Refund endpoint on GET for convenience. Verdict?",
+      "options": ["Pragmatic", "Violation: crawlers/prefetch trigger GETs — mutations ride POST with keys + audit, always", "Faster", "Cacheable refunds"],
+      "answer": 1,
+      "explain": "Method semantics are safety features: GET must be side-effect free. Convenience that executes on prefetch is an incident class."
+    },
+    {
+      "q": "SSE stream of bare newline-separated text. Gap?",
+      "options": ["None — simple", "Untyped frames: clients guess boundaries/versions/errors — versioned typed frames + resume make streaming a protocol", "Slower", "Bigger payloads"],
+      "answer": 1,
+      "explain": "Framing contracts (names, versions, resume, completion) turn streams from hopes into protocols clients can robustly consume."
+    },
+    {
+      "q": "Idempotency keys on read endpoints. Verdict?",
+      "options": ["Required everywhere", "Unnecessary: GET reads are safe by method — keys belong on mutating money paths, not cacheable reads", "Harmful", "Illegal"],
+      "answer": 1,
+      "explain": "Keys cost complexity: spend on mutations (duplicate charges), skip on safe reads. Method semantics already protect GETs."
+    }
+  ],
+  "summary": "Validated sync bodies, versioned SSE frames with resume, POST mutations with keys + audit. HTTP semantics as safety features, audited per endpoint.",
+  "next": "Surface shaped — now identity: JWT sessions, thread ownership, and tenant isolation that never trusts IDs. Next: auth that holds."
+}

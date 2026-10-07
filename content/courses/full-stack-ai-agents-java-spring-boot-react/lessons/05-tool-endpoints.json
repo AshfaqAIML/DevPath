@@ -1,0 +1,126 @@
+{
+  "title": "Tool Endpoints: Validated & Audited",
+  "slug": "05-tool-endpoints",
+  "objective": "After this lesson you will be able to expose agent tools as HTTP endpoints with schema validation, idempotency keys, approval gates, and audit trails — consumable by any client, not just your UI.",
+  "why": "Agent tools behind HTTP become products: the React UI calls them, future mobile apps will, and partners might. Endpoint discipline (validation, keys, gates, audit) makes tools safe for unknown callers — the MCP server lessons applied over HTTP with web threat models (retries across networks, auth per call, crawlers hitting GETs).",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Endpoints mirror tools, plus web threats"
+    },
+    {
+      "t": "p",
+      "text": "Each agent tool gets an HTTP twin: same schema, same validation, plus **per-call auth** (principal resolved per request), **network retry safety** (idempotency keys required on mutations — retries cross networks constantly), and **rate limits** (per key/tenant). Tool logic shared (same service methods agents call); transport concerns layered at the controller, never inside domain logic."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Endpoint guard chain: auth → validate → idempotency → gate → execute → audit\nfunction guardChain(req, tool) {\n  const steps = [];\n  if (!req.principal) return { ok: false, at: \"auth\", status: 401 };\n  const bad = tool.validate(req.body);\n  if (bad.length) return { ok: false, at: \"validate\", status: 400, bad };\n  if (tool.money && !req.body.idempotencyKey) return { ok: false, at: \"key\", status: 400 };\n  if (tool.gated && !req.approvalRef) return { ok: false, at: \"gate\", status: 403 };\n  return { ok: true };\n}\n// Order matters: auth before validation (no oracle for attackers), keys before gates.",
+      "caption": "Guard order: auth → validate → keys → gates → execute → audit"
+    },
+    {
+      "t": "h",
+      "text": "Auth before validation (no oracles)"
+    },
+    {
+      "t": "p",
+      "text": "Validate authentication **first**: validation errors on unauthenticated requests leak schema details to attackers (which fields exist, what formats). 401 before 400, always — error precedence is a security decision. Rate limits sit beside auth (throttle anonymous aggressively, authenticated by tier)."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Guard",
+        "Checks",
+        "Fails to"
+      ],
+      "rows": [
+        [
+          "Auth",
+          "Principal present, tier quota",
+          "401 / 429"
+        ],
+        [
+          "Validate",
+          "Schema, types, bounds",
+          "400 with field reasons"
+        ],
+        [
+          "Keys",
+          "Idempotency key on money paths",
+          "400 missing-key"
+        ],
+        [
+          "Gates",
+          "Approval ref on gated tools",
+          "403 ungated"
+        ]
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Guard the endpoint",
+      "query": "function guardChain(req, tool) {\n  if (!req.principal) return { ok: false, at: 'auth' };\n  if (tool.money && !(req.body || {}).idempotencyKey) return { ok: false, at: 'key' };\n  if (tool.gated && !req.approvalRef) return { ok: false, at: 'gate' };\n  return { ok: true, at: 'ok' };\n}\nconst moneyTool = { money: true, gated: true };\nconst readTool = { money: false, gated: false };\nconst cases = [\n  [{}, moneyTool],\n  [{ principal: 1, body: {} }, moneyTool],\n  [{ principal: 1, body: { idempotencyKey: 'k' } }, moneyTool],\n  [{ principal: 1, body: {}, approvalRef: 'a' }, moneyTool],\n  [{ principal: 1, body: {} }, readTool],\n];\nfor (const [req, tool] of cases) console.log(guardChain(req, tool).at);",
+      "note": "Run it: expect auth, key, gate, key, ok — in order. Approval without a key still fails (keys precede gates); the read tool passes freely."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Tool twins: same schemas/validation as agent tools + per-call auth + network-grade idempotency",
+        "Guard order auth → validate → keys → gates: precedence is security, oracle prevention first",
+        "Reads flow freely; money gated+keyed+audit — endpoint discipline mirrors tool discipline"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice guard chain and map all five verdicts. (b) Explain why case 4 (approval present, key missing) still fails — with the ordering principle. (c) Add a rate-limit check (position it in the chain with reason) plus a test proving anonymous throttling.",
+    "hints": [
+      "Verdicts: auth / key / gate / key-again / ok-read (in order) — keys precede gates, both after auth.",
+      "Case 4 fails on keys despite approval: ordering principle (keys before gates) — approval can't bless an unkeyed money call.",
+      "Rate limit beside auth (throttle anonymous aggressively): position before validation (cheap reject) with tiered quotas."
+    ],
+    "solution": "// (a) auth / key / gate / key / ok (ordering proven).\n// (b) keys-before-gates: approval needs a keyed call to bless.\n// (c) rate-limit beside auth (cheap reject, tiered quotas, anonymous strict).",
+    "why": "Ordering principles (auth→keys→gates), per-case verdicts, and rate-limit placement are the three endpoint judgments — each verified against crafted requests.",
+    "code": "// Guard-chain pattern: auth, validate, keys, gates, execute, audit — in that order.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Validation errors returned before auth checks. Issue?",
+      "options": [
+        "None — helpful",
+        "Oracle leak: unauthenticated callers learn schema details — 401 before 400, always",
+        "Slower",
+        "Bigger responses"
+      ],
+      "answer": 1,
+      "explain": "Error precedence is security: authentication gates all detail. Validation-first leaks field shapes to attackers."
+    },
+    {
+      "q": "Approval present but idempotency key missing on refund call. Verdict?",
+      "options": [
+        "Execute — approved",
+        "Refuse: keys precede gates — approval blesses keyed calls, never unkeyed ones (recovery would double-charge)",
+        "Warn and proceed",
+        "Ask again"
+      ],
+      "answer": 1,
+      "explain": "Ordering principles compose: approval authorizes, keys deduplicate. Unkeyed approval is authorization without safety."
+    },
+    {
+      "q": "Rate limiting placement in the chain?",
+      "options": [
+        "After execution",
+        "Beside auth (early, cheap reject) with tiered quotas — throttles anonymous aggressively before spending validation compute",
+        "Nowhere",
+        "Client-side only"
+      ],
+      "answer": 1,
+      "explain": "Early cheap rejects protect compute: throttle before validating, tier by trust, honest statuses for legitimate overflow."
+    }
+  ],
+  "summary": "Tool twins with per-call auth, guard order (auth→keys→gates), rate limits beside auth, audit always. Endpoints hold the same discipline as tools, plus web threats.",
+  "next": "Acting endpoints secured — now remembering across restarts: threads, messages, and checkpoints owned per user. Next: persistence."
+}

@@ -1,0 +1,131 @@
+{
+  "title": "Ship Review: Evidence to Launch",
+  "slug": "08-ship-review",
+  "objective": "After this lesson you will be able to assemble a full-stack launch bundle (contracts, gold, budgets, guardrails, runbooks, residual risks), present it weakest-first, and operate the shipped product with day-two rituals.",
+  "why": "Full-stack launches multiply evidence surfaces: API contracts, UI states, auth proofs, budgets, guardrails, runbooks — each with owners and gates. The ship review approves evidence, not enthusiasm: weakest-first presentation, conditional canary approval, and residual risks with owners and dates. Launches approved on proof ship calmly; others ship incidents.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Bundle: six sections, all evidenced"
+    },
+    {
+      "t": "p",
+      "text": "Contracts (OpenAPI + event versions, additive-clean), gold (API + UI + reconnect with per-layer scores), budgets (latency p99 + cost per task with headroom), guardrails (attack gold per layer, PII audits), operations (runbooks practiced, review queue staffed, dashboards live), residuals (named risks with owners + dates). Each section measured or contracted — manifest-audited like every capstone before."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Launch manifest: sections with gates (plain JS)\nconst manifest = {\n  contracts: { additiveClean: true, versions: [\"v1\", \"v2\"] },\n  gold: { api: \"12/12\", ui: \"10/10\", reconnect: true },\n  budgets: { p99margin: 25, costMargin: 30 },\n  guardrails: { attackGold: \"9/9\", piiAudit: true },\n  ops: { runbooksPracticed: true, queueStaffed: true },\n  residual: [{ risk: \"novel attacks\", owner: \"security\", date: \"2027-02-01\" }],\n};\n// Reviewers verify gates; residuals need owners + dates, never silence.",
+      "caption": "Manifest-first launch: gates per section, honesty per residual"
+    },
+    {
+      "t": "h",
+      "text": "Weakest-first, conditional approval"
+    },
+    {
+      "t": "p",
+      "text": "Present weakest segment first (the 10/10 with a caveat beats hidden 7/12s), then gates, then budgets — approval conditional (canary-gated %) by default, full traffic on measured green. Residual risks open the meeting, not buried in appendix: honesty up front earns the trust that carries the launch."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Section",
+        "Evidence",
+        "Gate"
+      ],
+      "rows": [
+        [
+          "Contracts",
+          "Additive-clean, versions",
+          "Breaking fails review"
+        ],
+        [
+          "Gold",
+          "API+UI+reconnect scores",
+          "No-regression"
+        ],
+        [
+          "Budgets",
+          "p99/cost headroom",
+          "Margin > 0"
+        ],
+        [
+          "Guardrails",
+          "Attack gold 9/9",
+          "Full coverage"
+        ],
+        [
+          "Ops",
+          "Runbooks practiced",
+          "Drill proof"
+        ]
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Audit the bundle",
+      "query": "const manifest = {\n  contracts: { additiveClean: true },\n  gold: { api: '12/12', ui: '9/10' },\n  budgets: { p99margin: 25 },\n  guardrails: { attackGold: '9/9' },\n  ops: { runbooksPracticed: true },\n  residual: [{ risk: 'novel attacks', owner: 'security', date: '2027-02-01' }],\n};\nconst checks = [\n  ['contracts additive', manifest.contracts.additiveClean === true],\n  ['api gold full', manifest.gold.api === '12/12'],\n  ['ui gold noted-weak', manifest.gold.ui === '9/10'],\n  ['budget headroom', manifest.budgets.p99margin > 0],\n  ['guards proven', manifest.guardrails.attackGold === '9/9'],\n  ['residuals owned', manifest.residual.every((r) => r.owner && r.date)],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'conditional approval' : 'BLOCKED');",
+      "note": "Run it: expect six PASS lines then conditional approval — including the honestly-noted 9/10 UI gold. Weakest-first with named handling passes review; hidden weakness blocks it."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Bundle: contracts + gold (API/UI/reconnect) + budgets + guardrails + ops + owned residuals",
+        "Weakest-first presentation; conditional canary approval default; full traffic on measured green",
+        "Day-two rituals (re-scores, budgets, chaos, gap audits) compound or decay — scheduled either way"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the bundle audit and confirm conditional approval with the noted weakness. (b) Drop UI gold to 7/10 unexplained and state the review outcome. (c) Draft your capstone bundle skeleton (same six sections) with one evidence line per section.",
+    "hints": [
+      "Baseline: 6 PASS + conditional (9/10 UI noted with handling beats hidden 7/12s).",
+      "Unexplained 7/10 → BLOCKED until named with fix-or-accept decision (weakness without handling fails review).",
+      "Your skeleton needs per-section evidence lines (contracts, gold scores, margins, guard proofs, ops staffing, owned residuals)."
+    ],
+    "solution": "// (a) 6 PASS + conditional (weakness named + handled).\n// (b) unexplained 7/10 → BLOCKED (named handling required).\n// (c) domain bundle with evidence per section (launch-grade coverage).",
+    "why": "Named-weakness approval (honesty passes) vs unexplained weakness (blocks) plus skeleton coverage are the three launch judgments — evidence graded, not enthusiasm.",
+    "code": "// Launch-audit pattern: per-section evidence + owned residuals.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Green averages, one unnamed weak segment. Verdict?",
+      "options": [
+        "Approve",
+        "Block until weakest named with fix-or-accept handling — hidden weakness fails review",
+        "Average harder",
+        "More segments"
+      ],
+      "answer": 1,
+      "explain": "Weakest-first honesty: named weakness with handling passes; concealed weakness blocks. Averages conceal by construction."
+    },
+    {
+      "q": "Approve full traffic at review?",
+      "options": [
+        "Yes — confidence",
+        "Conditionally (canary %) with measured promotion after — meetings scope, canaries scale",
+        "Never launch",
+        "Coin flip"
+      ],
+      "answer": 1,
+      "explain": "Conditional approval default: canary-gated percentages with vetoes armed, promotion on measured green."
+    },
+    {
+      "q": "Post-launch improvement system?",
+      "options": [
+        "Hope",
+        "Rituals: re-scores, budgets, chaos, gap audits on schedule — findings become next cycle's prevention",
+        "More features",
+        "Bigger team"
+      ],
+      "answer": 1,
+      "explain": "Monotonic improvement is ritual-driven; hope-driven systems decay silently. Schedule or slide."
+    }
+  ],
+  "summary": "Evidence bundles, weakest-first reviews, conditional approvals, day-two rituals. Launches approved on proof with owned residuals — then operated into improvement.",
+  "next": "Course complete: take the 10-question final assessment (70% to pass), then ship the Storefront Agent Product capstone — and step into Python-powered analytics."
+}

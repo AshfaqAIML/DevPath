@@ -1,0 +1,121 @@
+{
+  "title": "Persistence: Threads That Survive",
+  "slug": "06-persistence",
+  "objective": "After this lesson you will be able to persist threads/messages/checkpoints in Postgres with owner columns from migration one, resume conversations exactly, and migrate conversation schemas without losing history.",
+  "why": "In-memory conversations die with deploys; unowned rows leak across users; schemaless blobs rot unqueryable. Persistence design (owner columns day one, message/checkpoint tables, migration discipline) makes conversations durable, private, and evolvable — the difference between a demo with memory and a product with history.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Owners from migration one"
+    },
+    {
+      "t": "p",
+      "text": "Threads, messages, and checkpoints all carry **owner_id + tenant_id from the first migration** — no nullable-later, no backfill saga. Every read scopes by principal (Ch.3 predicates); every write stamps ownership server-side (never trusts client-sent owners). Retrofitting isolation rewrites history under live traffic; day-one columns never need to."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Thread store shape: ownership intrinsic, resume by checkpoint (plain JS)\n// threads(id, owner_id, tenant_id, title, created_at)\n// messages(id, thread_id, role, content, citations, created_at)\n// checkpoints(thread_id, step, state_json, created_at)\n// resume(threadId, principal):\n//   thread = threads.find(owned by principal) or 403\n//   last = checkpoints.latest(thread) → state + next step\n// Ownership checked before checkpoint read: no owned-thread, no history.",
+      "caption": "Three tables, ownership everywhere, resume from checkpoints"
+    },
+    {
+      "t": "h",
+      "text": "Migration discipline for live conversations"
+    },
+    {
+      "t": "p",
+      "text": "Schema evolves under live threads: **additive migrations** (nullable columns, new tables) deploy freely; **breaking changes** (renames, type changes) dual-write during windows, backfill offline, then cut over. Checkpoint state JSON gets **schema versions** (v1/v2 readers coexist) — old checkpoints resume under new code via migrators, never crash on unknown shapes."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Table",
+        "Purpose",
+        "Owner column"
+      ],
+      "rows": [
+        [
+          "threads",
+          "Conversation scope",
+          "owner_id + tenant_id"
+        ],
+        [
+          "messages",
+          "Turn history",
+          "via thread ownership"
+        ],
+        [
+          "checkpoints",
+          "Resumable state",
+          "via thread ownership"
+        ]
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Own every row",
+      "query": "const threads = [\n  { id: 't1', owner: 'u-a', tenant: 't-1', title: 'Returns' },\n  { id: 't2', owner: 'u-b', tenant: 't-1', title: 'Shipping' },\n];\nfunction listThreads(principal) {\n  return threads.filter((t) => t.owner === principal.userId && t.tenant === principal.tenantId).map((t) => t.id);\n}\nfunction readThread(principal, id) {\n  const t = threads.find((x) => x.id === id);\n  if (!t || t.owner !== principal.userId || t.tenant !== principal.tenantId) return { error: 'forbidden' };\n  return { thread: t };\n}\nconsole.log(listThreads({ userId: 'u-a', tenantId: 't-1' }).join(','));\nconsole.log(JSON.stringify(readThread({ userId: 'u-b', tenantId: 't-1' }, 't1')));\nconsole.log(JSON.stringify(readThread({ userId: 'u-a', tenantId: 't-1' }, 't1').thread.title));",
+      "note": "Run it: expect t1 only, then forbidden on cross-read, then Returns. List scoping plus per-row reads — both layers, proven refused where required."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Owner + tenant columns from migration one on threads/messages/checkpoints; server-stamped, never client-sent",
+        "Additive migrations freely; breaking via dual-write + backfill + cutover; checkpoint JSON versioned",
+        "Resume from checkpoints with ownership verified first — no owned thread, no history"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice store and confirm list/read/refusal. (b) Add tenant-2 isolation proof (same user id, different tenant reading t1 → forbidden). (c) Write the checkpoint-version migration rule (v1 state under v2 code) in two sentences.",
+    "hints": [
+      "Baseline: t1-only list, cross-user forbidden, owned read Returns.",
+      "Tenant proof: {userId:'u-a', tenantId:'t-2'} reading t1 → forbidden (tenant predicate independent of user).",
+      "Migration: version-tagged state JSON; v2 code runs v1 migrators on load (additive defaults), unknown versions quarantine, never crash."
+    ],
+    "solution": "// (a) scoped list / forbidden cross-read / owned Returns (in order).\n// (b) cross-tenant forbidden (tenant predicate independent).\n// (c) version-tagged checkpoints + migrators; unknown versions quarantine.",
+    "why": "List scoping (bulk), per-row reads (point), tenant independence (second axis), and version migration (evolution) are the four persistence judgments.",
+    "code": "// Ownership-audit pattern: list scope + point reads + tenant axis + versioned state.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Owner columns added 'later when needed'. Verdict?",
+      "options": [
+        "Pragmatic",
+        "Dangerous: backfilling isolation under live traffic leaks during the gap — owner columns from migration one",
+        "Faster launch",
+        "Simpler schema"
+      ],
+      "answer": 1,
+      "explain": "Isolation retrofits rewrite history under load with a leak window. Day-one columns never need backfill sagas."
+    },
+    {
+      "q": "v2 code meets v1 checkpoint state. Handling?",
+      "options": [
+        "Crash (fail fast)",
+        "Version-tagged migrators upgrade on load; unknown versions quarantine, never crash",
+        "Delete old checkpoints",
+        "Ignore versions"
+      ],
+      "answer": 1,
+      "explain": "State evolution needs readers for old shapes: migrators bridge versions, quarantine catches the unknown. Crash-on-history loses users' work."
+    },
+    {
+      "q": "Same user id, different tenant reads thread. Expected?",
+      "options": [
+        "Allowed — same user",
+        "Forbidden: tenant predicate independent of user — cross-tenant reads refuse regardless of user match",
+        "Allowed with warning",
+        "Logged only"
+      ],
+      "answer": 1,
+      "explain": "Tenant axis independent: user match without tenant match still refuses. Both predicates, always."
+    }
+  ],
+  "summary": "Ownership from migration one, additive evolution with versioned checkpoints, resume with ownership verified. History durable, private, and evolvable.",
+  "next": "Durable and private — now proven: gold evals spanning API contracts and UI states. Next: full-stack truth."
+}

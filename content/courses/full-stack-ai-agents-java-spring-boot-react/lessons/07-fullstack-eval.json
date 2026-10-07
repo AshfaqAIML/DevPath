@@ -1,0 +1,121 @@
+{
+  "title": "Full-Stack Eval: Contracts to Pixels",
+  "slug": "07-fullstack-eval",
+  "objective": "After this lesson you will be able to evaluate API contracts and UI states together, test reconnect/resume paths, and gate full-stack merges on combined gold with per-layer attribution.",
+  "why": "Backend-green plus frontend-green still ships broken products: untested seams (stream parsing, citation rendering, resume paths) fail where neither suite looks. Full-stack gold spans the wire — API JSON asserts plus rendered-state asserts plus reconnect journeys — with failures attributed per layer (contract, stream, render, auth). Coverage ends at the user's eyes, not the API boundary.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Three layers, one gold run"
+    },
+    {
+      "t": "p",
+      "text": "Each gold conversation asserts **API layer** (status codes, entity shapes, audit entries), **stream layer** (frame order, resume equality, citation attachment), and **UI layer** (rendered states, optimistic reconciliation, empty/error designs). One run, three verdicts, per-layer owners. Layers tested in isolation plus composed end to end — isolation for speed, composition for truth."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Full-stack gold item: layered expectations (plain JS)\nconst goldItem = {\n  id: \"fs7\", kind: \"edge\",\n  flow: [\"send ticket\", \"stream reply\", \"drop at 50%\", \"resume\", \"read citations\"],\n  expect: {\n    api: { status: 200, entityValid: true },\n    stream: { resumedEqual: true },\n    ui: { citationsRendered: 2, phase: \"complete\" },\n  },\n  forbid: [\"restart-from-zero\", \"uncited-price\"],\n};\n// Reconnect journeys are first-class gold citizens, not edge curiosities.",
+      "caption": "API + stream + UI expectations with forbiddens per layer"
+    },
+    {
+      "t": "h",
+      "text": "Reconnect journeys as gold"
+    },
+    {
+      "t": "p",
+      "text": "Drop-reconnect-resume flows get dedicated gold items: kill mid-stream (chaos or proxy), assert resume equality (final state equals uninterrupted), assert no duplicate side effects (idempotency across the drop). Mobile networks drop constantly — untested resume is untested core UX, not an edge case."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Layer",
+        "Asserts",
+        "Owner"
+      ],
+      "rows": [
+        [
+          "API",
+          "Status, entity shapes, audit rows",
+          "Backend"
+        ],
+        [
+          "Stream",
+          "Frame order, resume equality",
+          "Protocol"
+        ],
+        [
+          "UI",
+          "Rendered states, citations",
+          "Frontend"
+        ]
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Score the layers",
+      "query": "function checkLayers(result, gold) {\n  const issues = [];\n  for (const [layer, exp] of Object.entries(gold.expect)) {\n    const got = result[layer] || {};\n    for (const [k, v] of Object.entries(exp)) if (got[k] !== v) issues.push(layer + '.' + k);\n  }\n  return { pass: issues.length === 0, issues };\n}\nconst gold = { expect: { api: { status: 200 }, stream: { resumed: true }, ui: { citations: 2 } } };\nconst good = { api: { status: 200 }, stream: { resumed: true }, ui: { citations: 2 } };\nconst bad = { api: { status: 200 }, stream: { resumed: false }, ui: { citations: 2 } };\nconsole.log(JSON.stringify(checkLayers(good, gold)));\nconsole.log(JSON.stringify(checkLayers(bad, gold)));",
+      "note": "Run it: expect pass with [] then fail naming stream.resumed — attribution to the layer, not the stack. Fix location decided by the issue string before any code changes."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Gold spans API (contracts) + stream (frames/resume) + UI (rendered states) with per-layer owners",
+        "Reconnect journeys first-class: drop → resume equality → no duplicate effects",
+        "Isolation for speed, composition for truth — both suites, always"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice checker on both runs and map verdicts. (b) Add a UI-layer failure (citations 0 vs expected 2) and confirm attribution names ui.citations. (c) Write the reconnect gold item (drop at 50%, resume, equality + idempotency asserts) in the Ch.6 shape.",
+    "hints": [
+      "Verdicts: pass [] / fail [stream.resumed] — owner named, fix located in resume path.",
+      "UI failure: citations 0 → [ui.citations] — rendering layer indicted, API exonerated.",
+      "Reconnect gold: flow with drop step, expect resumed-equal + no-duplicate-effects, forbid restart-from-zero."
+    ],
+    "solution": "// (a) pass [] / fail [stream.resumed] (attribution precise).\n// (b) [ui.citations] on zero-render (rendering indicted).\n// (c) reconnect gold per hints (drop/resume/equality/idempotency).",
+    "why": "Layer attribution (API/stream/UI owners), reconnect gold (drop discipline), and forbidden shapes (restart/uncited) are the three full-stack eval judgments.",
+    "code": "// Layered-gold pattern: per-layer expects + forbiddens + reconnect journeys.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "API green, UI shows stale drafts. Missing layer?",
+      "options": [
+        "More API tests",
+        "UI-state gold (rendered states, stream parsing, resume paths) — full-stack truth ends at pixels",
+        "Faster API",
+        "Bigger models"
+      ],
+      "answer": 1,
+      "explain": "Backend truth ≠ product truth: rendering, parsing, and resume paths live untested between suites. Layered gold covers the wire end to end."
+    },
+    {
+      "q": "Reconnect untested ('rare edge'). Verdict?",
+      "options": [
+        "Fine",
+        "Core UX untested: mobile drops constantly — reconnect journeys are first-class gold, not curiosities",
+        "Test later",
+        "Disable mobile"
+      ],
+      "answer": 1,
+      "explain": "Drop frequency on mobile makes resume a main path. Untested resume fails exactly where users live."
+    },
+    {
+      "q": "Correct terminal, wrong citations count. Fault bin + owner?",
+      "options": [
+        "Delegation — router",
+        "UI/rendering layer (citation attach) — terminal correctness exonerates routing; count mismatch indicts render",
+        "Handoff",
+        "State"
+      ],
+      "answer": 1,
+      "explain": "Layer attribution: terminal right (routing/state fine), count wrong (rendering/attach fault). Fix location from the issue string."
+    }
+  ],
+  "summary": "API + stream + UI gold with per-layer owners, reconnect journeys first-class, forbiddens per layer. Full-stack truth ends at the user's eyes.",
+  "next": "Proven across layers — now the launch itself: evidence, gates, and residual risks. Next and last: the ship review."
+}
