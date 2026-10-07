@@ -1,0 +1,159 @@
+{
+  "courseSlug": "spring-ai-for-e-commerce",
+  "subtitle": "AI in the Spring ecosystem: ChatClient, advisors, embeddings, vector stores, and tool calling wired into Java services — enterprise patterns for storefront intelligence",
+  "audience": "Java/Spring Boot developers (comfortable with controllers, beans, and configuration) who finished Prompt Engineering 101 and RAG Agents for E-commerce conceptually and now ship the same capabilities as production Java services. Version basis stated once, used everywhere: Spring AI 1.1+/2.x (verified against 2.0.1 reference), Spring Boot 3.x, Java 17+. Java runs in your Spring project; logic twins run as executable JS in the playground.",
+  "outcomes": [
+    "Map the Spring AI landscape (ChatClient, advisors, RAG, tools, eval) and choose starters per need",
+    "Build ChatClient flows: builder beans, prompts, templates, defaults, entity outputs, streaming",
+    "Wire advisors: chat memory (with CONVERSATION_ID discipline), RAG question-answering, logging, ordering",
+    "Return structured entities with validation switches and provider-native output where supported",
+    "Expose POJO tools with @Tool methods and operate the ToolCallingAdvisor (auto-registration, ordering, user control)",
+    "Assemble RAG: ETL pipeline, pgvector store, QuestionAnswerAdvisor with metadata discipline",
+    "Evaluate with gold sets and observe via Micrometer observations + logger advisors",
+    "Ship a storefront assistant service: controller, RAG advisor, tools, eval gates, measured"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "rag-agents-for-e-commerce"],
+  "technologies": ["Spring AI 1.1+/2.x (verified vs 2.0.1 reference)", "Spring Boot 3.x", "Java 17+", "ChatClient + Advisors", "pgvector VectorStore", "Micrometer observations"],
+  "skills": ["ChatClient fluency", "advisor chains", "structured outputs", "Spring tool calling", "Spring RAG", "AI evaluation", "AI observability"],
+  "assessment": [
+    {
+      "q": "Where does ChatClient.Builder come from in a Boot app, and why not ChatClient.create(model) directly?",
+      "options": ["No difference", "Autoconfigured prototype Builder bean carries observability + customizers; create() bypasses them (use BuilderConfigurer path for multi-model instead)", "Builder is slower", "create() is deprecated"],
+      "answer": 1,
+      "explain": "Auto-configured builders wire observability and customizers. Direct create() skips them — fine for scripts, wrong for services (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Memory advisor throws IllegalArgumentException at runtime. Most likely cause?",
+      "options": ["Wrong model", "Missing ChatMemory.CONVERSATION_ID param on the call — required every time a memory advisor runs", "Too much history", "Wrong temperature"],
+      "answer": 1,
+      "explain": "The ID param is mandatory per call with memory advisors. Absence fails fast at runtime, not compile time (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Advisor order: memory before RAG advisor. Why?",
+      "options": ["Alphabetical", "History must enter the prompt before retrieval runs, so search sees conversational context (follow-ups resolve pronouns correctly)", "Faster", "Required by law"],
+      "answer": 1,
+      "explain": "Advisor chains execute in order with changes passed along: memory first enriches, RAG searches enriched. Order is semantics (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "entity() returns garbage shaped correctly. Fix switches?",
+      "options": ["Bigger model only", "validateSchema() (retry with error feedback) + useProviderStructuredOutput() (API-level constraint) — validation and native constraints, composable", "More examples", "Higher temperature"],
+      "answer": 1,
+      "explain": "EntityParamSpec switches: validate-then-retry plus provider-native schema enforcement. Shape-right-but-wrong needs validation loops (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Tools fire but never execute (definitions sent, calls ignored). Cause + fix?",
+      "options": ["Model too small", "ToolCallingAdvisor auto-registration disabled (property or per-call flag) — re-enable or drive user-controlled execution explicitly", "Wrong package", "No internet"],
+      "answer": 1,
+      "explain": "Definitions without execution = disabled auto-registration. Either re-enable or own the loop explicitly (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "ToolCallingAdvisor must run inside a custom advisor's loop. Mechanism?",
+      "options": ["Impossible", "advisor-order property below the custom advisor's order (inside-loop) vs above (outside) — ordering positions repetition", "Duplicate the advisor", "Remove custom advisors"],
+      "answer": 1,
+      "explain": "Order values place advisors inside/outside the tool loop. Default HIGHEST_PRECEDENCE+300; tune per placement need (Ch.5).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "RAG answers ignore conversation follow-ups ('what about in blue?'). Fix?",
+      "options": ["Bigger chunks", "Memory advisor BEFORE QuestionAnswerAdvisor so retrieval sees history-enriched queries", "More documents", "Lower temperature"],
+      "answer": 1,
+      "explain": "Follow-ups need conversational context at retrieval time. Advisor order carries history into search (Ch.3/6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Streaming endpoint needs entities (not yet supported reactively). Pattern?",
+      "options": ["Block forever", "Stream content, aggregate, then convert explicitly with a StructuredOutputConverter (BeanOutputConverter) — documented workaround", "Give up streaming", "Return raw strings"],
+      "answer": 1,
+      "explain": "Stream strings, collect, convert: the reference-documented bridge until reactive entities land. Workarounds stated as such (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "StTemplateRenderer vs JSON in prompts conflict. Fix?",
+      "options": ["Avoid JSON", "Custom delimiters (e.g. <>) via StTemplateRenderer builder — default {} collides with JSON braces", "NoOpRenderer always", "Escape everything manually"],
+      "answer": 1,
+      "explain": "Delimiter collision is mechanical: reconfigure start/end tokens. NoOpRenderer when no templating is wanted at all (Ch.2).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Logs show prompts but responses missing. Configuration?",
+      "options": ["Logging broken", "SimpleLoggerAdvisor request/response mapping defaults: customize via constructor functions (request/response toString + order) — plus DEBUG level on the advisor package", "Logs can't show responses", "Wrong appender"],
+      "answer": 1,
+      "explain": "Advisor logging is configurable per direction with explicit order; package log level gates output. Configure, don't assume (Ch.7).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Storefront Assistant Service",
+    "summary": "Ship a Spring Boot service exposing a store assistant: ChatClient with memory + RAG advisors, catalog/order tools with a gated refund path, structured entities for decisions, streaming chat endpoint, gold-gated evaluation, and Micrometer observations — the Java production shape of everything this track taught in JS and Python.",
+    "requirements": [
+      "ChatClient beans (default system + tools + advisors) with multi-model config where justified, observability retained",
+      "RAG: ETL-ingested catalog, pgvector store, QuestionAnswerAdvisor after memory advisor, metadata discipline",
+      "Tools: POJO @Tool methods (lookup, gated refund) with ToolCallingAdvisor ordering documented",
+      "Entities: decision/draft records via entity() with validateSchema on money paths",
+      "Streaming SSE endpoint plus sync JSON endpoint; documented entity-streaming workaround",
+      "Evaluation: gold conversation set with per-component attribution; no-regression gate on merges",
+      "Observability: SimpleLoggerAdvisor (DEBUG) + Micrometer observations with trace IDs in logs"
+    ],
+    "technical": [
+      "Version basis pinned (Spring AI 1.1+/2.x verified vs 2.0.1, Boot 3.x, Java 17+); deviations documented",
+      "Harness logic twins in runnable JS where behavior is engine-agnostic (routing, budgets, gates)",
+      "Secrets via environment only; no keys in code, logs scrubbed of PII",
+      "Numbers reproducible: gold sets, budgets, and eval scores committed"
+    ],
+    "architecture": "Five sections: (1) Service map — controllers, beans, advisors, tools, stores with versions; (2) Runs — traced conversations (happy/edge/gated) with per-component attribution; (3) Evaluation — gold scores, per-segment diffs, iterated fix; (4) Operations — observations, budgets, runbooks; (5) Honesty appendix — workarounds used (streaming entities, delimiter choices) with upstream links.",
+    "steps": [
+      "Scaffold Boot service with ChatClient bean + /ai/health endpoint; verify via curl",
+      "Add memory + RAG advisors with CONVERSATION_ID discipline; prove follow-ups resolve",
+      "Add POJO tools with gated refund path; test invalid args and approval flow",
+      "Add entity outputs with validation switches; streaming endpoint with converter bridge",
+      "Build gold eval; baseline; iterate once on weakest segment; re-score",
+      "Instrument observations + logger advisor; write runbooks; assemble the evidence bundle"
+    ],
+    "evaluation": [
+      "Follow-up resolution proven (memory-before-RAG ordering correct)",
+      "Gated refund path demonstrated end to end with audit entries",
+      "Gold baseline + iteration with per-segment diffs on the same set",
+      "Observability shows traces with token/latency attributes; PII absent from logs",
+      "Workarounds documented with upstream references, not hidden"
+    ],
+    "stretch": [
+      "Add a second ChatModel (cost/quality routing) via BuilderConfigurer with @Primary documented",
+      "Dockerize with Testcontainers-based integration tests for RAG + tools",
+      "Expose an MCP server (Spring AI MCP boot starter) for the catalog tools"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "ChatClient.Builder bean vs ChatClient.create(model) — when each?",
+      "a": "Autoconfigured Builder (prototype-scoped) for services: carries observability, customizers, and defaults; multi-model via BuilderConfigurer + @Primary to retain all wiring. create() for scripts/tests where observability doesn't matter. Bypass costs: direct builders skip customizers silently — the kind of gap found in production, not review."
+    },
+    {
+      "q": "Advisor ordering: memory before RAG — why does order matter?",
+      "a": "Advisors execute in chain order passing modifications along: memory first injects history, then RAG searches with enriched queries (follow-ups resolve). Reversed, retrieval runs on bare follow-ups ('what about blue?' searches blue, not shoes). Order is semantics: each advisor transforms shared prompt state for the next."
+    },
+    {
+      "q": "ToolCallingAdvisor auto-registration — control it.",
+      "a": "Auto-registered unless disabled globally (spring.ai.chat.client.tool-calling.enabled=false), per call (AdvisorParams flag), or suppressed by providing your own ToolAdvisor. Order via advisor-order property (inside vs outside the loop). Own the loop explicitly (user-controlled execution) when streaming intermediates to UIs or customizing management."
+    },
+    {
+      "q": "entity() with validation — explain the switches.",
+      "a": "EntityParamSpec.validateSchema() validates JSON against the entity schema with automatic retry-with-error-feedback; useProviderStructuredOutput() sends the schema as an API-level constraint where providers support it. Compose both for money paths. Converters (BeanOutputConverter) bridge streaming (aggregate-then-convert) until reactive entities land."
+    },
+    {
+      "q": "StTemplateRenderer delimiters vs JSON — resolve the conflict.",
+      "a": "Default {} template syntax collides with JSON braces in prompts. Reconfigure delimiters (StTemplateRenderer.builder().startDelimiterToken('<')...) or use NoOpTemplateRenderer when no templating is wanted. Scoped per ChatClient via .templateRenderer() — advisor-internal templates have their own customization paths."
+    },
+    {
+      "q": "RAG in Spring AI: pieces and their order?",
+      "a": "ETL pipeline (read/transform/write documents) → vector store (pgvector) → QuestionAnswerAdvisor in the ChatClient chain (after memory advisor) → entity/contract outputs. Metadata discipline (sku/version/date) carries over from RAG courses; SimpleLoggerAdvisor + Micrometer observations instrument; Testcontainers verify integration. Order: memory enriches, RAG retrieves, tools act, entities structure."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

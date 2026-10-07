@@ -1,0 +1,52 @@
+{
+  "title": "RAG in Spring: ETL to Advisor",
+  "slug": "06-rag-spring",
+  "objective": "After this lesson you will be able to run ETL ingestion into pgvector, wire QuestionAnswerAdvisor after memory, enforce metadata discipline (sku/version/date), and scope retrieval with filters.",
+  "why": "RAG theory (RAG Agents course) meets Spring machinery here: document ETL pipelines, vector-store abstractions with pgvector behind them, and the QuestionAnswerAdvisor slotting into tested chains. Enterprise RAG adds two disciplines the theory course assumed: metadata as schema (filterable, versioned, dated) and store choice with migration awareness.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "ETL: read, transform, write" },
+    { "t": "p", "text": "Ingestion is a pipeline: **readers** (PDF/text/JSON per source), **transformers** (splitters with overlap + metadata enrichment: sku/version/date), **writers** (vector store batch inserts). Spring AI models each stage explicitly — transformers compose (character split → metadata attach → filter), writers batch (throughput without timeouts). Untested ETL corrupts silently; probe each stage's output shape before wiring the next." },
+    { "t": "code", "lang": "js", "code": "// ETL stage contracts (logic twins; Java runs TokenTextSplitter + PgVectorStore)\n// read(source) -> documents[]\n// transform(doc) -> chunks[] with {text, metadata: {sku, version, updated}}\n// write(chunks) -> ids[] (batched, verified count matches input)\n// Probe rule: assert stage output shapes (counts + metadata keys) before wiring onward.", "caption": "Stage contracts with shape probes — ETL you can trust" },
+    { "t": "h", "text": "pgvector behind one interface" },
+    { "t": "p", "text": "VectorStore abstraction unifies pgvector/Chroma/MongoDB behind identical calls; **pgvector** is the production default here (Postgres you already operate, transactional guarantees, no new infrastructure). Initialize schema (extension + tables/indexes), choose index type per scale (IVFFlat/HNSW trade recall/latency/build-cost), and keep embeddings provider-pinned (mixed encoders corrupt silently — Ch.3 RAG lesson, enforced in config)." },
+    { "t": "h", "text": "Advisor placement + metadata filters" },
+    { "t": "p", "text": "`QuestionAnswerAdvisor` slots **after memory** (Ch.3 ordering) with top-k + similarity thresholds + metadata filters (category/price-band/version). Filters prune before ranking (cheap, exact); thresholds cut the tail (unknowns abstain instead of answering from weak matches). Unfiltered unthresholded retrieval answers confidently from irrelevance — the failure mode filters exist to delete." },
+    { "t": "practice", "sim": "js-playground", "title": "Filter then rank", "query": "function retrieve(chunks, query, filters, k) {\n  const kept = chunks.filter((c) => Object.entries(filters).every(([key, v]) => c.meta[key] === v));\n  const scored = kept.map((c) => ({ id: c.id, s: c.text.includes(query) ? 2 : 1 }));\n  scored.sort((a, b) => b.s - a.s);\n  return scored.slice(0, k).map((r) => r.id);\n}\nconst chunks = [\n  { id: 'a', text: 'Runner v9 price 129', meta: { cat: 'shoes', v: 3 } },\n  { id: 'b', text: 'Runner v9 price 129', meta: { cat: 'shoes', v: 2 } },\n  { id: 'c', text: 'Sandal summer sale', meta: { cat: 'shoes', v: 3 } },\n];\nconsole.log(retrieve(chunks, 'Runner', { cat: 'shoes' }, 5).join(','));\nconsole.log(retrieve(chunks, 'Runner', { cat: 'shoes', v: 3 }, 5).join(','));\nconsole.log(retrieve(chunks, 'Runner', { cat: 'hats' }, 5).join(',') || 'empty-correct');", "note": "Run it: expect a,b,c then a,c (version filter drops stale b) then empty-correct (no hats exist — abstain, don't hallucinate). Filters prune exactly; thresholds would cut weak scores next." },
+    { "t": "keytakeaways", "items": ["ETL stages with shape probes; transformers compose; writers batch with count verification", "pgvector default (operated Postgres, transactional); index per scale; encoders pinned", "Advisor after memory; metadata filters prune, thresholds cut tails, abstention beats weak answers"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice retrieval on all three filter sets and map outcomes. (b) Add a similarity threshold (score ≥2 to keep) and state which result changes. (c) Write the metadata schema for catalog chunks (5+ keys with staleness roles) defending each key.",
+    "hints": [
+      "Outcomes: unfiltered trio; version-3 pair (stale b dropped); empty hats (abstain-correct).",
+      "Threshold ≥2 keeps exact matches only: 'Sandal' (score 1) drops from query 1 — precision over recall, abstention risk noted.",
+      "Schema: sku (cite/filter), category (filter), price (money gate), version (staleness), updated (recency) — each key serving filters, citations, or freshness."
+    ],
+    "solution": "// (a) trio / versioned-pair / empty-correct (filters prune exactly).\n// (b) threshold drops score-1 stragglers (precision up, abstention risk noted).\n// (c) sku/category/price/version/updated (filter/cite/freshness roles each).",
+    "why": "Filter-then-threshold mechanics (exact pruning, score cutting) plus metadata-as-schema (every key serving a downstream need) are the two RAG-operational judgments.",
+    "code": "// Filter-threshold pattern: exact prune first, score cut second, abstain last.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Stale v2 price quoted confidently. Missing layers?",
+      "options": ["More chunks", "Version metadata + filter (current only) + freshness guard: staleness is a metadata failure, fixed in schema not prompts", "Bigger model", "More examples"],
+      "answer": 1,
+      "explain": "Version/date metadata with filters and guards prevents stale answers structurally. Prompt pleading can't fix missing metadata."
+    },
+    {
+      "q": "Empty retrieval returns best-effort guesses. Fix?",
+      "options": ["Lower threshold to zero", "Abstention path: empty results abstain with gap noted — guesses from absence are hallucinations with extra steps", "More documents", "Higher top-k"],
+      "answer": 1,
+      "explain": "Empty-correct beats invented: abstention with gap analysis preserves trust and diagnoses corpus holes."
+    },
+    {
+      "q": "Mixed embedding providers across index and query. Consequence?",
+      "options": ["Slight degradation", "Confident nonsense: unshared geometry scores noise — pin encoders, verify match, never mix", "Faster", "Cheaper"],
+      "answer": 1,
+      "explain": "Encoder compatibility is load-bearing (RAG Ch.3): mismatched spaces produce decimals without meaning. Pinned and verified."
+    }
+  ],
+  "summary": "ETL with probes, pgvector by default, advisor after memory, metadata filters + thresholds + abstention. Enterprise RAG is metadata discipline plus ordering.",
+  "next": "Grounded and placed — now proven: gold evals, observations, and the honesty appendix. Next: eval and observability."
+}

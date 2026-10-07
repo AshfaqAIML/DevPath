@@ -1,0 +1,52 @@
+{
+  "title": "Eval & Observability in Spring",
+  "slug": "07-eval-observability",
+  "objective": "After this lesson you will be able to build gold conversation evals with per-component attribution, instrument with SimpleLoggerAdvisor + Micrometer observations, and keep PII out of logs and eval sets alike.",
+  "why": "'Works in the demo controller' is not production evidence: advisor chains, tool loops, and RAG retrieval interact in ways unit tests miss. Gold evals with attribution plus observation-backed traces (tokens, latency, verdicts per span) make Spring AI services measurable — and PII discipline keeps measurement legal.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Gold evals with Spring attribution" },
+    { "t": "p", "text": "Gold conversations assert per-component expectations: memory resolved the follow-up (advisor), retrieval hit policy chunks (RAG), refund gated (tools), draft met contract (entity). Failures attribute to advisor/tool/prompt respectively — the LangGraph Ch.9 and CrewAI Ch.8 discipline, Spring-flavored. Same-set version diffs gate merges; Testcontainers run RAG/tool integration gold against real pgvector." },
+    { "t": "code", "lang": "js", "code": "// Gold runner shape: conversations with component slots (plain JS)\n// gold = [{id, kind, turns, expect: {memory, retrieval, gate, contract}, forbid: [...]}]\n// run(conversation) -> trace {spans, verdicts, tokens}\n// check(trace, gold) -> per-component pass/fail + forbiddens scan\n// diff(v1report, v2report) -> per-segment deltas + gate verdict", "caption": "Eval as pipeline: gold → traces → attribution → diffs → gates" },
+    { "t": "h", "text": "Observations: Micrometer spans with AI attributes" },
+    { "t": "p", "text": "Spring AI emits **Micrometer observations** for model and vector-store calls: trace IDs propagate, token/latency attributes attach, dashboards aggregate per operation. Pair with SimpleLoggerAdvisor (DEBUG, PII-scrubbed mappers) for prompt-level detail. Observations answer 'how slow/expensive?' per span; gold answers 'how correct?' per release — operations needs both, neither substitutes." },
+    { "t": "h", "text": "PII discipline across eval and logs" },
+    { "t": "p", "text": "Gold sets and logs both attract real ticket text — with emails, cards, order IDs. Scrub identically in both (same redaction functions, shared library): eval sets committed scrubbed, logs mapped through redaction pre-persistence. Unscrubbed fixtures violate retention the moment they're committed; unscrubbed logs, the moment they're written." },
+    { "t": "practice", "sim": "js-playground", "title": "Attribute the drop", "query": "function checkRun(trace, gold) {\n  const issues = [];\n  for (const [comp, exp] of Object.entries(gold.expect)) {\n    const got = trace[comp];\n    if (JSON.stringify(got) !== JSON.stringify(exp)) issues.push(comp);\n  }\n  for (const f of gold.forbid || []) if (JSON.stringify(trace).includes(f)) issues.push('forbidden:' + f);\n  return { pass: issues.length === 0, issues };\n}\nconst gold = { expect: { memory: 'resolved', retrieval: 'hit', gate: 'held' }, forbid: ['ungated-refund'] };\nconst good = { memory: 'resolved', retrieval: 'hit', gate: 'held' };\nconst bad = { memory: 'resolved', retrieval: 'miss', gate: 'held' };\nconsole.log(JSON.stringify(checkRun(good, gold)));\nconsole.log(JSON.stringify(checkRun(bad, gold)));", "note": "Run it: expect pass with [] then fail naming retrieval — attribution to the component, not the team. Fix location decided by the issue string before any code changes." },
+    { "t": "keytakeaways", "items": ["Gold with per-component slots (memory/retrieval/gate/contract) + forbiddens across happy/edge/attack", "Micrometer observations (tokens/latency per span) + scrubbed logger advisors: operations needs both", "PII scrubbed identically in eval sets and logs — shared redaction library, committed clean"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice checker on both traces and map verdicts. (b) Add a forbidden-triggering trace (ungated-refund present) and confirm the forbid fires. (c) Write the Testcontainers scope for RAG+tools integration gold (what runs real, what stubs, what asserts).",
+    "hints": [
+      "Verdicts: pass [] / fail [retrieval] — owner named, fix located upstream of generation.",
+      "Forbid proof: inject 'ungated-refund' into any field → forbidden fires alongside/ instead of slot issues.",
+      "Scope: real pgvector + real tools against seeded fixtures; stubbed model responses (recorded); asserts on retrieval hits + gate holds + contract shapes."
+    ],
+    "solution": "// (a) pass [] / fail [retrieval] (attribution precise).\n// (b) forbid fires on injected ungated-refund (invariant guard proven).\n// (c) real store+tools, stubbed model, asserted retrieval/gates/contracts.",
+    "why": "Attribution precision (component owners), invariant guards (forbiddens), and integration scope (real stores, stubbed models) are the three eval judgments — each decisive for different failure classes.",
+    "code": "// Eval-scope pattern: real stateful deps, stubbed models, asserted contracts.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "All unit tests pass; follow-ups fail in staging. Missing layer?",
+      "options": ["More units", "Conversation gold with per-component attribution: memory-resolution failures exist only end to end", "Faster CI", "More advisors"],
+      "answer": 1,
+      "explain": "Composition truth (advisor interaction across turns) escapes unit tests structurally. Gold conversations with slots catch integration reality."
+    },
+    {
+      "q": "Gold set committed with live customer emails. Issue + fix?",
+      "options": ["Richer fixtures", "Retention violation: scrub with the shared redaction library, identical to log scrubbing — committed PII is a breach surface", "Better realism", "More items"],
+      "answer": 1,
+      "explain": "Fixtures are code: committed PII violates retention from commit time. Shared scrubbers keep eval and logs equally clean."
+    },
+    {
+      "q": "Latency regressed; which spans + what attribution?",
+      "options": ["Guess the slowest", "Micrometer per-operation spans: compare p95 per span vs baseline — regressed span names the component (retrieval? tools? model?)", "Add caching blindly", "Bigger instances"],
+      "answer": 1,
+      "explain": "Observations attribute latency per operation: measurements name components, baselines prove regressions. Instrumented spans replace speculation."
+    }
+  ],
+  "summary": "Component-slotted gold, Micrometer + scrubbed logging, PII discipline everywhere, Testcontainers integration scope. Measured Spring services, legally held.",
+  "next": "Measured and observed — now assemble the storefront service end to end. Next and last: the capstone build."
+}

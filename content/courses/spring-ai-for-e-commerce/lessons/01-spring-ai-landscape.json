@@ -1,0 +1,51 @@
+{
+  "title": "Spring AI Landscape & Versions",
+  "slug": "01-spring-ai-landscape",
+  "objective": "After this lesson you will be able to map Spring AI's pieces (ChatClient, advisors, RAG, tools, eval, observability, MCP starters), choose starters per need, and pin versions with upgrade awareness.",
+  "why": "Spring AI is an ecosystem, not a library: models, advisors, vector stores, tools, MCP starters, observability — each with starters and versions. Teams fail by grabbing all starters (dependency sprawl) or none (hand-rolled HTTP). Landscape fluency (what exists, what each piece owns, what versions assume) precedes every build decision in this course.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Pieces and their jobs" },
+    { "t": "p", "text": "**ChatClient**: fluent model access (prompts, entities, streaming). **Advisors**: composable interceptors (memory, RAG, logging, tool-calling). **Models**: chat/embedding/image/audio per provider (OpenAI, Anthropic, Ollama, PostgresML…). **Vector stores**: pgvector/Chroma/MongoDB/etc. behind one interface. **Tools**: POJO methods as model tools. **MCP starters**: client/server boot integration. **Observability/eval**: Micrometer observations, logger advisors, Testcontainers patterns." },
+    { "t": "table", "headers": ["Need", "Starter/piece", "Lesson"], "rows": [["Chat + streaming", "model starter (e.g. openai) + ChatClient", "Ch.2"], ["Memory + RAG", "advisors + vector store starter", "Ch.3/6"], ["Structured outputs", "core converters (built in)", "Ch.4"], ["Tool calling", "core + model support", "Ch.5"], ["Eval/obs", "testcontainers + micrometer", "Ch.7"], ["MCP servers", "mcp server boot starter", "Ch.8 capstone"]] },
+    { "t": "h", "text": "Version basis (stated once)" },
+    { "t": "p", "text": "This course verified against **Spring AI 2.0.1 reference, Spring Boot 3.x, Java 17+**: ChatClient fluent shapes, advisor ordering semantics, ToolCallingAdvisor auto-registration, entity() switches, StTemplateRenderer defaults all confirmed there. v1→v2 migrations (package moves, advisor builders) get explicit notes where shapes changed. Pin versions in build files; read upgrade notes per minor — AI libraries move quarterly." },
+    { "t": "callout", "variant": "tip", "title": "Docs-first habit", "text": "Spring AI moves quarterly: before trusting any API shape in this course (or elsewhere), check it against the current reference — the version basis above tells you exactly which reference. Shapes confirmed here were verified against 2.0.1; your project's pinned version is the final authority." },
+    { "t": "practice", "sim": "js-playground", "title": "Choose the starters", "query": "function startersFor(needs) {\n  const out = new Set(['spring-boot-starter']);\n  if (needs.chat) out.add('model-starter (e.g. openai)');\n  if (needs.rag) out.add('vector-store-starter (e.g. pgvector)');\n  if (needs.eval) out.add('testcontainers');\n  if (needs.obs) out.add('micrometer-observation');\n  if (needs.mcp) out.add('mcp-server-boot-starter');\n  return [...out];\n}\nconsole.log(startersFor({ chat: true }).join(','));\nconsole.log(startersFor({ chat: true, rag: true, eval: true, obs: true }).join(','));\nconsole.log('minimal for chat-only: ' + startersFor({ chat: true }).length + ' starters');", "note": "Run it: chat-only stays minimal (2 starters); full RAG service pulls five. Starters follow needs, never FOMO — each dependency is maintenance surface." },
+    { "t": "keytakeaways", "items": ["Pieces own jobs: ChatClient access, advisors interception, stores behind one interface, starters per need", "Version basis Spring AI 1.1+/2.x (verified 2.0.1), Boot 3.x, Java 17+ — pin and read upgrade notes", "Starters follow needs; minimal viable dependencies, never FOMO sprawl"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice selector for chat-only vs full-service and compare counts. (b) Map your capstone project to starters with one-line need each. (c) State the version-pinning rule (what pins, where, what breaks unpinned in 6 months).",
+    "hints": [
+      "Counts: 2 vs 5 — each starter traces to a need, none to fashion.",
+      "Capstone mapping: model starter (chat), pgvector (RAG), testcontainers (eval), micrometer (obs) — MCP starter only if exposing servers.",
+      "Pin: BOM + plugin versions in build files; unpinned AI deps drift quarterly into breaking shapes."
+    ],
+    "solution": "// (a) 2 vs 5 starters (needs-driven delta).\n// (b) per-need starter map (no FOMO entries).\n// (c) pin BOM/plugins; unpinned drifts break quarterly.",
+    "why": "Needs-driven dependencies (counted, justified) plus version discipline (pinned, upgrade-read) are the two scaffolding judgments — each verified before any AI code exists.",
+    "code": "// Starter-selection pattern: needs in, minimal starters out.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Greenfield assistant service starters?",
+      "options": ["Every AI starter available", "Needs-driven minimum: model starter + additions per proven need (RAG→vector store, eval→testcontainers)", "None — hand-rolled HTTP", "Copy another project"],
+      "answer": 1,
+      "explain": "Dependencies are maintenance surface: each starter earns inclusion via a need. Sprawled starters rot unmaintained."
+    },
+    {
+      "q": "Unpinned Spring AI version for a year. Risk?",
+      "options": ["None", "Quarterly drift into breaking shapes (advisor APIs, package moves) — pin BOM/versions, read upgrade notes per minor", "Faster builds", "Better features automatically"],
+      "answer": 1,
+      "explain": "Fast-moving AI libraries break shapes regularly. Pins + upgrade notes convert surprise into planned work."
+    },
+    {
+      "q": "MCP server need arises mid-project. Addition?",
+      "options": ["Rewrite everything", "mcp server boot starter (stdio/SSE/streamable variants per Ch.8) — needs-driven, not upfront", "Custom protocol", "Ignore it"],
+      "answer": 1,
+      "explain": "Starters arrive with needs: MCP exposure need → MCP starter. Upfront speculation wastes; just-in-time addition fits."
+    }
+  ],
+  "summary": "Landscape mapped (pieces own jobs), versions pinned (2.0.1-verified basis), starters needs-driven. Scaffolding before code, always.",
+  "next": "Pinned and minimal — now the fluent core: ChatClient builders, prompts, entities, streaming. Next: ChatClient fluency."
+}

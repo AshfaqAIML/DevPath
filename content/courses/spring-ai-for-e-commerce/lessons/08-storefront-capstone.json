@@ -1,0 +1,52 @@
+{
+  "title": "Capstone: Storefront Assistant Service",
+  "slug": "08-storefront-capstone",
+  "objective": "After this lesson you will be able to assemble the complete Spring AI storefront service (controller, ChatClient, advisors, tools, RAG, entities, streaming, eval, observability) from the course's pieces, evaluate it with attribution, and present it as traced runs plus a findings memo — ready for the final assessment and your capstone project.",
+  "why": "Seven lessons of Spring pieces; one lesson of shipped service. The walkthrough performs the full build once — pinned versions, builder beans, ordered advisors, validated entities, gated tools, pgvector RAG, gold eval, observations — so your project repeats a demonstrated shape with numbers attached. Assembly is the final Spring AI skill.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "Assembly manifest (gates per arrow)" },
+    { "t": "p", "text": "Build in dependency order with verification per stage: (1) **scaffold pinned** (BOM/versions + /ai/health via curl); (2) **ChatClient + advisors** (memory→RAG→logging, follow-ups proven); (3) **tools** (POJO + gated refund, invalid-args tested); (4) **entities + streaming** (validated decisions, SSE endpoint + converter bridge); (5) **gold eval** (baseline + iteration with attribution); (6) **observations** (traces with tokens, PII-free logs). No stage starts on unverified prior output." },
+    { "t": "code", "lang": "js", "code": "// Assembly manifest: stages with gates (plain JS)\nconst manifest = {\n  pins: { springAi: \"1.1+/2.x\", boot: \"3.x\", java: \"17+\" },\n  chat: { bean: \"Builder-based\", streaming: true, entityBridge: true },\n  advisors: [\"memory\", \"rag\", \"logging\"],\n  tools: [\"lookup\", \"search\", \"refund@gated\"],\n  rag: { store: \"pgvector\", metadata: true, followups: true },\n  eval: { gold: 12, gate: \"no-regressions\" },\n  ops: { observations: true, piiClean: true },\n};\n// Every entry measured, contracted, or audited — manifest as machine-checkable build.", "caption": "Manifest-first: pins, beans, advisors, tools, RAG, eval, ops" },
+    { "t": "h", "text": "Three traced runs (the demo that proves)" },
+    { "t": "p", "text": "Happy (SKU question → RAG hit → cited entity answer), edge (vague follow-up → memory-enriched retrieval → clarified), gated ($500 refund → approval → validated execution → audit). Each with trace (spans + verdicts), token counts, and timing: capability, context-handling, and governance demonstrated — not described." },
+    { "t": "h", "text": "Findings memo (your project's shape)" },
+    { "t": "p", "text": "Baseline per segment with weakest named, one iterated fix with delta (follow-up resolution after advisor reorder), workaround honesty (streaming-entity bridge, delimiter choices with upstream links), and deferred list (second model routing, MCP server exposure). Measured, cited, improvable — with workarounds documented, never hidden." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the manifest", "query": "const manifest = {\n  pins: { springAi: true, boot: true, java: true },\n  chat: { bean: true, streaming: true },\n  advisors: ['memory', 'rag', 'logging'],\n  tools: ['lookup', 'refund@gated'],\n  rag: { followups: true },\n  eval: { gold: 12 },\n};\nconst checks = [\n  ['versions pinned', manifest.pins.springAi && manifest.pins.boot],\n  ['advisor order', manifest.advisors.indexOf('memory') < manifest.advisors.indexOf('rag')],\n  ['money gated', manifest.tools.some((t) => t.endsWith('@gated'))],\n  ['followups proven', manifest.rag.followups === true],\n  ['eval sized', manifest.eval.gold >= 10],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'manifest sound' : 'manifest BROKEN');", "note": "Run it: expect five PASS lines then 'manifest sound'. Pins, order, gates, follow-ups, gold size — architecture audited before a single bean wires." },
+    { "t": "keytakeaways", "items": ["Assemble in dependency order with per-stage gates: pins → chat/advisors → tools → entities/stream → eval → ops", "Trace one run per kind (happy/edge/gated) with spans, tokens, timing", "Memo: baselines, iterated delta, workaround honesty, deferred list"]} ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm soundness. (b) Break it (drop the gated suffix) and state the review outcome + required fix. (c) Draft your capstone manifest (same shape, your domain's pieces) with version pins and one gate per destructive path.",
+    "hints": [
+      "Baseline sound (5 PASS); gateless money fails the audit → assembly halts until gated (gates gate builds).",
+      "Ungated money in review = launch-blocking finding with the elicitation/idempotency/audit fix named.",
+      "Your manifest needs pins, advisor order, gate flags, follow-up proof, sized gold — coverage thinking for builds."
+    ],
+    "solution": "// (a) 5 PASS + sound.\n// (b) gate check FAILs → assembly halts; fix: gate + idempotency + audit.\n// (c) domain manifest with pins, order, gates, proofs, sized gold.",
+    "why": "Gate-driven assembly (failed gates halt downstream) plus manifest auditing makes Spring builds verifiable at every arrow — practiced on breakage, not just success.",
+    "code": "// Manifest-audit pattern: pins, order, gates, proofs, gold size as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the service?",
+      "options": ["Tools first", "Pins → chat/advisors → tools → entities/stream → eval → ops — dependencies first, verified per stage", "Eval first", "Gates optional"],
+      "answer": 1,
+      "explain": "Dependency order with per-stage gates: scaffold proves ground that money and eval require. Each stage verified before downstream builds."
+    },
+    {
+      "q": "Streaming endpoint ships raw strings (no converter). Gap + fix?",
+      "options": ["Fine", "Entity bridge missing: collect + BeanOutputConverter.convert explicitly (documented workaround) — raw strings break typed consumers", "Bigger buffers", "Block instead"],
+      "answer": 1,
+      "explain": "Typed consumers need entities: the bridge converts explicitly with documented status. Raw-string streaming shifts parsing burden downstream."
+    },
+    {
+      "q": "Workarounds (delimiter choices, streaming bridge) undocumented. Issue?",
+      "options": ["None — code speaks", "Honesty appendix missing: workarounds need upstream links + revisit conditions, or they fossilize into idioms nobody questions", "More comments", "Fewer workarounds"],
+      "answer": 1,
+      "explain": "Undocumented workarounds become permanent idioms: appendix with links + revisit triggers keeps them temporary and reviewable."
+    }
+  ],
+  "summary": "Manifest-audited assembly, one traced run per kind with tokens/timing, findings per segment, honesty appendix on workarounds. Seven lessons become one operating service — assessment next, capstone after.",
+  "next": "Course complete: take the 10-question final assessment (70% to pass), then ship the Storefront Assistant Service capstone — and step into full-stack agents."
+}

@@ -1,0 +1,53 @@
+{
+  "title": "ChatClient Fluency",
+  "slug": "02-chatclient-fluency",
+  "objective": "After this lesson you will be able to build ChatClient beans (prototype Builder), compose prompts (system/user/templates/params), return entities and streams, set defaults, and choose create() vs Builder correctly.",
+  "why": "ChatClient is the daily driver: every prompt, entity, and stream flows through its fluent chain. Fluency (builder beans, template params, entity switches, streaming shapes, defaults, mutate()) determines whether service code stays clean or accretes prompt spaghetti. The reference-verified shapes in this lesson are the ones production code uses.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Builder beans, not create() in services" },
+    { "t": "p", "text": "Inject the autoconfigured prototype `ChatClient.Builder`, call `.build()` — observability and customizers ride along. `ChatClient.create(model)` / `builder(model)` bypass them: fine for scripts, wrong for services. Multi-model? `ChatClientBuilderConfigurer` + `@Primary`, never bare builders that drop wiring." },
+    { "t": "code", "lang": "java", "code": "@RestController\nclass AIController {\n    private final ChatClient chatClient;\n    AIController(ChatClient.Builder builder) { this.chatClient = builder.build(); }\n    @GetMapping(\"/ai\")\n    String generation(String input) {\n        return chatClient.prompt().user(input).call().content();\n    }\n}" },
+    { "t": "h", "text": "Prompts: templates, params, system+user" },
+    { "t": "p", "text": "Templates with `{params}` substituted at runtime (StTemplateRenderer default); custom delimiters (`<>`) when JSON collides; system+user composition per call; defaults (`defaultSystem`) set once in config. Params bind data without concatenation — concatenation is injection's doorway (validated inputs still prefer params over pasting)." },
+    { "t": "code", "lang": "java", "code": "String answer = chatClient.prompt()\n    .user(u -> u.text(\"5 movies, soundtrack by {composer}\").param(\"composer\", \"John Williams\"))\n    .call().content();\n// Entity + switches live here too: .entity(ActorFilms.class, spec -> spec.validateSchema())" },
+    { "t": "h", "text": "Entities and streams (with the documented bridge)" },
+    { "t": "p", "text": "`.entity(Class)` maps outputs to records (plus `ParameterizedTypeReference` for generics, switches for validation/provider-native). `.stream().content()` fluxes strings; `.stream().chatResponse()` fluxes metadata. Reactive entities aren't supported yet: stream strings, collect, convert explicitly via `BeanOutputConverter` — the reference's own workaround, stated as such, not hidden." },
+    { "t": "practice", "sim": "js-playground", "title": "Shape the call", "query": "function buildCall(kind) {\n  const shapes = {\n    content: ['prompt', 'user', 'call', 'content'],\n    entity: ['prompt', 'user', 'call', 'entity(Class, spec?)'],\n    stream: ['prompt', 'user', 'stream', 'content'],\n    streamEntity: ['prompt', 'user', 'stream', 'collect', 'convert(BeanOutputConverter)'],\n  };\n  return shapes[kind] || null;\n}\nconsole.log(buildCall('content').join('->'));\nconsole.log(buildCall('entity').join('->'));\nconsole.log(buildCall('stream').join('->'));\nconsole.log(buildCall('streamEntity').join('->'));\nconsole.log('unknown=' + buildCall('telepathy'));", "note": "Run it: four call shapes with the streaming-entity bridge explicit. Shape choice is a decision (sync/async × string/entity) — the bridge documents what reactive entities will one day replace." },
+    { "t": "keytakeaways", "items": ["Builder beans carry observability; create() bypasses — services use beans, scripts use create", "Templates bind params (custom delimiters vs JSON); defaults set once; system+user compose per call", "Entities via switches; streams via Flux; reactive entities bridged (collect+convert) until native"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice shape mapper and state all four chains. (b) Write the controller method for a triage endpoint (ticket param → category entity with validateSchema) in real Java shape. (c) State when Builder-with-configurer beats create() with the observability argument.",
+    "hints": [
+      "Chains: content/entity/stream/streamEntity(+bridge) — each a decision, plus the unknown→null guard.",
+      "Triage: @GetMapping + prompt().user(ticket).call().entity(Triage.class, spec -> spec.validateSchema()) — contract-shaped output.",
+      "Configurer path retains customizers + observations across multi-model setups; create() drops both silently."
+    ],
+    "solution": "// (a) four chains + null guard (in order).\n// (b) triage endpoint per hints (validated entity output).\n// (c) services needing observability/customizers across models → configurer path.",
+    "why": "Call-shape fluency (four chains + bridge), contract output (validated entities), and wiring discipline (beans over create) are the three ChatClient judgments.",
+    "code": "// Endpoint pattern: prompt → user(param) → call → entity-validated.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Service uses ChatClient.create(model) everywhere. Issue?",
+      "options": ["None", "Bypassed observability + customizers: autoconfigured Builder beans (or configurer path) carry production wiring create() drops", "Slower", "Wrong results"],
+      "answer": 1,
+      "explain": "Wiring discipline: beans for services (observability retained), create() for scripts. Silent drops surface in production, never review."
+    },
+    {
+      "q": "JSON-heavy prompt with {} templates breaking. Fix?",
+      "options": ["Avoid JSON", "Custom StTemplateRenderer delimiters (<>) — default braces collide with JSON; NoOp when templating unwanted", "Escape manually forever", "String concat"],
+      "answer": 1,
+      "explain": "Mechanical delimiter collision with a configured fix. Scoped per client; advisor templates have separate paths."
+    },
+    {
+      "q": "Streaming endpoint needs entity records today. Pattern?",
+      "options": ["Wait for native support", "Stream strings → collect → BeanOutputConverter.convert explicitly (documented bridge)", "Block on call()", "Return raw strings"],
+      "answer": 1,
+      "explain": "The reference's own workaround: aggregate then convert. Stated as bridge (with upstream direction), not hidden as idiom."
+    }
+  ],
+  "summary": "Beans over create, params over pasting, entities with switches, streams with bridges. Fluent shapes verified against the 2.0.1 reference.",
+  "next": "Calls fluent — now interception: memory, RAG, logging advisors in order. Next: the advisor chain."
+}

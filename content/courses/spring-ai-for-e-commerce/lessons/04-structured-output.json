@@ -1,0 +1,52 @@
+{
+  "title": "Structured Output: Entities That Hold",
+  "slug": "04-structured-output",
+  "objective": "After this lesson you will be able to map model output to records via entity(), enforce validation with validateSchema(), constrain natively with useProviderStructuredOutput(), and bridge streaming via explicit converters.",
+  "why": "Routers switch on categories, UIs render fields, databases store rows — all need typed records, not prose. Spring AI's entity pipeline (converters + validation switches + provider-native constraints) turns probabilistic text into reliable Java objects with retry semantics. Unvalidated parsing is the silent-corruption vector of Java AI services.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "entity(): text to records" },
+    { "t": "p", "text": "`.entity(ActorFilms.class)` maps output to a record; `entity(new ParameterizedTypeReference<List<X>>(){})` handles generics; custom `StructuredOutputConverter` instances plug bespoke parsing. Records carry the contract (types, bounds) that prose lacks — downstream code consumes fields, never substrings." },
+    { "t": "code", "lang": "java", "code": "record Triage(String category, double confidence) {}\nTriage t = chatClient.prompt().user(ticket)\n    .call().entity(Triage.class, spec -> spec\n        .useProviderStructuredOutput()\n        .validateSchema());\n// Native constraint (where supported) + validate-then-retry with error feedback." },
+    { "t": "h", "text": "Switches: validateSchema + useProviderStructuredOutput" },
+    { "t": "p", "text": "`validateSchema()` validates JSON against the entity schema, retrying automatically with error feedback on failure. `useProviderStructuredOutput()` sends the schema as an API-level constraint (provider support varies — check per model). Compose both on money paths; either alone where justified. Switches are independent and composable by design — combine deliberately, not maximally." },
+    { "t": "h", "text": "Converters and the streaming bridge" },
+    { "t": "p", "text": "`BeanOutputConverter` (and Map/List variants) convert explicitly — including the documented streaming bridge: collect Flux strings, convert after. Converters also supply `{format}` template variables binding schemas into prompts. Explicit conversion beats implicit parsing everywhere: same converter in prompt template and result parsing guarantees shape agreement." },
+    { "t": "practice", "sim": "js-playground", "title": "Validate the entity", "query": "function validateEntity(obj, spec) {\n  const issues = [];\n  for (const [k, rule] of Object.entries(spec)) {\n    const v = obj[k];\n    if (v === undefined) { issues.push('missing:' + k); continue; }\n    if (rule === 'enum' && !['billing', 'shipping', 'returns'].includes(v)) issues.push('bad-enum:' + k);\n    if (rule === 'score' && (typeof v !== 'number' || v < 0 || v > 1)) issues.push('bad-range:' + k);\n  }\n  return issues.length ? { ok: false, issues } : { ok: true };\n}\nconst spec = { category: 'enum', confidence: 'score' };\nconsole.log(JSON.stringify(validateEntity({ category: 'shipping', confidence: 0.9 }, spec)));\nconsole.log(JSON.stringify(validateEntity({ category: 'Exchange', confidence: 0.9 }, spec)));\nconsole.log(JSON.stringify(validateEntity({ category: 'billing' }, spec)));", "note": "Run it: expect ok, then bad-enum, then missing-confidence. Entity validation mirrors the switches: shape, enums, ranges — each violation named for retry feedback." },
+    { "t": "keytakeaways", "items": ["entity() maps to records/generics; converters bridge streaming explicitly", "validateSchema (retry w/ feedback) + useProviderStructuredOutput (native constraint), composable per path", "Same converter in template + parsing guarantees shape agreement"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice validator on all three entities and map verdicts. (b) Write the Triage record + entity() call with both switches for a money-adjacent path (stated why both). (c) State when provider-native alone suffices vs validation-required.",
+    "hints": [
+      "Verdicts: ok / bad-enum / missing (in order) — each named for retry feedback.",
+      "Money paths compose both: native constrains generation, validation verifies receipt (defense in depth on value).",
+      "Native suffices for well-supported providers on low-stakes shapes; validation required on money/contract outputs regardless."
+    ],
+    "solution": "// (a) ok / bad-enum / missing (named violations).\n// (b) Triage record + dual switches (defense in depth on value).\n// (c) native for supported low-stakes; validation mandatory on money/contracts.",
+    "why": "Violation naming (retry feedback), switch composition (defense in depth), and sufficiency judgment (when native alone holds) are the three entity judgments.",
+    "code": "// Entity pattern: record + switches per path value + converter reuse.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Entity parses but values are wrong-shaped (confidence 'high'). Missing?",
+      "options": ["Bigger model", "validateSchema(): schema validation with retry-with-feedback catches shape-right/wrong-typed outputs", "More examples", "Lower temperature"],
+      "answer": 1,
+      "explain": "Parsing succeeds on malformed values; validation enforces types/ranges with automatic retry carrying the error."
+    },
+    {
+      "q": "Streaming endpoint needs records now. Pattern?",
+      "options": ["Wait for native support", "Collect Flux strings, BeanOutputConverter.convert explicitly (documented bridge)", "Block on call()", "Raw strings to UI"],
+      "answer": 1,
+      "explain": "The reference bridge: aggregate then convert. Stated as workaround with upstream direction, not hidden idiom."
+    },
+    {
+      "q": "Same converter in template {format} and result parsing. Why?",
+      "options": ["DRY aesthetics", "Shape agreement guaranteed: prompt demands exactly what parsing accepts — drift impossible by construction", "Faster", "Required by compiler"],
+      "answer": 1,
+      "explain": "Single converter source synchronizes demand and acceptance. Separate definitions drift into mutual incompatibility."
+    }
+  ],
+  "summary": "Records via entity(), validation via switches, streaming via converter bridge, agreement via converter reuse. Probabilistic text becomes reliable objects.",
+  "next": "Shaped outputs flowing — now actions: POJO tools, advisors, and user-controlled loops. Next: tool calling, Spring style."
+}

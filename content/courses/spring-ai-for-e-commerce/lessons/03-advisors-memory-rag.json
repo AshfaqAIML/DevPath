@@ -1,0 +1,52 @@
+{
+  "title": "Advisors: Memory, RAG, Logging",
+  "slug": "03-advisors-memory-rag",
+  "objective": "After this lesson you will be able to chain advisors in semantic order (memory → RAG → logging), pass CONVERSATION_ID correctly, scope QuestionAnswerAdvisor retrieval, and instrument with SimpleLoggerAdvisor at DEBUG.",
+  "why": "Advisors are Spring AI's interception layer: cross-cutting prompt enrichment without tangling business code. Order is semantics (memory before RAG so searches see history), IDs are mandatory (CONVERSATION_ID every memory call), and logging is debuggability. Misordered advisors silently degrade (follow-ups searching blind); missing IDs fail loudly at runtime.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Order is semantics" },
+    { "t": "p", "text": "Advisors execute in registration order, each transforming shared prompt state: `MessageChatMemoryAdvisor` (inject history) → `QuestionAnswerAdvisor` (retrieve with enriched query) → `SimpleLoggerAdvisor` (log final prompt + response) → `ToolCallingAdvisor` (auto, positioned by order property). Reversed memory/RAG order searches bare follow-ups ('blue?' searches blue, not shoes). Order deliberately, document why inline." },
+    { "t": "code", "lang": "java", "code": "chatClient.prompt()\n    .advisors(a -> a\n        .advisors(\n            MessageChatMemoryAdvisor.builder(chatMemory).build(),\n            QuestionAnswerAdvisor.builder(vectorStore).build(),\n            new SimpleLoggerAdvisor())\n        .param(ChatMemory.CONVERSATION_ID, conversationId))\n    .user(userText).call().content();\n// Memory enriches → RAG searches enriched → logger records final. Omit the ID param: IllegalArgumentException." },
+    { "t": "h", "text": "CONVERSATION_ID discipline" },
+    { "t": "p", "text": "Memory advisors key history by conversation: the ID param is **mandatory per call** (runtime exception otherwise), stable per user-thread (UUIDs, not incrementing counters shared across users), and logged with traces (which conversation misbehaved?). Missing IDs fail fast (good); shared IDs across users leak histories (catastrophic — test isolation explicitly)." },
+    { "t": "h", "text": "Logging that debugs (DEBUG-gated)" },
+    { "t": "p", "text": "`SimpleLoggerAdvisor` logs advised requests + responses; constructor variants customize mapping and order; package level `logging.level.org.springframework.ai.chat.client.advisor=DEBUG` gates output. Log prompts/responses in dev/staging freely; scrub PII before production logging (advisor-mapped custom functions that redact). Unlogged advisor chains debug by imagination." },
+    { "t": "practice", "sim": "js-playground", "title": "Order the chain", "query": "function orderAdvisors(names) {\n  const rank = { memory: 0, rag: 1, logger: 2, tools: 3 };\n  const ordered = [...names].sort((a, b) => rank[a] - rank[b]);\n  const ok = names.every((n, i) => true);\n  return { ordered: ordered.join(','), memoryBeforeRag: ordered.indexOf('memory') < ordered.indexOf('rag') };\n}\nconst r1 = orderAdvisors(['rag', 'memory', 'logger']);\nconsole.log(r1.ordered);\nconsole.log('memory-before-rag: ' + r1.memoryBeforeRag);\nconst r2 = orderAdvisors(['logger', 'tools']);\nconsole.log(r2.ordered);\nconsole.log('memory-before-rag: ' + r2.memoryBeforeRag);", "note": "Run it: expect memory,rag,logger with true — then logger,tools with false (no memory/RAG present: indexOf -1 < -1 is false, correctly signaling absence, not order). Ordering proves semantics; absence proves nothing." },
+    { "t": "keytakeaways", "items": ["Advisor order is semantics: memory → RAG → logging (+ tool advisor positioned) — document why inline", "CONVERSATION_ID mandatory per call, stable per thread, isolation-tested across users", "SimpleLoggerAdvisor + DEBUG level + PII scrubbing: debuggability without leakage"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice orderer on both inputs and explain the false in case two. (b) Write the follow-up failure without memory-first (bare 'blue?' retrieval) vs fixed, as two advisor lists. (c) State the PII rule for advisor logs in production (what gets scrubbed, where).",
+    "hints": [
+      "Case one orders correctly (memory,rag,logger, true). Case two: logger,tools with false — absence, not misorder (no memory/RAG to compare).",
+      "Broken: [rag] alone on 'blue?' (searches color). Fixed: [memory, rag] (history enriches to shoes before search).",
+      "Scrub PII in custom request/response mappers pre-log; eval datasets scrubbed identically; raw ticket text never in DEBUG prod logs."
+    ],
+    "solution": "// (a) ordered + true; absent-pair false correctly (absence ≠ misorder).\n// (b) [rag] blind vs [memory, rag] enriched (order as semantics).\n// (c) custom mappers scrub PII pre-log; eval sets scrubbed identically.",
+    "why": "Absence-vs-misorder distinction (false means nothing to compare), order-as-semantics (follow-up proof), and scrub-before-log (PII discipline) are the three advisor judgments.",
+    "code": "// Advisor-order pattern: memory → RAG → logging, documented inline.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Follow-ups failing ('blue?' searches blue). Fix?",
+      "options": ["Bigger chunks", "Memory advisor before RAG advisor: history enriches queries pre-retrieval", "More documents", "Lower temperature"],
+      "answer": 1,
+      "explain": "Order is semantics: RAG on bare follow-ups searches fragments. Memory-first carries conversation into retrieval."
+    },
+    {
+      "q": "IllegalArgumentException on memory-advisor call. Cause?",
+      "options": ["Wrong model", "Missing ChatMemory.CONVERSATION_ID param — mandatory per call", "Too much history", "Debug level"],
+      "answer": 1,
+      "explain": "Fail-fast by design: no ID, no history scoping possible. Stable per-thread IDs, isolation-tested."
+    },
+    {
+      "q": "Production DEBUG logs with ticket PII. Fix?",
+      "options": ["Disable all logging", "Custom request/response mappers scrubbing PII pre-log; eval sets scrubbed identically", "Finer levels", "More disk"],
+      "answer": 1,
+      "explain": "Debuggability without leakage: scrub in mappers before persistence. Raw PII in logs violates retention silently."
+    }
+  ],
+  "summary": "Memory → RAG → logging (+ tools positioned), IDs mandatory and isolated, logs DEBUG-gated and scrubbed. Order documents itself inline.",
+  "next": "Enriched prompts flowing — now shaped outputs: entities, converters, and validation switches. Next: structured results."
+}

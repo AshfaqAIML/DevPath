@@ -1,0 +1,52 @@
+{
+  "title": "Tool Calling, Spring Style",
+  "slug": "05-tool-calling",
+  "objective": "After this lesson you will be able to expose POJO methods as tools, operate ToolCallingAdvisor auto-registration (ordering, disabling, user control), and scope tools per call with context passing.",
+  "why": "Agents act through tools, and Spring AI's story is idiomatic: plain methods become model-callable with framework-managed execution loops. The mechanics that matter — auto-registration defaults, advisor ordering inside/outside loops, user-controlled execution for UIs — decide whether tools behave transparently or mysteriously in production services.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "POJOs become tools" },
+    { "t": "p", "text": "Plain methods with `@Tool` annotations register via `.tools(new OrderTools())` or `defaultTools(...)`: descriptions steer selection, signatures constrain args, return values feed the loop. No framework base classes, no XML — methods you already write, annotated. Tool design (naming, sibling disambiguation, closed shapes) carries over whole from LangGraph Ch.7 and MCP courses." },
+    { "t": "code", "lang": "java", "code": "class OrderTools {\n    @Tool(description = \"Look up one order by exact ID. For browsing many orders use search instead.\")\n    Order lookup(String orderId) { /* ... */ }\n}\nString out = chatClient.prompt(\"Where is ORD-4821?\")\n    .tools(new OrderTools())   // ToolCallingAdvisor auto-registers here\n    .call().content();\n// Auto-registration at HIGHEST_PRECEDENCE + 300 unless disabled/superseded." },
+    { "t": "h", "text": "Auto-registration: control it deliberately" },
+    { "t": "p", "text": "The advisor auto-registers **unless**: globally disabled (`spring.ai.chat.client.tool-calling.enabled=false`), per-call disabled (`AdvisorParams.toolCallingAdvisorAutoRegister(false)`), or superseded (your own ToolAdvisor present). Disable globally when tools must never auto-fire (all calls user-driven); per-call when streaming intermediates to UIs; custom builder bean for manager-level control. Each mode tested, never assumed." },
+    { "t": "h", "text": "Ordering: inside vs outside the loop" },
+    { "t": "p", "text": "The `advisor-order` property positions repetition: value **below** advisors that must repeat per iteration (RAG refresh each loop), **above** those running once per request (audit logging). Default suits the common case; custom loops need explicit ordering with the inside/outside decision recorded. Misordered advisors execute at wrong cadence silently — the setting to check first when loops behave oddly." },
+    { "t": "practice", "sim": "js-playground", "title": "Place the advisor", "query": "function advisorOrder(advisors) {\n  const rank = { memory: 0, rag: 1, tools: 2, audit: 3 };\n  return [...advisors].sort((a, b) => rank[a] - rank[b]).join(',');\n}\nconsole.log(advisorOrder(['tools', 'memory', 'rag']));\nconsole.log(advisorOrder(['audit', 'tools']));\nconsole.log('loop-members: tools-inside means repeat-per-iteration');", "note": "Run it: expect memory,rag,tools then tools,audit (audit ranked outside/after the loop, running once per request). Order positions repetition: inside-loop advisors repeat per iteration, outside run once per request." },
+    { "t": "keytakeaways", "items": ["POJO @Tool methods + .tools(): framework-managed loops, zero base classes", "Auto-registration controlled globally/per-call/custom-builder; user-controlled execution for UI streaming", "advisor-order positions repetition (inside) vs once (outside); misordering fails silently"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice orderer on both inputs and explain audit-last. (b) Write the disable matrix (global/per-call/custom-builder) with one use case each. (c) State what breaks if audit logging runs inside the tool loop, in one sentence.",
+    "hints": [
+      "Orders: memory,rag,tools then audit,tools — audit outside (once per request) by rank.",
+      "Global: all-manual shops; per-call: UI streaming intermediates; custom-builder: manager-level control (documented wiring).",
+      "Audit-inside duplicates log entries per iteration (noise + cost) and misattributes single decisions as repeated ones."
+    ],
+    "solution": "// (a) ordered chains per rank; audit outside by design.\n// (b) global/per-call/custom-builder with use cases (control granularity).\n// (c) duplicated audit entries misattribute single decisions repeatedly.",
+    "why": "Ordering semantics (repetition positioning), disable granularity (control levels), and audit placement (once-per-request) are the three tool-loop judgments.",
+    "code": "// Advisor-order pattern: inside-loop vs outside documented per advisor.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Tools sent to model but never execute. Cause + fix?",
+      "options": ["Wrong model", "Auto-registration disabled (property/per-call/custom-supersede) — re-enable or drive user-controlled execution explicitly", "Missing @Tool", "No internet"],
+      "answer": 1,
+      "explain": "Definitions without execution means the loop advisor is off. Re-enable deliberately or own the loop with user-controlled execution."
+    },
+    {
+      "q": "Audit log shows every decision 5x. Cause?",
+      "options": ["Verbose model", "Audit advisor ordered inside the tool loop — move outside (higher order value) for once-per-request logging", "Too many tools", "Debug level"],
+      "answer": 1,
+      "explain": "Repetition follows order values: inside-loop advisors repeat per iteration. Audit belongs outside unless per-iteration detail is the point."
+    },
+    {
+      "q": "Streaming intermediates to a UI while tools run. Setup?",
+      "options": ["Impossible", "Per-call disable auto-registration + user-controlled loop: observe each iteration, forward chunks, drive explicitly", "Bigger buffers", "Polling"],
+      "answer": 1,
+      "explain": "User-controlled execution exists for observable loops: disable auto, drive manually, stream deliberately. The documented UI pattern."
+    }
+  ],
+  "summary": "POJO tools, controlled auto-registration, ordered repetition, user-driven loops when UIs demand. Tool mechanics verified against the 2.0.1 reference.",
+  "next": "Acting with tools — now grounding with documents: ETL, pgvector, and metadata discipline. Next: Spring RAG."
+}
