@@ -1,0 +1,176 @@
+{
+  "courseSlug": "agent-harnesses-for-developers",
+  "subtitle": "Build the scaffolding around your models: context windows, memory, tool registries, planning loops, and debugging — the harness patterns behind reliable agents",
+  "audience": "Developers who finished LangGraph for E-commerce and Prompt Engineering 101 and now build the code around models: the loops, stores, registries, and guardrails that turn API calls into dependable agents. All harness machinery runs as executable JS in the playground; framework mappings (LangGraph/CrewAI/MCP concepts) are named per pattern.",
+  "outcomes": [
+    "Distinguish harnesses from frameworks and decide build-vs-buy per component",
+    "Budget context windows with truncation, summarization, and priority ordering",
+    "Design memory systems (episodic, semantic, working) with retrieval and decay policies",
+    "Run tool registries with versioning, discovery, and deprecation discipline",
+    "Implement planning loops (ReAct, plan-act-observe) with termination proofs",
+    "Classify errors and apply retries, repairs, and escalations per class",
+    "Debug with traces, deterministic replay, dry runs, and time-travel",
+    "Enforce guardrails (validation layers, approval hooks, audit) inside the harness",
+    "Evaluate harnesses with gold sets, regression gates, and behavior dashboards",
+    "Ship a support-agent harness: loop, memory, tools, guards, eval — measured"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "langgraph-for-e-commerce"],
+  "technologies": ["JavaScript (ES2020+) for harness machinery", "LangGraph/CrewAI/MCP concept mappings", "JSON contracts", "Gold eval harnesses"],
+  "skills": ["harness design", "context management", "memory systems", "tool registries", "planning loops", "agent debugging", "harness evaluation"],
+  "assessment": [
+    {
+      "q": "Framework vs harness — boundary?",
+      "options": ["Synonyms", "Frameworks provide orchestration primitives; harnesses are your scaffolding (loops, memory, registries, guards) around models — build-vs-buy decided per component", "Harnesses replace models", "No difference"],
+      "answer": 1,
+      "explain": "Buy orchestration where standard (graphs, checkpointing); build domain scaffolding (memory policies, guardrails, eval) where differentiated (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Context overflow on long tickets. First lever?",
+      "options": ["Bigger window", "Budgeted management: priority ordering, truncation of low-value history, summarization checkpoints — fit by design, not by window size", "Fewer features", "Shorter prompts only"],
+      "answer": 1,
+      "explain": "Windows are budgets to manage (priority/truncate/summarize), not walls to hit. Bigger windows postpone the same discipline at higher cost (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Agent forgets user preferences across sessions. Missing?",
+      "options": ["Bigger prompts", "Long-term memory with retrieval (preferences store) — conversation history is not memory; memory needs write/read/decay policies", "More context", "Faster model"],
+      "answer": 1,
+      "explain": "History ≠ memory: persisted, retrievable, decaying preference stores with explicit write/read rules (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Two tool versions live; agents call the deprecated one. Fix?",
+      "options": ["Delete it instantly", "Registry discipline: versioned tools, deprecation flags with migration notes, discovery filtered to current — plus a removal date", "More tools", "Rename everything"],
+      "answer": 1,
+      "explain": "Registries manage lifecycles: versions coexist, deprecations warn with deadlines, discovery hides the dead. Deletion without migration breaks callers (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Plan-act-observe loop runs 40 iterations on a stuck task. Missing?",
+      "options": ["Better planner", "Termination: max iterations + progress detection (no-new-information cutoff) + stuck escalation — loops need proofs, not hope", "More tools", "Faster model"],
+      "answer": 1,
+      "explain": "Planning loops terminate by construction (caps + progress criteria) or hang on hard tasks. Stuck detection routes to humans with trails (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Rate-limit error retried instantly 10x, then quota-burned. Correct policy?",
+      "options": ["Retry harder", "Classified errors: rate-limit → backoff with jitter + budget; auth → no retry (escalate); invalid args → repair-or-quarantine, never blind retry", "No retries ever", "Infinite retries"],
+      "answer": 1,
+      "explain": "Error classes dictate policy: transients backoff, auth escalates, invalid repairs. Blind retry converts incidents into bigger incidents (Ch.6).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Heisenbug agent failure, unreproducible. Missing capability?",
+      "options": ["More logging", "Deterministic replay: logged inputs + seeded randomness + frozen tool responses reproduce exactly — plus dry-run mode for safe re-execution", "Bigger traces", "New framework"],
+      "answer": 1,
+      "explain": "Reproducibility is designed: seeded randomness, recorded tool responses, dry-run sandboxes. Unreproducible bugs are harness gaps (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Draft ence contains a refund promise the policy forbids. Catch layer?",
+      "options": ["Better prompts", "Output validation layer in the harness (forbidden-pattern + policy checks) with quarantine routing — guardrails enforce, prompts request", "Trust the model", "Human review of everything"],
+      "answer": 1,
+      "explain": "Harness guardrails (validation layers, approval hooks) enforce where prompts merely ask. Layered, logged, tested with attack gold (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Harness v2 passes unit tests, support quality drops. Missing?",
+      "options": ["More units", "Behavior gold runs (end-to-end conversations) with per-component attribution — harness changes need behavior gates, not just unit gates", "Faster CI", "More agents"],
+      "answer": 1,
+      "explain": "Harness refactors shift behavior silently: gold conversation sets with attribution catch composition effects units miss (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Build vs buy for the checkpoint store?",
+      "options": ["Always build", "Buy where standard (framework checkpointers, vector DBs); build where differentiated (domain memory policies, guardrails, eval) — decide per component by moat and maintenance", "Always buy", "Neither — no state"],
+      "answer": 1,
+      "explain": "Component-wise economics: commodity infrastructure bought, differentiating scaffolding built. Blanket rules waste both ways (Ch.1 + capstone).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Memory grows unboundedly across sessions. Policy?",
+      "options": ["Unlimited storage", "Write rules (what merits memory) + decay/pruning + retrieval budgets — memory managed like context: budgeted, retrieved, expired", "Delete all memory", "Bigger vectors"],
+      "answer": 1,
+      "explain": "Memory without policy is a landfill: write criteria, decay schedules, retrieval caps. Every stored byte needs a retention reason (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Dry-run mode value during a refactor?",
+      "options": ["None — slower", "Safe re-execution: full loop with side effects stubbed/mocked — proves logic changes without touching the world", "Production traffic", "Load testing"],
+      "answer": 1,
+      "explain": "Dry runs separate logic verification from side-effect risk: replay gold with stubs, diff behaviors, ship logic confidently (Ch.7).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Support-Agent Harness",
+    "summary": "Build the complete harness around a support agent: budgeted context management, episodic + semantic memory with policies, versioned tool registry, terminating planning loop, classified error handling, trace/replay debugging, layered guardrails, and gold-gated evaluation — measured, documented, and demoed on failure cases as well as happy paths.",
+    "requirements": [
+      "Context manager: token budgets per section, truncation policy, summarization checkpoints with tests",
+      "Memory: episodic (tickets) + semantic (preferences/facts) stores with write/read/decay rules and retrieval budgets",
+      "Tool registry: versioned tools with deprecation flags, discovery filtering, and selection tests",
+      "Planning loop: ReAct-style with max iterations, progress detection, and stuck escalation",
+      "Error policy: classified errors (transient/auth/invalid) with retry/repair/escalate paths and budgets",
+      "Debugging: trace spans, deterministic replay (seeded), dry-run mode, time-travel on checkpoints",
+      "Guardrails: input validation, output filters, approval hooks on money, audit logging",
+      "Evaluation: gold conversation set with per-component attribution and no-regression gates"
+    ],
+    "technical": [
+      "All machinery in runnable JS with asserted behaviors; framework mappings named per pattern",
+      "Memory and registries inspectable (dump/list commands) for debugging",
+      "Deterministic replay proven: same inputs + seed → identical traces",
+      "Numbers reproducible: gold sets, budgets, and policies committed"
+    ],
+    "architecture": "Five sections: (1) Harness map — components with build-vs-buy rationale each; (2) Runs — happy/edge/failure traces with attribution; (3) Evaluation — gold scores, per-component diffs, iterated fix; (4) Operations — budgets, decay schedules, deprecation calendar; (5) Failure gallery — one demonstrated failure per class with the catching layer named.",
+    "steps": [
+      "Map components with build-vs-buy per piece; scaffold loop + registry + memory stores",
+      "Implement context budgets and memory policies with tests",
+      "Add error classification, retries, guardrails, and audit logging",
+      "Build trace/replay/dry-run debugging; prove determinism",
+      "Run gold eval; attribute failures; iterate once; re-score",
+      "Assemble the operations docs (budgets, schedules, calendars) and failure gallery"
+    ],
+    "evaluation": [
+      "Context fits budgets on longest gold conversations (measured, not hoped)",
+      "Memory retrieves correctly with decay demonstrated; no unbounded growth",
+      "Registry deprecation path proven (old version warns, discovery filters)",
+      "Loop terminates on stuck tasks (proven by forced-stuck test); errors classified with paths",
+      "Replay deterministic (identical traces); gold baseline + iteration with attribution"
+    ],
+    "stretch": [
+      "Add semantic caching with tenant isolation and report hit-rate + savings",
+      "Multi-agent extension: two harnessed agents sharing the task board protocol",
+      "Cost attribution per harness component with a monthly projection"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Harness vs framework — where do you draw the line?",
+      "a": "Frameworks own orchestration primitives (graphs, checkpointing, tool protocols); harnesses own domain scaffolding (memory policies, guardrails, eval harnesses, context budgets, error taxonomies). Buy commodity infrastructure, build differentiating policy — decided per component by moat (does it encode our domain judgment?) and maintenance (who tends it?). Blanket build wastes on solved problems; blanket buy surrenders differentiation."
+    },
+    {
+      "q": "Context keeps overflowing. Your system?",
+      "a": "Budgets per section (system/examples/history/tools) with priority ordering, truncation from the bottom of value (verbose history first, contracts never), summarization checkpoints at thresholds, and retrieval instead of stuffing for archives. Measure fit on longest gold conversations; overflow is a budget-design failure, solved structurally — never by hoping for bigger windows."
+    },
+    {
+      "q": "How do you make agent behavior reproducible for debugging?",
+      "a": "Deterministic replay: log all inputs, seed all randomness, record/freeze tool responses (cassettes), and provide dry-run mode stubbing side effects. Same inputs + seed must yield identical traces — proven by test, not assumed. Time-travel on checkpoints then lets you fork from any step. Unreproducible bugs indicate harness gaps (unseeded randomness, unlogged inputs), fixed structurally."
+    },
+    {
+      "q": "Error taxonomy for agent tool calls — design it.",
+      "a": "Classes: transient (timeouts, rate limits → backoff with jitter + budgets), auth (→ no retry, escalate + rotate), invalid (schema violations → repair-once with quoted error, then quarantine), downstream-down (→ fallback cascade), budget-exhausted (→ escalate with trail). Each class owns retry/repair/escalate policy plus tests proving the path — blind retry is banned by code review checklist."
+    },
+    {
+      "q": "Memory that grows forever — policy?",
+      "a": "Write rules (what merits persistence: preferences, facts, open loops — not chatter), decay schedules (recency + importance scoring, prune below threshold), retrieval budgets (top-k with diversity), and audit commands (inspect/export/delete per user). Every stored byte carries a retention reason; unbounded growth is a policy absence, fixed by rules not disks."
+    },
+    {
+      "q": "Guardrails in the harness vs in prompts — division of labor?",
+      "a": "Prompts request (scope sentences, abstention paths, contracts); harness enforces (validation layers, approval hooks, output filters, audit logs, rate limits). Request-only protection fails open on the first bypass; enforcement without prompt cooperation fights the model unnecessarily. Both layers, each tested: prompt compliance in eval, enforcement in attack gold with bypass attempts."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

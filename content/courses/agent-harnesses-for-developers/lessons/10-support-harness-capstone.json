@@ -1,0 +1,52 @@
+{
+  "title": "Capstone: Support-Agent Harness",
+  "slug": "10-support-harness-capstone",
+  "objective": "After this lesson you will be able to assemble the complete support-agent harness (budgets, memory, registry, loops, errors, traces, guards, gold) from the course's pieces, evaluate it with attribution, and present it as traced runs plus a findings memo — ready for the final assessment and your capstone project.",
+  "why": "Nine lessons of scaffolding pieces; one lesson of assembled system. The walkthrough builds the harness once — budgeted context, policy memory, versioned tools, terminating loops, classified errors, replayable traces, enforced guardrails, gated gold — so your project repeats a demonstrated shape with numbers attached. Assembly is the final harness skill.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "Assembly manifest (gates per piece)" },
+    { "t": "p", "text": "Build in dependency order with verification per piece: (1) **budgets + registry** (context fits longest gold; tools versioned); (2) **memory policies** (write/decay/retrieve proven); (3) **loops + errors** (termination + classification tested); (4) **traces + guards** (replay deterministic, attack gold passing); (5) **gold eval** (baseline + one iteration with attribution). No piece starts on unverified prior output — dependency order with proof." },
+    { "t": "code", "lang": "js", "code": "// Assembly manifest: pieces with gates (plain JS)\nconst manifest = {\n  budgets: { longestFit: true, truncationPolicy: true },\n  memory: { decayProven: true, floorsTested: true },\n  registry: { versions: 3, deprecations: 1, selectionTests: \"6/6\" },\n  loops: { termination: \"caps+delta\", stuckTest: true },\n  errors: { classes: 5, blindRetry: \"banned\" },\n  traces: { deterministic: true, dryRun: true },\n  guards: { attackGold: \"9/9\", audit: true },\n  eval: { gold: 15, gate: \"no-regressions\" },\n};\n// Every entry measured or contracted — manifest as machine-checkable build.", "caption": "Manifest-first: gates per piece, numbers per claim" },
+    { "t": "h", "text": "Three traced runs (the demo that proves)" },
+    { "t": "p", "text": "Happy (late parcel → answered with citations, 3 steps), edge (vague multi-issue → clarified → resolved), attack (injection → quarantined pre-tool with logged attempt). Each with trace (spans + verdicts), memory reads/writes shown, guardrail verdicts attached. Demos without traces are theater; with per-piece evidence, proof." },
+    { "t": "h", "text": "Findings memo (your project's shape)" },
+    { "t": "p", "text": "Baseline per component with weakest named, one iterated fix with delta (memory retrieval tuning after misses), budget headroom statement, decay schedule, deprecation calendar, and deferred list (semantic caching next, multi-agent later). Measured, cited, improvable — the deliverable stakeholders fund and operators run." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the manifest", "query": "const manifest = {\n  budgets: { longestFit: true },\n  memory: { decayProven: true },\n  registry: { selectionTests: '6/6' },\n  loops: { termination: true },\n  errors: { classes: 5 },\n  traces: { deterministic: true },\n  guards: { attackGold: '9/9' },\n  eval: { gold: 15 },\n};\nconst checks = [\n  ['budgets fit', manifest.budgets.longestFit === true],\n  ['memory decays', manifest.memory.decayProven === true],\n  ['registry tested', manifest.registry.selectionTests === '6/6'],\n  ['loops terminate', manifest.loops.termination === true],\n  ['errors classified', manifest.errors.classes === 5],\n  ['traces replay', manifest.traces.deterministic === true],\n  ['guards proven', manifest.guards.attackGold === '9/9'],\n  ['eval sized', manifest.eval.gold >= 12],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'manifest sound' : 'manifest BROKEN');", "note": "Run it: expect eight PASS lines then 'manifest sound'. Piecewise gates audited before a single conversation runs — manifest-first means machine-checkable harnesses." },
+    { "t": "keytakeaways", "items": ["Assemble in dependency order with per-piece gates: budgets → memory → registry → loops/errors → traces/guards → eval", "Trace one run per kind (happy/edge/attack) with piece-level evidence; memo findings per component", "Deferred list with reasons; budgets/schedules/calendars as living operations docs"]} ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm soundness. (b) Break it (attack gold 7/9) and state the review outcome + required fix. (c) Draft your capstone manifest (same shape, your domain's pieces) with one measured-or-contracted entry per piece.",
+    "hints": [
+      "Baseline sound (8 PASS); broken guards fail the manifest → assembly halts until 9/9 (gates gate).",
+      "7/9 attack gold means two bypass shapes unhandled: add rules + gold pins, re-run to full coverage.",
+      "Your manifest needs per-piece entries with numbers-or-contracts: budgets, policies, versions, terminations, classes, determinism, gold."
+    ],
+    "solution": "// (a) 8 PASS + sound.\n// (b) guards check FAILs → assembly halts; fix rules + pin gold to 9/9.\n// (c) domain manifest with measured/contracted entries per piece (coverage thinking).",
+    "why": "Gate-driven assembly (failed gates halt downstream) plus manifest auditing makes harness construction verifiable at every arrow — practiced on breakage, not just success.",
+    "code": "// Manifest-audit pattern: per-piece requirements as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the harness?",
+      "options": ["Guards first", "Budgets → memory → registry → loops/errors → traces/guards → eval — dependencies first, verified per piece", "Eval first", "Loops last (optional)"],
+      "answer": 1,
+      "explain": "Dependency order with per-piece gates: each layer builds on verified prior output. Budgets and registries precede the loops that consume them."
+    },
+    {
+      "q": "Attack gold at 7/9 during assembly. Proceed?",
+      "options": ["Yes — close enough", "No: gate fails → fix rules + pin gold to full coverage first; unhandled bypass shapes ship as incidents", "Ship and fix later", "Lower the bar"],
+      "answer": 1,
+      "explain": "Gates gate assembly, not just merges: 2 unhandled bypasses are 2 future incidents with known shapes. Fix, pin, re-audit."
+    },
+    {
+      "q": "Capstone manifest's job in review?",
+      "options": ["Decoration", "Machine-checkable architecture: per-piece requirements audited before runs — coverage thinking for builds", "Longer docs", "Compliance theater"],
+      "answer": 1,
+      "explain": "Manifests convert architecture opinions into runnable checks. Reviewers verify gates, not prose — coverage thinking extends to builds."
+    }
+  ],
+  "summary": "Manifest-audited assembly, one traced run per kind with piece evidence, findings per component, deferred list with reasons. Nine lessons become one operating harness — assessment next, capstone after.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship the Support-Agent Harness capstone — and step into Spring AI."
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Error Taxonomy: Retry, Repair, Escalate",
+  "slug": "06-error-taxonomy",
+  "objective": "After this lesson you will be able to classify tool/model errors (transient, auth, invalid, downstream-down, budget-exhausted), assign retry/repair/escalate policies per class with budgets, and ban blind retry by checklist.",
+  "why": "Uniform error handling fails uniformly: blind retries burn quotas on auth errors, silent catches hide invalid args, crashes on transients abandon recoverable work. Classified errors route correctly — transients backoff, auth escalates, invalid repairs once then quarantines, downstreams cascade to fallbacks. Taxonomy converts error handling from catch-all hope into per-class policy.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Five classes, five policies" },
+    { "t": "p", "text": "**Transient** (timeouts, rate limits, 5xx): backoff with jitter + attempt/time budgets, then escalate. **Auth** (401/403, expired keys): zero retries — escalate + rotate immediately (retrying burns + logs secrets). **Invalid** (schema violations, bad args): repair once with quoted error, then quarantine. **Downstream-down** (dependency outage): fallback cascade (Ch.4 Production). **Budget-exhausted** (caps hit): escalate with trail, never extend silently." },
+    { "t": "code", "lang": "js", "code": "// Classified executor: policy per error class (plain JS)\nconst POLICIES = {\n  transient: { retries: 3, backoffMs: [200, 800, 2000], then: \"escalate\" },\n  auth: { retries: 0, then: \"escalate-and-rotate\" },\n  invalid: { retries: 0, repair: 1, then: \"quarantine\" },\n  downstream: { retries: 1, then: \"fallback-cascade\" },\n  budget: { retries: 0, then: \"escalate-with-trail\" },\n};\nfunction classify(err) {\n  if (err.status === 401 || err.status === 403) return \"auth\";\n  if (err.status >= 500 || err.code === \"TIMEOUT\" || err.code === \"RATE_LIMIT\") return \"transient\";\n  if (err.status === 400 || err.code === \"SCHEMA\") return \"invalid\";\n  if (err.code === \"DOWN\") return \"downstream\";\n  return \"budget\";\n}\n// Classification first, policy second — never catch-all, never blind retry.", "caption": "Classes route to policies; policies carry budgets; budgets escalate" },
+    { "t": "h", "text": "Repair once, with quoted errors" },
+    { "t": "p", "text": "Invalid-argument failures get **one repair attempt** with the violation quoted back (schema error text included), then quarantine with evidence. Unbounded repair loops hallucinate fixes onto broken premises; single repair respects the model's fix rate while bounding the burn. Quarantine preserves raw inputs for parser tuning — the OpenDataLoader discipline, applied to tool calls." },
+    { "t": "h", "text": "Jitter and idempotency guard retries" },
+    { "t": "p", "text": "Retries need **jitter** (randomized backoff spreads thundering herds) and **idempotency** (repeated side effects dedupe by key — Production Ch.7/Ch.4 patterns). Retry storms (synchronized clients hammering recovery) have caused more outages than the original faults — jittered, budgeted, keyed retries are the only safe kind." },
+    { "t": "practice", "sim": "js-playground", "title": "Classify and route", "query": "function classify(err) {\n  if (err.status === 401 || err.status === 403) return 'auth';\n  if (err.status >= 500 || err.code === 'TIMEOUT' || err.code === 'RATE_LIMIT') return 'transient';\n  if (err.status === 400 || err.code === 'SCHEMA') return 'invalid';\n  if (err.code === 'DOWN') return 'downstream';\n  return 'budget';\n}\nconst POLICIES = { transient: 'retry-backoff', auth: 'escalate-noretry', invalid: 'repair-once-quarantine', downstream: 'fallback', budget: 'escalate-trail' };\nconst cases = [\n  [{ status: 503 }, 'transient'],\n  [{ status: 401 }, 'auth'],\n  [{ status: 400 }, 'invalid'],\n  [{ code: 'TIMEOUT' }, 'transient'],\n  [{ code: 'DOWN' }, 'downstream'],\n  [{ code: 'UNKNOWN_WEIRD' }, 'budget'],\n];\nlet pass = 0;\nfor (const [err, expected] of cases) {\n  const got = classify(err);\n  if (got === expected) pass++;\n  else console.log('MISS ' + JSON.stringify(err) + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' errors classified');\nconsole.log('auth policy: ' + POLICIES[classify({ status: 403 })]);", "note": "Run it: expect 6/6 classifications plus the auth policy lookup (escalate-noretry). Unknown codes fall to budget/escalate — safe default for unrecognized failures, never blind retry." },
+    { "t": "keytakeaways", "items": ["Five classes (transient/auth/invalid/downstream/budget) with retry/repair/escalate policies + budgets", "Repair once with quoted errors, then quarantine; jitter + idempotency guard all retries", "Unknown errors default to escalate — safe fallback for unrecognized failures"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice classifier on all six cases and map classes. (b) Add RATE_LIMIT handling proof (classify + state its backoff policy from POLICIES). (c) Write the blind-retry ban as a code-review checklist line with the exception that proves the rule.",
+    "hints": [
+      "Baseline 6/6: 503/RATE_LIMIT/TIMEOUT transient; 401/403 auth; 400/SCHEMA invalid; DOWN downstream; unknown budget.",
+      "RATE_LIMIT → transient: backoff [200,800,2000] + jitter, then escalate (never hammer recovery).",
+      "Checklist: 'Every retry names its class + budget; blanket catch-retry requires written justification' — the exception proves enforcement."
+    ],
+    "solution": "// (a) transient/auth/invalid/transient/downstream/budget (in order).\n// (b) RATE_LIMIT transient with staged backoff + jitter, then escalate.\n// (c) checklist line per hints: class + budget named, or written justification.",
+    "why": "Classification coverage (all six incl. unknown), policy proof (backoff stages), and process enforcement (checklist line) are the three error-handling judgments — each verified, with blind retry banned structurally.",
+    "code": "// Error-policy pattern: classify → budgeted policy → escalate with evidence.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "401 on a tool call, retried 5x with backoff. Verdict?",
+      "options": ["Diligent", "Harmful: auth errors never retry — escalate + rotate immediately; retries burn quota and log secrets", "Needs more retries", "Correct"],
+      "answer": 1,
+      "explain": "Auth failures are credential problems, not transient ones. Retrying authenticates nothing and exposes secrets repeatedly."
+    },
+    {
+      "q": "Unknown error code from a new dependency. Default policy?",
+      "options": ["Blind retry", "Escalate with trail (budget class): unrecognized failures route safe, never retried blindly", "Ignore it", "Crash"],
+      "answer": 1,
+      "explain": "Unknowns default to escalate-with-evidence: the safe fallback for failures outside the taxonomy. Taxonomies grow by classifying unknowns post-incident."
+    },
+    {
+      "q": "Synchronized clients hammer a recovering service. Missing?",
+      "options": ["More capacity", "Jitter on backoff: synchronized retries become retry storms worse than original faults", "Faster retries", "No retries"],
+      "answer": 1,
+      "explain": "Identical backoffs synchronize into storms. Jitter spreads load; idempotency dedupes effects. Both required for safe retries."
+    }
+  ],
+  "summary": "Classify first (five classes), policy per class with budgets, repair once quoted, jitter + idempotency on retries, unknowns escalate. Blind retry banned by checklist.",
+  "next": "Failures routed — now visibility: traces, replay, dry runs, and time-travel that make bugs reproducible. Next: debugging infrastructure."
+}

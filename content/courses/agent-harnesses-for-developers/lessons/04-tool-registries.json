@@ -1,0 +1,52 @@
+{
+  "title": "Tool Registries: Versioned Capabilities",
+  "slug": "04-tool-registries",
+  "objective": "After this lesson you will be able to run versioned tool registries with discovery filtering, deprecation lifecycles, and selection tests — so capabilities evolve without breaking callers.",
+  "why": "Tools multiply and mutate: v2 endpoints, renamed arguments, retired beta tools — while agents built months ago still call v1 shapes. Registries manage the lifecycle (versions coexist, deprecations warn with deadlines, discovery hides the dead) so evolution doesn't break callers. Unmanaged tools rot into folklore: nobody knows what's current, safe, or dead.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Versions coexist, deprecations warn" },
+    { "t": "p", "text": "Register tools **versioned** (`lookup-order@v1`, `@v2`): both callable during migration windows, discovery defaulting to current. **Deprecation** carries deadline + migration note + warning on call (logged, counted) — callers migrate on schedule, not surprise. Removal only after zero-call windows prove disuse. Lifecycles prevent both breakage (early removal) and fossilization (never removing)." },
+    { "t": "code", "lang": "js", "code": "// Versioned registry: coexistence + deprecation lifecycle (plain JS)\nfunction makeRegistry() {\n  const tools = new Map(); // name -> [{version, fn, deprecated, deadline}]\n  return {\n    register(name, version, fn, meta = {}) { /* push version entry */ },\n    resolve(name, want) {\n      const versions = tools.get(name) || [];\n      const pick = want ? versions.find((v) => v.version === want)\n        : [...versions].reverse().find((v) => !v.deprecated) || versions[versions.length - 1];\n      if (pick && pick.deprecated) pick.warned = (pick.warned || 0) + 1;\n      return pick || null;\n    },\n    discover() { return [...tools].map(([n, vs]) => ({ name: n, versions: vs.map((v) => v.version + (v.deprecated ? \" (deprecated)\" : \"\")) })); },\n  };\n}\n// Resolve: pinned version, else newest non-deprecated; deprecated use counted.", "caption": "Pin explicit, default current, deprecations warned-and-counted" },
+    { "t": "h", "text": "Discovery filters the dead" },
+    { "t": "p", "text": "**Discovery** lists what's callable *now*: current versions foremost, deprecated flagged, removed absent. Agents discover (never hardcode tool lists) so registry evolution propagates automatically. Listing staleness (cached toolsets) gets TTLs + version checks at call time — stale discovery plus strict resolution equals safe evolution." },
+    { "t": "h", "text": "Selection tests per registry change" },
+    { "t": "p", "text": "Every registry change (add/rename/deprecate) re-runs **selection tests**: tricky tickets asserting correct tool picks including refusal cases. Renames break learned selections silently — tests catch what changelogs merely announce. Registry CI: discovery snapshot diffs reviewed like API diffs." },
+    { "t": "practice", "sim": "js-playground", "title": "Resolve versions", "query": "function makeRegistry() {\n  const tools = new Map();\n  return {\n    register(name, version, fn, dep) {\n      if (!tools.has(name)) tools.set(name, []);\n      tools.get(name).push({ version, fn, deprecated: !!dep });\n    },\n    resolve(name, want) {\n      const vs = tools.get(name) || [];\n      const pick = want ? vs.find((v) => v.version === want) : [...vs].reverse().find((v) => !v.deprecated) || vs[vs.length - 1];\n      return pick ? pick.version + (pick.deprecated ? '!' : '') : null;\n    },\n  };\n}\nconst r = makeRegistry();\nr.register('lookup', 'v1', () => 1);\nr.register('lookup', 'v2', () => 2);\nr.register('lookup', 'v3', () => 3, true);\nconsole.log('default=' + r.resolve('lookup'));\nconsole.log('pinned=' + r.resolve('lookup', 'v1'));\nconsole.log('missing=' + r.resolve('nope'));", "note": "Run it: expect default v2 (newest non-deprecated, v3 skipped), pinned v1 (explicit pins honored), missing null. Defaults stay current automatically; pins freeze deliberately." },
+    { "t": "keytakeaways", "items": ["Versions coexist with deprecation deadlines + warnings + usage counts; removal after proven disuse", "Discovery lists the callable-now (flagged deprecations); agents discover, never hardcode", "Selection tests re-run per registry change; snapshot diffs reviewed like API diffs"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice resolver and confirm default/pinned/missing outcomes. (b) Mark v2 deprecated and re-run: state the new default and why the rule still holds. (c) Write the removal policy (zero-call window proof + announcement + deadline) for v1 in two sentences.",
+    "hints": [
+      "Baseline: default v2 (v3 deprecated-skipped), pinned v1 honored, missing null.",
+      "With v2 deprecated: default falls to v1 (newest non-deprecated) — rule holds mechanically (reverse scan skips deprecated).",
+      "Removal: 30-day zero-call window proven from logs + announcement with migration note → delete; reverts on any late use."
+    ],
+    "solution": "// (a) v2 / v1 / null (defaults current, pins frozen, missing null).\n// (b) default falls to v1 mechanically (reverse-scan skips deprecated).\n// (c) zero-call window + announcement + deadline, revert on late use.",
+    "why": "Default-fallback mechanics (reverse scan), pin semantics (explicit freezes), and removal policy (proven disuse) are the three lifecycle judgments — each verified, with deprecation as managed transition, never surprise.",
+    "code": "// Lifecycle pattern: coexist → warn+count → prove disuse → remove.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Agents call v1 after v2 ships with no deprecation path. Failure?",
+      "options": ["None — v1 works", "Silent drift: callers freeze on stale behavior without warnings, counts, or deadlines — deprecation lifecycle missing", "Faster", "Cheaper"],
+      "answer": 1,
+      "explain": "Unmanaged coexistence strands callers silently. Versions need flags, warnings, counts, deadlines — lifecycle, not just multiplicity."
+    },
+    {
+      "q": "Discovery caches tool lists for a week. Risk + fix?",
+      "options": ["None", "Stale discovery calling removed tools: TTLs + version checks at call time bound staleness", "Faster discovery", "More tools"],
+      "answer": 1,
+      "explain": "Cached discovery decays: TTLs bound age, call-time version checks catch removals. Discovery freshness is a correctness input."
+    },
+    {
+      "q": "Remove v1 immediately on v2 release?",
+      "options": ["Yes — clean", "No: prove zero-call window + announce with migration + deadline; immediate removal breaks pinned callers", "Depends on mood", "Rename instead"],
+      "answer": 1,
+      "explain": "Removal requires proven disuse (logs), announced deadlines, and migration paths. Pins are promises; breaking them silently destroys trust."
+    }
+  ],
+  "summary": "Versioned coexistence, flagged deprecations with deadlines, discovery of the callable-now, selection tests per change, removal on proven disuse. Capabilities evolve without breaking callers.",
+  "next": "Capabilities managed — now the engine room: planning loops that terminate. Next: ReAct with proof."
+}

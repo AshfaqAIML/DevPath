@@ -1,0 +1,52 @@
+{
+  "title": "Context Management: Budgeted Windows",
+  "slug": "02-context-management",
+  "objective": "After this lesson you will be able to allocate token budgets per context section, truncate by value priority, place summarization checkpoints, and prove fit on longest gold conversations.",
+  "why": "Context is the scarcest agent resource: every token costs money and attention, and overflow truncates silently (usually the system prompt's tail — your most important rules). Budgeted windows allocate per section (system/contracts/examples/history/tools), truncate low-value first, and summarize at thresholds — fit by design on the longest real conversations, never hoped on average ones.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Budgets per section, priority-ordered" },
+    { "t": "p", "text": "Split the window: **system/contracts** (protected, never truncated), **examples** (capped count), **retrieved context** (top-k bounded), **history** (shrinking first), **tools/output scratch** (bounded). Priority order defines truncation sequence: history trims before examples, examples before contracts. Unbudgeted context spends randomly — budgeted spends deliberately." },
+    { "t": "code", "lang": "js", "code": "// Context assembler with priority truncation (plain JS)\nfunction assembleContext(sections, budget) {\n  // sections: [{name, tokens, priority}] — higher priority kept first\n  const ordered = [...sections].sort((a, b) => b.priority - a.priority);\n  let used = 0;\n  const kept = [];\n  for (const s of ordered) {\n    if (used + s.tokens <= budget) { kept.push(s.name); used += s.tokens; }\n    else kept.push(s.name + \"(TRUNCATED)\");\n  }\n  return { kept, used, fits: used <= budget };\n}\n// Priority decides survival: contracts outrank history, always.", "caption": "Priority-ordered packing: protection by rank, truncation from the bottom" },
+    { "t": "h", "text": "Summarization checkpoints" },
+    { "t": "p", "text": "At thresholds (history > N tokens), a **summarizer** compresses older turns into a rolling digest (decisions, open items, key facts — never verbatim needs), replacing bulk with density. Checkpoints trigger on size, run on schedule (not every turn — cost), and preserve open loops explicitly (summaries that drop pending items corrupt downstream). Digest quality is itself gold-tested." },
+    { "t": "h", "text": "Prove fit on longest conversations" },
+    { "t": "p", "text": "Budgets validate against **longest gold conversations**, not averages: assemble worst-case contexts and assert fit with headroom. Overflow handling is specified (what truncates first is policy, documented), never discovered (silent system-prompt tail loss). Fit proven on extremes holds everywhere below." },
+    { "t": "practice", "sim": "js-playground", "title": "Pack the window", "query": "function assembleContext(sections, budget) {\n  const ordered = [...sections].sort((a, b) => b.priority - a.priority);\n  let used = 0;\n  const kept = [];\n  for (const s of ordered) {\n    if (used + s.tokens <= budget) { kept.push(s.name); used += s.tokens; }\n    else kept.push(s.name + '(TRUNCATED)');\n  }\n  return { kept, used };\n}\nconst sections = [\n  { name: 'system', tokens: 800, priority: 100 },\n  { name: 'contracts', tokens: 400, priority: 90 },\n  { name: 'examples', tokens: 1200, priority: 60 },\n  { name: 'history', tokens: 3000, priority: 20 },\n];\nconst r = assembleContext(sections, 3000);\nconsole.log(r.kept.join(','));\nconsole.log('used=' + r.used);", "note": "Run it: expect system,contracts,examples kept (2400) with history TRUNCATED. Priority protects contracts while history — lowest value density — absorbs the cut. Budgets direct truncation, never hope." },
+    { "t": "keytakeaways", "items": ["Budget per section with priority ranks: contracts protected, history truncated first", "Summarization checkpoints at size thresholds preserve decisions + open loops, never verbatim bulk", "Prove fit on longest gold conversations; truncation order is documented policy"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice packer and confirm which section truncates. (b) Raise history priority above examples and re-run; state what the inversion risks. (c) Write the summarization trigger rule (threshold + what the digest must preserve) for a support agent.",
+    "hints": [
+      "Baseline: system+contracts+examples kept (2400/3000), history truncated. Priority protects value density.",
+      "Inverted: examples truncate while verbose history survives — contracts still safe (priority 90), but demonstration quality dies for chatter.",
+      "Trigger: history > 2000 tokens → digest (decisions, open items, key facts); verbatim recent 5 turns kept; open loops explicitly preserved."
+    ],
+    "solution": "// (a) history truncates (lowest priority); contracts/examples/system kept.\n// (b) examples truncate instead — demonstration quality traded for chatter (bad trade).\n// (c) size-triggered digest preserving decisions + open loops (+ recent verbatim).",
+    "why": "Priority inversion experiments prove ranks have consequences: protection follows value density deliberately. Trigger design (threshold + preserved content) makes summarization a policy, not a hope.",
+    "code": "// Budget-tune pattern: reorder priorities, observe truncation, justify ranks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Overflow truncates silently — most likely victim and fix?",
+      "options": ["History — fine", "System-prompt tail (most important rules): priority budgets protecting contracts + proven fit on longest conversations", "Examples — acceptable", "Nothing truncates"],
+      "answer": 1,
+      "explain": "Silent truncation hits whatever overflows — usually trailing system rules. Priority protection plus worst-case proof prevents it structurally."
+    },
+    {
+      "q": "Summarizer drops open loops. Consequence + fix?",
+      "options": ["Cleaner digests", "Downstream acts on closed assumptions: digests must explicitly preserve open items + decisions; gold-test digest quality", "Faster", "Shorter context"],
+      "answer": 1,
+      "explain": "Summaries that lose pending work corrupt downstream reasoning. Open-loop preservation is a digest requirement, tested like any contract."
+    },
+    {
+      "q": "Validate budgets against averages or extremes?",
+      "options": ["Averages — typical", "Longest gold conversations: fit proven at extremes holds everywhere below; averages hide the overflow cases", "Shortest", "Random sample"],
+      "answer": 1,
+      "explain": "Overflow lives at extremes by definition. Worst-case proof with headroom is the only validation that prevents silent truncation."
+    }
+  ],
+  "summary": "Priority budgets, value-ordered truncation, scheduled summarization preserving open loops, worst-case proof. Windows managed, never hoped.",
+  "next": "Working memory budgeted — now persistent memory: episodic, semantic, and decay policies. Next: remembering deliberately."
+}

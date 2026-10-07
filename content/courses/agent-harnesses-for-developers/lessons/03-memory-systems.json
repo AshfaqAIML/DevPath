@@ -1,0 +1,53 @@
+{
+  "title": "Memory Systems: Remember Deliberately",
+  "slug": "03-memory-systems",
+  "objective": "After this lesson you will be able to separate episodic, semantic, and working memory; write read/write/decay policies per store; and retrieve with budgets that prevent unbounded growth.",
+  "why": "'The agent forgot my preference' and 'the agent remembers everything including noise' are the same missing system: memory without policy. Episodic (what happened), semantic (what's true), and working (what's active) stores with explicit write rules, decay schedules, and retrieval budgets turn remembering from accident into infrastructure — the difference between personalization and landfill.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Three stores, three jobs" },
+    { "t": "p", "text": "**Episodic**: event records (tickets, outcomes, timestamps) — append-only, queried by recency/similarity. **Semantic**: facts and preferences (user tier, policy exceptions) — upserted, versioned, contradicted explicitly. **Working**: active task state (Ch.2 budgets apply) — bounded, summarized, discarded on completion. One store for all three confuses jobs: facts need updates, episodes need immutability, working needs bounds." },
+    { "t": "code", "lang": "js", "code": "// Memory writes route by kind with policies attached (plain JS)\nconst memory = { episodic: [], semantic: new Map(), working: {} };\nfunction remember(kind, key, value, meta = {}) {\n  if (kind === \"episodic\") memory.episodic.push({ key, value, at: Date.now(), ...meta });\n  if (kind === \"semantic\") memory.semantic.set(key, { value, at: Date.now(), version: (memory.semantic.get(key)?.version || 0) + 1 });\n  if (kind === \"working\") memory.working[key] = value; // bounded elsewhere (Ch.2)\n}\n// Episodes append (history), facts upsert with versions (contradictions explicit),\n// working overwrites within budgets. Kinds never mix.", "caption": "Write paths differ per store: append vs versioned-upsert vs bounded-overwrite" },
+    { "t": "h", "text": "Decay: forgetting as policy" },
+    { "t": "p", "text": "Every stored byte needs a retention reason: **recency decay** (untouched episodes fade), **importance floors** (VIP facts persist), **explicit expiry** (session tokens die on schedule). Decay runs as scheduled jobs with logs (what pruned, why) — silent accumulation is the default without them. Contradictions resolve by version (newer wins, old preserved in history) never by silent overwrite." },
+    { "t": "code", "lang": "js", "code": "// Decay sweep: prune by age/importance with logs (plain JS)\nfunction decay(memory, now, maxAgeMs, minImportance) {\n  const pruned = [];\n  memory.episodic = memory.episodic.filter((e) => {\n    const keep = now - e.at < maxAgeMs || (e.importance || 0) >= minImportance;\n    if (!keep) pruned.push(e.key);\n    return keep;\n  });\n  return { kept: memory.episodic.length, pruned };\n}\n// Importance floors protect VIP facts; everything else ages out loudly (logged).", "caption": "Prune with reasons logged: retention as auditable policy" },
+    { "t": "h", "text": "Retrieval budgets per store" },
+    { "t": "p", "text": "Reads are budgeted like context (they become context): top-k episodic by recency+similarity, semantic by key with version check, working direct. Retrieval caps prevent memory from re-flooding the windows Ch.2 just budgeted — stores without read budgets are just slower context overflow." },
+    { "t": "practice", "sim": "js-playground", "title": "Write, decay, retrieve", "query": "const memory = { episodic: [], semantic: new Map() };\nfunction remember(kind, key, value, meta) {\n  meta = meta || {};\n  if (kind === 'episodic') memory.episodic.push({ key, value, at: meta.at || 0, importance: meta.importance || 0 });\n  if (kind === 'semantic') memory.semantic.set(key, { value, version: (memory.semantic.get(key) || { version: 0 }).version + 1 });\n}\nfunction decay(now, maxAge, minImp) {\n  const kept = memory.episodic.filter((e) => now - e.at < maxAge || e.importance >= minImp);\n  const pruned = memory.episodic.length - kept.length;\n  memory.episodic = kept;\n  return { kept: kept.length, pruned };\n}\nremember('episodic', 't1', 'late parcel', { at: 100, importance: 1 });\nremember('episodic', 't2', 'VIP complaint', { at: 100, importance: 9 });\nremember('semantic', 'tier', 'gold');\nremember('semantic', 'tier', 'platinum');\nconsole.log('semantic tier=' + memory.semantic.get('tier').value + ' v' + memory.semantic.get('tier').version);\nconst r = decay(1000, 500, 5);\nconsole.log('kept=' + r.kept + ' pruned=' + r.pruned);", "note": "Run it: semantic tier platinum v2 (versioned upsert, contradiction explicit); decay keeps 1 (VIP importance floor) prunes 1 (aged ordinary). Write paths differ, decay respects floors, versions never silently overwrite." },
+    { "t": "keytakeaways", "items": ["Episodic appends (immutable history), semantic versioned-upserts (contradictions explicit), working bounded-overwrites", "Decay by age/importance/expiry with pruned-logs; importance floors protect VIP facts", "Retrieval budgeted per store — stores without read caps re-flood managed windows"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice memory and confirm versioning + decay outcomes. (b) Add an expiry rule (session tokens die after 1h regardless of importance) with a test. (c) Write the retrieval budget for a support turn (episodic top-3 + semantic keys + working direct) with caps justified per store.",
+    "hints": [
+      "Baseline: tier platinum v2; kept 1 (VIP floor), pruned 1 (aged ordinary). Versions prove contradiction handling.",
+      "Expiry: kind check (session-*) with hard deadline overriding importance floors — security tokens never persist on importance.",
+      "Budgets: episodic 3 (recent context), semantic 5 keys (facts cheap), working direct (already bounded) — caps prevent re-flooding."
+    ],
+    "solution": "// (a) platinum v2; kept 1 / pruned 1 (floor respected).\n// (b) session-expiry overrides floors (security > importance).\n// (c) episodic-3 + semantic-5 + working-direct (budgeted reads).",
+    "why": "Versioning (contradictions explicit), expiry overrides (security beats importance), and read budgets (stores can't re-flood windows) are the three memory policies — each enforced, with decay logged.",
+    "code": "// Memory-policy pattern: kind-specific writes + floors + expiry + read caps.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Agent cites a superseded preference as current. Root cause + fix?",
+      "options": ["More memory", "Silent overwrite: semantic updates need versioning (newer wins, history preserved) — contradictions explicit, never overwritten", "Bigger vectors", "More context"],
+      "answer": 1,
+      "explain": "Versioned upserts make supersession visible and auditable. Silent overwrites corrupt without trace."
+    },
+    {
+      "q": "Memory grows 10x quarterly with no policy. Response?",
+      "options": ["Bigger disks", "Write rules + decay schedules + retrieval budgets + pruned logs — retention reasons per byte, or landfill", "Delete all quarterly", "Compress"],
+      "answer": 1,
+      "explain": "Unbounded growth is policy absence: write criteria, decay by age/importance/expiry, read caps. Every byte needs retention reason."
+    },
+    {
+      "q": "Session token persists via importance floor. Verdict?",
+      "options": ["Fine — important", "Security override: session/expiry rules beat importance floors — tokens die on schedule regardless", "Raise its importance", "Log it more"],
+      "answer": 1,
+      "explain": "Expiry classes (sessions, secrets) override floors: security deadlines ignore importance. Floors protect facts, never credentials."
+    }
+  ],
+  "summary": "Episodic appends, semantic versions, working bounds; decay with floors and expiry overrides; retrieval budgeted. Remembering as infrastructure, not accident.",
+  "next": "Remembering deliberately — now acting: versioned tool registries with discovery and deprecation. Next: tools managed."
+}

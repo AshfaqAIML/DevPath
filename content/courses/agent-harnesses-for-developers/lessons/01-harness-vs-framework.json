@@ -1,0 +1,154 @@
+{
+  "title": "Harnesses vs Frameworks",
+  "slug": "01-harness-vs-framework",
+  "objective": "After this lesson you will be able to separate framework primitives from harness scaffolding, decide build-vs-buy per component with moat/maintenance reasoning, and map every harness piece to its course lesson.",
+  "why": "Teams either rebuild checkpointing badly or surrender all policy to frameworks — both expensive. Frameworks (LangGraph graphs, MCP servers, CrewAI crews) provide orchestration primitives; harnesses provide your domain's policy (memory rules, guardrails, eval, budgets). The line between them decides what you maintain versus what upgrades itself — drawn per component, never by blanket rule.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Primitives vs policy"
+    },
+    {
+      "t": "p",
+      "text": "**Frameworks** own mechanism: graph execution, checkpoint storage formats, tool protocols, message passing. **Harnesses** own policy: what memory persists and decays, which guardrails gate money, what gold sets prove, how context budgets split. Buy mechanism (commodity, maintained by others); build policy (differentiating judgment, yours to encode). Confusing them means maintaining checkpoint code while neglecting eval — backwards priorities made concrete."
+    },
+    {
+      "t": "h",
+      "text": "The coordination bill (price it upfront)"
+    },
+    {
+      "t": "p",
+      "text": "Teams charge four taxes: **handoff formats** (every transfer needs contracted shapes), **delegation logic** (routers/managers with their own tests), **compounded errors** (three 95% agents ≈ 86% pipeline — multiply, don't average), and **context growth** (each agent adds its slice). Price the bill before staffing: if specialization gains don't exceed coordination taxes, the team is theater with latency."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Coordination math: reliability multiplies, context adds (plain JS)\nfunction teamReliability(accs) { return accs.reduce((p, a) => p * a, 1); }\nfunction contextBill(perAgent, n, shared) { return shared + perAgent * n; }\n// teamReliability([0.95, 0.95, 0.95]) ≈ 0.857: three 95s ≈ 86%\n// Lesson: each handoff must EARN its error share via specialization gains."
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Averages lie about pipelines",
+      "text": "Three 95%-accurate agents in sequence yield ≈86%, not 95% — series reliability multiplies. Teams that feel 'mostly right per agent' fail as systems. Price composition explicitly or it prices you."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Component",
+        "Usually",
+        "Why"
+      ],
+      "rows": [
+        [
+          "Graph execution / checkpointing",
+          "Buy (LangGraph)",
+          "Commodity mechanism, hard to beat"
+        ],
+        [
+          "Tool protocol (MCP)",
+          "Buy (SDK)",
+          "Standard; network effects"
+        ],
+        [
+          "Memory write/decay policies",
+          "Build",
+          "Encodes YOUR domain judgment"
+        ],
+        [
+          "Guardrails for money paths",
+          "Build",
+          "Your risk tolerance, your rules"
+        ],
+        [
+          "Gold eval sets",
+          "Build",
+          "Your customers, your failures"
+        ],
+        [
+          "Vector DB engine",
+          "Buy (pgvector)",
+          "Commodity storage"
+        ],
+        [
+          "Chunking strategy",
+          "Build",
+          "Corpus-specific judgment"
+        ]
+      ]
+    },
+    {
+      "t": "h",
+      "text": "The course map (harness pieces ahead)"
+    },
+    {
+      "t": "p",
+      "text": "Each lesson builds one harness piece: context budgets (Ch.2), memory systems (Ch.3), tool registries (Ch.4), planning loops (Ch.5), error taxonomies (Ch.6), trace/replay debugging (Ch.7), guardrail layers (Ch.8), gold evaluation (Ch.9), assembled capstone (Ch.10). Together: the scaffolding that makes models dependable — every piece runnable here, mappable to frameworks there."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Price build-vs-buy",
+      "query": "function decide(components) {\n  return components.map((c) => {\n    const build = c.moat * 2 - c.maintenance;\n    const buy = 5 - c.maintenance;\n    return { name: c.name, decision: build > buy ? 'build' : 'buy' };\n  });\n}\nconst parts = [\n  { name: 'graph-exec', moat: 1, maintenance: 4 },\n  { name: 'memory-policy', moat: 5, maintenance: 2 },\n  { name: 'gold-eval', moat: 5, maintenance: 2 },\n  { name: 'vector-engine', moat: 1, maintenance: 4 },\n];\nfor (const d of decide(parts)) console.log(d.name + ' -> ' + d.decision);",
+      "note": "Run it: expect buy, build, build, buy — moat (differentiation) minus maintenance decides. Toy arithmetic, real discipline: score each component's moat and upkeep honestly before choosing."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Frameworks = mechanism (buy); harnesses = policy (build) — decided per component by moat vs maintenance",
+        "Nine harness pieces ahead: budgets, memory, registries, loops, errors, traces, guards, eval, assembly",
+        "Blanket build wastes on commodities; blanket buy surrenders differentiation"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice decider and record all four verdicts. (b) Score two of your own components (moat 1–5, maintenance 1–5) and decide. (c) State one component where your org should switch sides (currently built-but-commodity, or bought-but-differentiating) with the cost argument.",
+    "hints": [
+      "Baseline: buy/build/build/buy (moat-minus-maintenance arithmetic).",
+      "Your components need honest moat scores: customer-specific judgment scores high; plumbing scores low.",
+      "Switch candidates: hand-rolled checkpointing (build→buy saves maintenance) or vendor eval suites missing your failures (buy→build captures differentiation)."
+    ],
+    "solution": "// (a) buy/build/build/buy (in order).\n// (b) self-scored components with decisions (honest moats).\n// (c) one switch with cost argument (maintenance saved or differentiation gained).",
+    "why": "Component-wise economics with honest moat scoring plus a switch audit makes build-vs-buy a maintained decision, not a founding accident.",
+    "code": "// Decision pattern: moat × 2 − maintenance vs fixed buy threshold.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Hand-rolled graph executor + vendor eval suite with your failures missing. Fix directions?",
+      "options": [
+        "Keep both",
+        "Executor → buy (commodity mechanism); eval → build in-house (differentiation lives in your failures)",
+        "Build more executor",
+        "Buy more eval"
+      ],
+      "answer": 1,
+      "explain": "Moat decides: mechanism commoditizes, failure knowledge differentiates. Each side corrected toward its economics."
+    },
+    {
+      "q": "Blanket 'build everything' policy. Cost?",
+      "options": [
+        "Full control, no cost",
+        "Maintaining commodities (checkpointing, vector engines) while starving differentiation (eval, guardrails) — backwards priorities",
+        "Faster shipping",
+        "Better hiring"
+      ],
+      "answer": 1,
+      "explain": "Maintenance budgets are finite: commodities consume them without differentiating. Policy must be per-component."
+    },
+    {
+      "q": "Moat scoring in the decider exists to…",
+      "options": [
+        "Justify pre-made decisions",
+        "Force honest differentiation assessment per component — the number that prevents both blanket policies",
+        "Impress management",
+        "Slow decisions"
+      ],
+      "answer": 1,
+      "explain": "Explicit moat scores make the differentiation claim falsifiable per component. Hand-waving can't survive the arithmetic."
+    }
+  ],
+  "summary": "Mechanism bought, policy built, per component by moat-vs-maintenance. Nine harness pieces ahead, each runnable here and mappable there.",
+  "next": "Scaffolding mapped — now the scarcest resource inside every call: context. Budgets, truncation, and summarization. Next: windows managed."
+}

@@ -1,0 +1,51 @@
+{
+  "title": "Planning Loops That Terminate",
+  "slug": "05-planning-loops",
+  "objective": "After this lesson you will be able to implement ReAct-style plan-act-observe loops with iteration caps and progress detection, distinguish stuck (escalate) from slow (continue), and log loop trails for post-hoc analysis.",
+  "why": "'Think step by step, use tools as needed' loops forever on hard tasks: repeated identical tool calls, planning without acting, acting without observing. Termination by construction (caps + progress criteria + stuck escalation) plus trail logging converts hopeful loops into bounded, debuggable workhorses — the engine room of every agent harness.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "ReAct: reason, act, observe, repeat (bounded)" },
+    { "t": "p", "text": "The **ReAct loop**: reason (plan next step from state) → act (tool call) → observe (result into state) → repeat until done or budget exhausted. Each iteration is one bounded unit: max iterations cap total work, per-iteration timeouts bound stalls, and the done-condition (answer ready? task complete?) exits early. Unbounded 'while not done' loops are hangs awaiting hard inputs." },
+    { "t": "code", "lang": "js", "code": "// Bounded ReAct loop with trail logging (plain JS pattern)\nfunction reactLoop(plan, act, observe, isDone, budget = { iters: 8 }) {\n  const trail = [];\n  let state = {};\n  for (let i = 0; i < budget.iters; i++) {\n    const step = plan(state);\n    const result = act(step);\n    state = observe(state, result);\n    trail.push({ i, step: step.kind, note: result.note });\n    if (isDone(state)) return { ok: true, state, trail };\n  }\n  return { ok: false, reason: \"budget-exhausted\", state, trail };\n}\n// Trail logs every iteration: stuck patterns visible post-hoc, not inferred.", "caption": "Plan/act/observe with caps and trails — termination structural" },
+    { "t": "h", "text": "Stuck vs slow: progress detection" },
+    { "t": "p", "text": "Caps bound worst cases; **progress detection** exits stuck loops early: no new information in K iterations (repeated tool calls, identical observations) → escalate with the trail, don't burn remaining budget. Stuck signatures: same action thrice, observations unchanged, plan oscillating between two steps. Slow-but-progressing (new info each round) runs to completion — distinguish by information delta, never elapsed time alone." },
+    { "t": "code", "lang": "js", "code": "// Progress watch: identical observations trip stuck escalation (plain JS)\nfunction progressWatch(maxRepeat = 3) {\n  let last = null, repeats = 0;\n  return (observation) => {\n    const key = JSON.stringify(observation);\n    repeats = key === last ? repeats + 1 : 0;\n    last = key;\n    return repeats >= maxRepeat ? { stuck: true } : { stuck: false };\n  };\n}\n// Stuck escalates with trail; slow continues with evidence of motion.", "caption": "Repeat-counting on observations: stuckness detected, not hoped away" },
+    { "t": "practice", "sim": "js-playground", "title": "Bound the loop", "query": "function reactLoop(plan, act, observe, isDone, maxIters) {\n  const trail = [];\n  let state = {};\n  for (let i = 0; i < maxIters; i++) {\n    const step = plan(state, i);\n    const result = act(step);\n    state = observe(state, result);\n    trail.push(step.kind + ':' + result.note);\n    if (isDone(state)) return { ok: true, iters: i + 1, trail };\n  }\n  return { ok: false, reason: 'budget-exhausted', trail };\n}\nconst plan = (s, i) => ({ kind: i < 2 ? 'fetch' : 'answer' });\nconst act = (step) => step.kind === 'fetch' ? { note: 'got-rows' } : { note: 'drafted' };\nconst observe = (s, r) => ({ ...s, [r.note]: true });\nconst isDone = (s) => !!s.drafted;\nconst r = reactLoop(plan, act, observe, isDone, 8);\nconsole.log('ok=' + r.ok + ' iters=' + r.iters);\nconsole.log(r.trail.join(' | '));\nconst stuck = reactLoop(() => ({ kind: 'fetch' }), () => ({ note: 'same' }), (s, x) => s, () => false, 3);\nconsole.log('stuck: ok=' + stuck.ok + ' reason=' + stuck.reason);", "note": "Run it: expect ok=true iters=3 with the fetch/fetch/answer trail — then the stuck twin exhausting budget with reason. Termination both ways: done-flags finish work, budgets finish loops." },
+    { "t": "keytakeaways", "items": ["ReAct bounded: caps + per-iteration timeouts + done-conditions + trail logs", "Stuck (no information delta) escalates early; slow (new info) runs on — distinguish by delta", "Trails make loops debuggable post-hoc: every iteration recorded with kind + note"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice loops and map both outcomes. (b) Add progress detection (repeat-counting on notes) that escalates the stuck twin at 2 repeats instead of budget 3 — state what changes in the trail. (c) Write the done-condition for a research task (sufficient sources?) with the sufficiency rule stated.",
+    "hints": [
+      "Baseline: ok=true/3 iters with fetch/fetch/answer trail; stuck twin budget-exhausted at 3.",
+      "Progress watch on result.note: second identical note trips stuck-escalation (faster than budget, with reason).",
+      "Done-condition: ≥3 independent sources covering all sub-questions (sufficiency = coverage, not count alone)."
+    ],
+    "solution": "// (a) ok/3-iters with trail; stuck exhausts at cap with reason.\n// (b) repeat-counting escalates at 2nd identical note (earlier than budget).\n// (c) done iff sources ≥3 AND sub-questions all covered (coverage rule).",
+    "why": "Budget termination (caps), progress termination (delta detection), and done-conditions (sufficiency rules) are the three loop exits — each verified, with trails proving which fired.",
+    "code": "// Triple-exit pattern: done-flags, progress-trip, budget-cap — logged which.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Loop repeats identical tool calls 12 times. Missing?",
+      "options": ["Better tools", "Progress detection + stuck escalation: no-information-delta trips early exit with trail, not budget burn", "More iterations", "Faster model"],
+      "answer": 1,
+      "explain": "Repeat patterns signal stuckness, not slowness. Delta detection escalates with evidence; caps merely bound damage."
+    },
+    {
+      "q": "Slow-but-progressing task hits iteration cap. Response?",
+      "options": ["Raise caps blindly", "Distinguish stuck (no delta → escalate) from slow (new info → extend or checkpoint-resume with justification)", "Kill it", "Restart fresh"],
+      "answer": 1,
+      "explain": "Caps bound worst cases; progress justifies extension. Information delta decides — extend with evidence, escalate without."
+    },
+    {
+      "q": "Loop trail value in postmortems?",
+      "options": ["Decoration", "Step-by-step evidence: plan choices, observations, and which exit fired — debugging without inference", "Compliance theater", "Slower loops"],
+      "answer": 1,
+      "explain": "Trails record decisions and outcomes per iteration: stuck patterns visible, attribution precise, fixes targeted."
+    }
+  ],
+  "summary": "Bounded ReAct with trails, progress-trip escalation, sufficiency done-conditions. Loops terminate by construction — done, stuck, or budgeted, always logged.",
+  "next": "Loops bounded — now their failures classified: transient, auth, invalid, and down. Next: error taxonomy with teeth."
+}
