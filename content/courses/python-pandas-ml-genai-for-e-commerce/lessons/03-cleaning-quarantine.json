@@ -1,0 +1,53 @@
+{
+  "title": "Cleaning With Quarantine Discipline",
+  "slug": "03-cleaning-quarantine",
+  "objective": "After this lesson you will be able to handle missing values deliberately (per-column policies), dedupe on declared keys with provenance, parse dates/currency strictly with quarantine for failures, and report reject rates per rule.",
+  "why": "Cleaning decisions corrupt silently at scale: mean-imputed prices bias revenue, dropped NaN keys vanish rows, dedupe-without-keys deletes distinct orders, locale-guessed dates shift quarters. Each rule needs a stated policy plus a quarantine stream carrying rejects with reasons — the OpenDataLoader discipline, executed in pandas.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Missing values: policy per column, never global" },
+    { "t": "p", "text": "Each column gets an explicit rule: **drop** (unusable key fields), **fill with stated value** (0 for counts, 'unknown' for segments — never means), **median/mode impute** (only for modeling features, flagged as imputed), or **quarantine** (unparseable criticals). Global `fillna(0)` corrupts meanings indiscriminately — policy per column, recorded with the rule." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"id,price,qty\\n1,129.00,2\\n2,,1\\n3,59.50,\\n\"\ndf = pd.read_csv(StringIO(csv))\nquarantine = df[df[\"price\"].isna()][[\"id\"]].assign(reason=\"missing-price\")\ndf = df.dropna(subset=[\"price\"]).copy()\ndf[\"qty\"] = df[\"qty\"].fillna(1).astype(int)  # stated: single-unit default\nprint(\"kept:\", len(df), \"quarantined:\", len(quarantine))\nprint(\"revenue:\", float((df[\"price\"] * df[\"qty\"]).sum()))" },
+    { "t": "h", "text": "Dedupe on keys with provenance" },
+    { "t": "p", "text": "Duplicates resolve on **declared keys** (`order_id`), keeping first/last by stated rule and logging merged-from IDs — never full-row equality (formatting differences hide true dupes) and never silent drops (counts reconcile: raw = kept + quarantined). Unkeyed 'looks duplicate' deletions destroy evidence." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"order_id,total\\nA1,100\\nA1,100\\nA2,50\\n\"\ndf = pd.read_csv(StringIO(csv), dtype={\"order_id\": str})\ndupes = df[df.duplicated(\"order_id\", keep=False)]\nprint(\"dup rows:\", len(dupes))\nclean = df.drop_duplicates(\"order_id\", keep=\"first\")\nprint(\"kept:\", len(clean), \"total:\", float(clean[\"total\"].sum()))" },
+    { "t": "h", "text": "Strict dates and currency" },
+    { "t": "p", "text": "Parse with `format=` (strict, no guessing), `errors` routed to quarantine (never `coerce`-and-forget without counting), currency stripped of symbols then converted with failure quarantine. Timezones normalized to UTC on ingest; locale day-first/month-first stated per source after sampling — never guessed per row." },
+    { "t": "practice", "sim": "js-playground", "title": "Quarantine the rows", "query": "function cleanRows(rows) {\n  const clean = [], quarantined = [];\n  for (const r of rows) {\n    if (r.price === null || r.price === undefined || r.price === '') {\n      quarantined.push({ id: r.id, reason: 'missing-price' });\n      continue;\n    }\n    clean.push({ ...r, qty: r.qty == null ? 1 : r.qty });\n  }\n  const revenue = clean.reduce((s, r) => s + r.price * r.qty, 0);\n  return { kept: clean.length, quarantined, revenue };\n}\nconst r = cleanRows([\n  { id: 1, price: 129, qty: 2 },\n  { id: 2, price: null, qty: 1 },\n  { id: 3, price: 59.5 },\n]);\nconsole.log('kept=' + r.kept + ' quarantined=' + r.quarantined.length);\nconsole.log('reasons=' + r.quarantined.map((q) => q.reason).join(','));\nconsole.log('revenue=' + r.revenue);", "note": "Run it: expect kept 2, quarantined 1 (missing-price), revenue 317.5 (129×2 + 59.5×1 default). Policy twins: drop-criticals, default-counts, quarantine-with-reasons — same discipline, both languages." },
+    { "t": "keytakeaways", "items": ["Per-column missing policies (drop/fill-flagged/quarantine) — never global fillna", "Key-based dedupe with provenance; counts reconcile raw = kept + quarantined", "Strict date/currency parsing with failure quarantine; UTC normalization on ingest"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice cleaner and verify kept/reasons/revenue. (b) In Python (your env), replicate on a 5-row CSV with one missing price and one duplicate key; report kept/quarantined/revenue. (c) State the imputation rule for a modeling feature vs a revenue figure, with the flagging requirement.",
+    "hints": [
+      "Twin outputs: kept 2, missing-price ×1, revenue 317.5 (qty default 1 applied once).",
+      "Python: dropna(subset) + quarantine frame + fillna-with-comment; duplicated(key) + drop_duplicates keep-first with merged log.",
+      "Modeling features: median-impute WITH _was_missing flag; revenue figures: never impute (quarantine) — money needs truth, models need completeness."
+    ],
+    "solution": "// (a) kept 2 / missing-price ×1 / 317.5 (in order).\n// (b) Python replication per hints (quarantine frames + reconciled counts).\n// (c) features: flagged imputation; money: quarantine-only (truth over completeness).",
+    "why": "Twin parity (JS logic mirrors pandas), per-rule quarantine (reasons + counts), and imputation-vs-truth judgment (flagged vs never) are the three cleaning disciplines.",
+    "code": "# Cleaning pattern: rule per column + quarantine frames + reconciled counts.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Global fillna(0) on a revenue table. Verdict?",
+      "options": ["Efficient", "Corrupting: missing prices become $0 sales — per-column policies (quarantine criticals, flag imputations)", "Faster queries", "Standard practice"],
+      "answer": 1,
+      "explain": "Blanket fills fabricate money: $0 sales distort revenue and averages. Criticals quarantine; features impute flagged."
+    },
+    {
+      "q": "Duplicate order_ids with identical totals. Action?",
+      "options": ["Keep both (safe)", "Dedupe on the key keeping first with merged-from log — duplicates double revenue silently", "Average them", "Delete randomly"],
+      "answer": 1,
+      "explain": "Key-based dedupe with provenance: identical totals still double-count. Counts reconcile raw = kept + quarantined."
+    },
+    {
+      "q": "Day-first vs month-first dates in one file. Approach?",
+      "options": ["Guess per row", "Sample to establish corpus convention, parse strictly with format=, quarantine failures — stated policy, never per-row guessing", "Split the difference", "Drop date columns"],
+      "answer": 1,
+      "explain": "Locale ambiguity resolves by documented convention from samples, enforced strictly, with quarantine for violators."
+    }
+  ],
+  "summary": "Per-column missing policies, keyed dedupe with provenance, strict date/currency parsing, quarantine with reasons, reconciled counts. Cleaning as engineering discipline.",
+  "next": "Clean and counted — now ask questions: groupby aggregations with reconciled totals. Next: aggregation that proves itself."
+}

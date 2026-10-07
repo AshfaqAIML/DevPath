@@ -1,0 +1,53 @@
+{
+  "title": "GroupBy Aggregation That Proves Itself",
+  "slug": "04-groupby-aggregation",
+  "objective": "After this lesson you will be able to aggregate sales by category/country/month with named aggregations, pivot for reports, resample time series, and reconcile every total back to raw counts.",
+  "why": "'Revenue by category' drives pricing, inventory, and marketing — and wrong totals drive them off cliffs. Aggregation bugs (fanout joins, NaN groups, double-counted dupes) hide inside plausible numbers. Reconciliation (grouped totals sum to grand totals sum to raw) plus named aggregations plus resampling discipline make every number traceable to rows.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Named aggregations, readable results" },
+    { "t": "p", "text": "Named aggregation (`agg(total=('price','sum'), orders=('id','count'))`) produces self-documenting columns — no MultiIndex riddles, no positional guessing. One verb per question: sums for money, counts for volume, means with n alongside (means without counts mislead on tiny groups — always pair them)." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"cat,price\\nshoes,129\\nshoes,139\\napparel,59\\nshoes,100\\n\"\ndf = pd.read_csv(StringIO(csv))\nr = df.groupby(\"cat\").agg(total=(\"price\", \"sum\"), n=(\"price\", \"size\")).reset_index()\nprint(r.to_dict(\"records\"))\nprint(\"reconciled:\", float(r[\"total\"].sum()) == float(df[\"price\"].sum()))" },
+    { "t": "h", "text": "Pivot for reports, resample for time" },
+    { "t": "p", "text": "**pivot_table** reshapes long-to-wide for readable reports (categories × months with margins=True checksumming). **resample** buckets datetimes (ME month-ends, W weeks) after setting a DatetimeIndex — irregular series become regular, missing periods explicit (fill or flag, never silently skip). Both end with reconciliation: margins sum, periods counted." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"day,amount\\n2026-09-05,100\\n2026-09-20,150\\n2026-10-03,200\\n\"\ndf = pd.read_csv(StringIO(csv), parse_dates=[\"day\"])\nm = df.set_index(\"day\").resample(\"ME\")[\"amount\"].sum()\nprint(m.to_dict())\nprint(\"months:\", len(m), \"total:\", float(m.sum()))" },
+    { "t": "h", "text": "Reconcile everything" },
+    { "t": "p", "text": "Three reconciliations, every aggregation: grouped sums = grand total = raw sum (fanout/dupes break this first); group counts sum to row count (NaN keys vanish — decide fill vs drop explicitly); pivot margins match groupby totals (reshape fidelity). Failed reconciliation names the bug class: fanout (joins), NaN groups, or duplicates." },
+    { "t": "practice", "sim": "js-playground", "title": "Aggregate and reconcile", "query": "const rows = [\n  { cat: 'shoes', price: 129 }, { cat: 'shoes', price: 139 },\n  { cat: 'apparel', price: 59 }, { cat: 'shoes', price: 100 },\n];\nconst groups = {};\nfor (const r of rows) groups[r.cat] = (groups[r.cat] || 0) + r.price;\nconst grand = Object.values(groups).reduce((s, v) => s + v, 0);\nconst raw = rows.reduce((s, r) => s + r.price, 0);\nconsole.log('shoes=' + groups.shoes + ' apparel=' + groups.apparel);\nconsole.log('reconciled=' + (grand === raw));\nconsole.log('grand=' + grand);", "note": "Run it: expect shoes 368, apparel 59, reconciled true, grand 427. Grouped sums equal raw sums — the invariant every aggregation in this lesson must satisfy." },
+    { "t": "keytakeaways", "items": ["Named aggregations (self-documenting) with means always paired with n", "Pivots with margins, resamples with explicit missing-period policy", "Triple reconciliation (grouped = grand = raw) names fanout/NaN/dupe bugs on failure"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice aggregator and confirm shoes/apparel/reconciliation/grand. (b) In Python, replicate with groupby + named agg on the same four rows; assert reconciled. (c) Break it deliberately (duplicate one row pre-aggregation) and state which reconciliation fails and what it diagnoses.",
+    "hints": [
+      "Twin outputs: 368/59/true/427 (shoes = 129+139+100).",
+      "Python: groupby('cat').agg(total=('price','sum')) then sum-vs-raw assert (must hold).",
+      "Duplicated row inflates one group: grouped still sums to (inflated) grand, but grand ≠ trusted raw — reconciliation against the cleaned baseline diagnoses duplication."
+    ],
+    "solution": "// (a) 368/59/true/427 (in order).\n// (b) pandas replication with assert (must hold).\n// (c) grand-vs-baseline breaks → duplication diagnosed (reconcile against cleaned).",
+    "why": "Twin parity (JS mirrors pandas), assert-driven aggregation (reconcile in code, not by eye), and breakage diagnosis (which invariant fails names the bug) are the three aggregation disciplines.",
+    "code": "# Reconciliation asserts: grouped.sum() == raw.sum() — in code, every time.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Grouped totals exceed raw sum. First suspects in order?",
+      "options": ["Bigger machine", "Join fanout, then duplicates, then double-counted NaN handling — reconcile staged counts to isolate", "More groups", "Float precision"],
+      "answer": 1,
+      "explain": "Inflation has three usual causes in order: fanout multiplies, dupes double, NaN mishandling shifts. Staged counts isolate which."
+    },
+    {
+      "q": "Mean without n per group. Problem?",
+      "options": ["None", "Tiny groups mislead: mean of 2 vs mean of 2000 need n alongside — always pair", "Slower", "Rounder"],
+      "answer": 1,
+      "explain": "Unweighted means hide sample size: pair every mean with its n, and distrust small-n cells explicitly."
+    },
+    {
+      "q": "Resampled months skip empty periods silently. Fix?",
+      "options": ["Fine", "Explicit missing-period policy (fill with 0/NaN + flag, or drop with note) — silent gaps misread as zero-activity or break joins", "More data", "Finer grains"],
+      "answer": 1,
+      "explain": "Missing periods are information (no sales vs unrecorded). Policy stated, gaps flagged — never silently absent."
+    }
+  ],
+  "summary": "Named aggregations with n, pivots with margins, resamples with explicit gaps, triple reconciliation always. Numbers traceable to rows or they don't ship.",
+  "next": "Aggregated honestly — now enrich: joins with cardinality guards and as-of features without leakage. Next: merging without multiplying."
+}

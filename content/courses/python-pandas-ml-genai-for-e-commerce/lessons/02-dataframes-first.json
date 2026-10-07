@@ -1,0 +1,53 @@
+{
+  "title": "DataFrames First: Load, Inspect, Slice",
+  "slug": "02-dataframes-first",
+  "objective": "After this lesson you will be able to load CSVs with explicit dtypes, profile them (shape, dtypes, nulls, describe), and slice with loc/iloc, boolean masks, and sorting — stating what each inspection is for.",
+  "why": "Every analysis starts with first contact: what rows exist, what types parsed, what's missing. Skipping inspection means analyzing assumptions — string prices sorting lexicographically, dates as objects, silent NaNs. Profiling (shape/dtypes/nulls/describe) takes minutes and prevents hours of wrong-number debugging later.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Load with declared dtypes" },
+    { "t": "p", "text": "`read_csv` infers types — and inference guesses wrong on messy files (IDs as ints dropping leading zeros, mixed columns as objects). Declare `dtype` for keys/IDs (strings, always), `parse_dates` for timestamps, `na_values` for the file's missing markers ('', 'N/A', '-'). Explicit loading converts surprises into declarations." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"order_id,customer,total,placed\\nORD-1,Ana,129.00,2026-10-01\\nORD-2,Ben,,2026-10-02\\n\"\ndf = pd.read_csv(StringIO(csv), dtype={\"order_id\": str}, parse_dates=[\"placed\"])\nprint(df.dtypes.to_dict())\nprint(\"shape:\", df.shape, \"nulls:\", int(df.isna().sum().sum()))" },
+    { "t": "h", "text": "Profile before you analyze" },
+    { "t": "p", "text": "Four probes, every dataset, no exceptions: **shape** (row/column counts — sanity vs source claims), **dtypes** (parsed as intended?), **nulls** (`isna().sum()` per column — missingness map), **describe** (ranges/means that expose outliers: negative prices, future dates, 0-row tables). Profiling output belongs in the data dossier (OpenDataLoader thinking, pandas execution)." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"item,price,qty\\nRunner,129.00,2\\nSandal,59.50,1\\nRunner,129.00,1\\n\"\ndf = pd.read_csv(StringIO(csv))\nprint(df.describe().loc[\"mean\"].to_dict())\nprint(\"dupes:\", int(df.duplicated().sum()))\nmask = (df[\"price\"] > 100) & (df[\"qty\"] >= 2)\nprint(df.loc[mask, [\"item\", \"price\"]].to_dict(\"records\"))" },
+    { "t": "h", "text": "Slice deliberately: loc, iloc, masks, sorting" },
+    { "t": "p", "text": "**loc** (label-based, inclusive), **iloc** (positional), **boolean masks** (composable with &/|/~ and parentheses — `and`/`or` fail elementwise), **sort_values** (by columns, NaN placement stated). Chained assignment (`df[a][b] = x`) warns (SettingWithCopyWarning) — assign via single `.loc` to write what you mean." },
+    { "t": "practice", "sim": "js-playground", "title": "Mask the rows", "query": "const rows = [\n  { item: 'Runner', price: 129, qty: 2 },\n  { item: 'Sandal', price: 59.5, qty: 1 },\n  { item: 'Runner', price: 129, qty: 1 },\n];\nconst mask = rows.filter((r) => r.price > 100 && r.qty >= 2);\nconsole.log('matching=' + mask.length);\nconsole.log('items=' + mask.map((r) => r.item).join(','));\nconst sorted = [...rows].sort((a, b) => b.price - a.price || b.qty - a.qty);\nconsole.log('top=' + sorted[0].item + ':' + sorted[0].qty);", "note": "Run it: the boolean-mask + multi-key-sort logic twins of pandas filtering. Masks compose with AND/OR/NOT (parenthesized); sorts break ties explicitly — same discipline, both languages." },
+    { "t": "keytakeaways", "items": ["Declare dtypes/parse_dates/na_values on load — inference guesses, declarations hold", "Profile always: shape, dtypes, nulls, describe — minutes that prevent hours", "loc/iloc/masks/sorts with composable boolean logic; single-.loc assignment only"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice mask/sort twin and record outputs. (b) In Python (your env), load a 5-row CSV with one missing price and report shape/dtypes/nulls/means. (c) Select high-value multi-qty rows with a two-condition mask and state why parentheses are mandatory.",
+    "hints": [
+      "Twin outputs: matching 1 (Runner), top Runner:2 (price tie broken by qty).",
+      "Profile lines: dtypes dict, null count, describe means — each answering what/which/how-much.",
+      "Parentheses: & / | bind tighter than comparisons in pandas — unparenthesized masks evaluate wrong (or raise); always wrap each condition."
+    ],
+    "solution": "// (a) matching=1, top Runner:2 (tie broken explicitly).\n// (b) profile dicts per hints (what/which/how-much answered).\n// (c) operator precedence: wrap each condition (mandatory, not style).",
+    "why": "Twin parity (JS logic mirrors pandas), profile completeness (four probes), and precedence discipline (parentheses mandatory) are the three first-contact judgments.",
+    "code": "# Profile quartet: shape, dtypes, isna().sum(), describe() — every dataset.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Prices sort as $100 > $20. Cause + fix?",
+      "options": ["Correct sort", "String dtype: lexicographic order — parse to numeric on load (dtype/converters), quarantine unparseable", "Sort descending", "More rows"],
+      "answer": 1,
+      "explain": "Inferred object dtype sorts textually ('9' > '80' lexicographically), so string prices order wrongly. Declare numeric dtypes (or converters) on load and quarantine the unparseable."
+    },
+    {
+      "q": "df[mask1] & df[mask2] raises. Why + fix?",
+      "options": ["Pandas bug", "and/or don't elementwise — use & / | with parenthesized conditions per side", "Bigger frames", "Reset index"],
+      "answer": 1,
+      "explain": "Python and/or coerce whole Series truthiness (ambiguous → error). Elementwise &/| with parentheses per condition is the rule."
+    },
+    {
+      "q": "SettingWithCopyWarning on chained assignment. Meaning + fix?",
+      "options": ["Ignore it", "Uncertain view-vs-copy: write may vanish — assign via single .loc[row_mask, col] instead", "Copy more", "Disable warnings"],
+      "answer": 1,
+      "explain": "Chained indexing may return views or copies unpredictably. Single .loc assignment writes deterministically."
+    }
+  ],
+  "summary": "Declared dtypes, four-probe profiles, composable masks, explicit sorts, single-.loc writes. First contact done right prevents wrong-number archaeology.",
+  "next": "Inspected honestly — now repair: missing values, duplicates, types, dates, and currency with quarantine discipline. Next: cleanup, pandas-style."
+}

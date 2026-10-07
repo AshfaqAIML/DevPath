@@ -1,0 +1,53 @@
+{
+  "title": "GenAI Layer: Narrate With Proof",
+  "slug": "08-genai-layer",
+  "objective": "After this lesson you will be able to wrap computed analysis in templated natural-language answers with cited numbers, enforce abstention paths, and evaluate the layer on gold questions — ready for the final assessment and your capstone pack.",
+  "why": "Stakeholders read sentences, not DataFrames: 'revenue grew 12% driven by shoes' beats a CSV dump — but only if every number traces to a computed cell. The GenAI layer translates analysis into narrative under grounding contracts (numbers from tables, citations attached, gaps abstained). Ungrounded narration invents trends; grounded narration ships insights with receipts.",
+  "minutes": 18,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Templates with computed slots" },
+    { "t": "p", "text": "Answers assemble from **templates with computed slots**: narrative skeleton fixed, numbers injected from analysis outputs, citations attached per figure. Slots never accept free prose where numbers belong (typed slots: currency, percent, count). Template + computed context is the entire architecture — the model (or formatter) fills slots, never invents them." },
+    { "t": "code", "lang": "python", "code": "TEMPLATE = \"Revenue {total} ({pct:+.1f}% vs prior), driven by {top_cat} ({cat_total}).\"\ncomputed = {\"total\": \"$427.00\", \"pct\": 12.3, \"top_cat\": \"shoes\", \"cat_total\": \"$368.00\"}\nprint(TEMPLATE.format(**computed))\n# Slot contract: every {name} exists in computed; missing slot aborts, never blanks." },
+    { "t": "h", "text": "Cite cells, abstain gaps" },
+    { "t": "p", "text": "Every figure cites its source cell (table + row + computation); questions without computed answers abstain with the gap named ('no August data loaded — cannot compare'). Abstention paths are designed outputs (Prompt 101 discipline), not failures — and abstention rates track corpus coverage over time." },
+    { "t": "code", "lang": "python", "code": "def narrate(question, tables):\n    if \"revenue\" in question and \"sales\" in tables:\n        t = tables[\"sales\"][\"total\"]\n        return f\"Revenue {t} [sales.total].\"\n    return \"Unknown: no computed table covers this question [gap:tables].\"\n\nprint(narrate(\"revenue?\", {\"sales\": {\"total\": \"$427.00\"}}))\nprint(narrate(\"churn?\", {\"sales\": {\"total\": \"$427.00\"}}))" },
+    { "t": "h", "text": "Evaluate the layer like RAG" },
+    { "t": "p", "text": "Gold questions with expected numbers + citations: faithfulness (figures match cells), coverage (cited claims ratio), abstention precision (gaps truly absent). Same metric triple as RAG generation eval — because it IS generation eval, over computed tables instead of retrieved chunks." },
+    { "t": "practice", "sim": "js-playground", "title": "Fill slots, cite cells", "query": "function narrate(question, tables) {\n  if (question.includes('revenue') && tables.sales) {\n    return 'Revenue ' + tables.sales.total + ' [sales.total].';\n  }\n  return 'Unknown: no computed table covers this [gap:tables].';\n}\nconsole.log(narrate('revenue?', { sales: { total: '$427.00' } }));\nconsole.log(narrate('churn?', { sales: { total: '$427.00' } }));\nconsole.log(narrate('revenue?', {}));", "note": "Run it: cited revenue, then two abstentions (missing topic, missing table). Slots filled from computed cells or explicit gaps — never invented figures, in any language." },
+    { "t": "keytakeaways", "items": ["Templates with typed computed slots; missing slots abort, never blank-fill", "Per-figure citations to cells; abstention with named gaps; abstention rate tracks coverage", "Gold questions assert numbers + citations + abstentions — generation eval over tables"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice narrator on all three cases and map outputs. (b) In Python (your env), run both lesson snippets and confirm template fill + abstention paths. (c) Write two gold questions for your capstone data (one answerable with expected citation, one correctly abstaining) with verdicts.",
+    "hints": [
+      "Outputs: cited revenue / topic-gap abstention / table-gap abstention (three paths, all designed).",
+      "Python: template formats computed dict; narrate covers both branches (verify by running).",
+      "Gold design: answerable (number + cell citation expected) vs unanswerable (abstention + gap name expected)."
+    ],
+    "solution": "// (a) cited / gap-tables ×2 paths (in order).\n// (b) Python confirms fill + both abstentions.\n// (c) answerable-with-citation + correctly-abstaining gold pair.",
+    "why": "Slot discipline (abort on missing), abstention design (named gaps), and gold pairing (answerable + abstaining) are the three narration judgments.",
+    "code": "# Narration pattern: computed slots + cell citations + named abstentions.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Summary states revenue never computed anywhere. Handling?",
+      "options": ["Publish with flair", "Abstain with named gap — uncomputed figures must never appear, however plausible", "Estimate it", "Round a nearby number"],
+      "answer": 1,
+      "explain": "Grounding contracts bind figures to cells. Plausible invention is still invention — abstention preserves trust."
+    },
+    {
+      "q": "Template slot missing at render. Correct behavior?",
+      "options": ["Blank it silently", "Abort with named gap — blank slots publish half-sentences that read as facts", "Guess the value", "Skip the sentence"],
+      "answer": 1,
+      "explain": "Missing slots are data gaps wearing formatting: abort explicitly with the gap named, never render around silence."
+    },
+    {
+      "q": "Abstention rate triples after new questions arrive. Reading?",
+      "options": ["Model degraded", "Coverage signal: new questions exceed computed tables — extend analysis, not prompts", "Worse prompts", "Ignore it"],
+      "answer": 1,
+      "explain": "Abstention tracks coverage: spikes mean the question space outgrew the tables. Fix with computation, not wording."
+    }
+  ],
+  "summary": "Computed slots with citations, gaps with names, gold with both paths. Narrative ships insights with receipts — course complete, assessment next.",
+  "next": "Course complete: take the 10-question final assessment (70% to pass), then build the Store Analyst Pack capstone — and step into visualization."
+}

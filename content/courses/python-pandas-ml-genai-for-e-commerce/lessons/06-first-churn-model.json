@@ -1,0 +1,53 @@
+{
+  "title": "First Churn Model, Honestly",
+  "slug": "06-first-churn-model",
+  "objective": "After this lesson you will be able to split temporally (not just randomly), train a logistic-regression churn baseline, beat dummy classifiers on precision/recall (not accuracy theater), and state calibration plainly.",
+  "why": "Churn prediction is the canonical first business model — and the canonical self-deception venue: random splits leak futures, accuracy flatters majorities, uncalibrated scores mislead actions. Honest modeling (temporal splits, dummy baselines, per-class metrics, calibration checks) produces smaller numbers you can believe over bigger numbers you can't.",
+  "minutes": 17,
+  "xp": 70,
+  "blocks": [
+    { "t": "h", "text": "Split by time, stratify by sense" },
+    { "t": "p", "text": "**Temporal splits** (train ≤ cutoff < test) mirror deployment: future predicted from past, never the reverse. Random splits leak future patterns into training (optimistic lies). Stratify to preserve churn rates across splits; fix `random_state` everywhere (reproducibility is a requirement, not a nicety). Split design stated before modeling begins." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.dummy import DummyClassifier\nfrom sklearn.metrics import precision_score, recall_score\ncsv = \"hours,orders,churned\\n900,5,0\\n800,4,0\\n150,1,1\\n200,1,1\\n700,3,0\\n100,0,1\\n650,3,0\\n120,1,1\\n\"\ndf = pd.read_csv(StringIO(csv))\nX = df[[\"hours\", \"orders\"]]\ny = df[\"churned\"]\nXtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.375, random_state=7, stratify=y)\nd = DummyClassifier(strategy=\"most_frequent\").fit(Xtr, ytr)\nprint(\"dummy acc:\", round(d.score(Xte, yte), 3), \"(the bar to beat, honestly)\")\nprint(\"dummy recall(churn=1):\", round(recall_score(yte, d.predict(Xte), zero_division=0), 3))" },
+    { "t": "h", "text": "Logistic regression as the honest baseline" },
+    { "t": "p", "text": "**LogisticRegression** first (interpretable coefficients, calibrated-ish probabilities, fast): scale features (`StandardScaler` fit on train only — fit-on-test leaks), inspect coefficients for sense (hours negative? plausible), and compare against dummies on precision/recall/F1 — never accuracy alone on imbalanced churn." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import precision_score, recall_score, f1_score\ncsv = \"hours,orders,churned\\n900,5,0\\n800,4,0\\n150,1,1\\n200,1,1\\n700,3,0\\n100,0,1\\n650,3,0\\n120,1,1\\n\"\ndf = pd.read_csv(StringIO(csv))\nX = df[[\"hours\", \"orders\"]]\ny = df[\"churned\"]\nXtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.375, random_state=7, stratify=y)\nsc = StandardScaler().fit(Xtr)\nmodel = LogisticRegression().fit(sc.transform(Xtr), ytr)\npred = model.predict(sc.transform(Xte))\nprint(\"precision:\", round(precision_score(yte, pred, zero_division=0), 3))\nprint(\"recall:\", round(recall_score(yte, pred, zero_division=0), 3))\nprint(\"f1:\", round(f1_score(yte, pred, zero_division=0), 3))\nprint(\"coef:\", [round(c, 3) for c in model.coef_[0]])" },
+    { "t": "h", "text": "Calibration: do 0.8s convert 80%?" },
+    { "t": "p", "text": "Probabilities drive actions (intervene above 0.7?): **calibration** asks whether stated probabilities match observed rates. Check crudely (bin predictions, compare rates) before acting on thresholds; uncalibrated scores rank fine but mislead absolutely. Thresholds follow costs (missing churners vs bothering loyals), never 0.5 by default." },
+    { "t": "practice", "sim": "js-playground", "title": "Beat the dummy", "query": "function metrics(yTrue, yPred) {\n  let tp = 0, fp = 0, fn = 0;\n  for (let i = 0; i < yTrue.length; i++) {\n    if (yPred[i] === 1 && yTrue[i] === 1) tp++;\n    else if (yPred[i] === 1) fp++;\n    else if (yTrue[i] === 1) fn++;\n  }\n  const prec = tp + fp ? tp / (tp + fp) : 0;\n  const rec = tp + fn ? tp / (tp + fn) : 0;\n  return { precision: prec, recall: rec, f1: prec + rec ? (2 * prec * rec) / (prec + rec) : 0 };\n}\nconst yTrue = [0, 0, 1, 1, 0, 1, 0, 1];\nconst dummy = [0, 0, 0, 0, 0, 0, 0, 0];\nconst model = [0, 0, 1, 0, 0, 1, 0, 1];\nconst d = metrics(yTrue, dummy);\nconst m = metrics(yTrue, model);\nconsole.log('dummy P/R/F1: ' + [d.precision, d.recall, d.f1].map((v) => Math.round(v * 100) / 100).join('/'));\nconsole.log('model P/R/F1: ' + [m.precision, m.recall, m.f1].map((v) => Math.round(v * 100) / 100).join('/'));\nconsole.log('model beats dummy on recall: ' + (m.recall > d.recall));", "note": "Run it: dummy 0/0/0 (majority-vote finds no churners) vs model 1/0.75/0.86 — accuracy would call them close (0.5 vs 0.875)... actually compute: dummy correct 4/8 = 0.5, model 7/8 = 0.875. Per-class metrics tell the real story: dummy recall 0 means total churn blindness." },
+    { "t": "keytakeaways", "items": ["Temporal splits (future from past) + stratify + fixed seeds; random splits leak optimism", "LogisticRegression first with train-fit scaling; beat dummies on precision/recall/F1, never accuracy alone", "Calibration checked before thresholds act; thresholds follow costs, never 0.5 default"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice metrics and confirm dummy 0/0/0 vs model 1/0.75/0.86. (b) In Python (your env), run both lesson snippets and confirm dummy accuracy vs model precision/recall. (c) State the threshold policy for intervention (cost of miss vs bother) with a worked example.",
+    "hints": [
+      "Twin outputs: dummy blind (0 recall), model 1/0.75/0.86 — per-class truth vs accuracy theater (0.5 vs 0.875).",
+      "Python: dummy acc + zero recall vs model P/R/F1 + negative hours coefficient (sense-check passes).",
+      "Threshold: intervene where expected loss minimized (miss cost × P(churn) vs bother cost) — computed, not defaulted."
+    ],
+    "solution": "// (a) 0/0/0 vs 1/0.75/0.86 (blindness vs signal).\n// (b) Python confirms + coefficient sense-check (hours negative).\n// (c) cost-minimizing threshold (miss vs bother economics, worked).",
+    "why": "Twin parity (JS mirrors sklearn metrics), dummy discipline (baselines first), and threshold economics (costs, not defaults) are the three honest-modeling judgments.",
+    "code": "# Honest-modeling pattern: temporal split + dummies + per-class metrics + calibration.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "0.97 accuracy, 4% churn rate. Go?",
+      "options": ["Ship it", "No: dummy majority hits 0.96 — demand precision/recall/F1 per class plus lift over dummy", "More features", "Bigger test set"],
+      "answer": 1,
+      "explain": "Imbalanced accuracy flatters majorities: 0.97 ≈ always-negative. Per-class metrics plus dummy baselines separate signal from theater."
+    },
+    {
+      "q": "Scaler fit on full data before split. Issue?",
+      "options": ["None — standard", "Leakage: test statistics influence training transform — fit on train only, transform test", "Slower", "Less accurate always"],
+      "answer": 1,
+      "explain": "Preprocessing fit on test leaks future distribution into training. Fit-train/transform-test, no exceptions."
+    },
+    {
+      "q": "Intervene at 0.5 for all customers. Problem?",
+      "options": ["Standard practice", "Thresholds follow costs (miss vs bother economics per segment), never defaults — 0.5 assumes symmetric costs falsely", "Too high", "Too low"],
+      "answer": 1,
+      "explain": "Optimal thresholds minimize expected loss: miss costs vs bother costs differ per segment. Computed, not defaulted."
+    }
+  ],
+  "summary": "Temporal splits, dummy baselines, per-class metrics, calibrated thresholds with cost economics. Smaller believable numbers beat bigger theater.",
+  "next": "Predicted churners identified — now what they buy together: basket rules with support gates and holdout proof. Next: association without superstition."
+}
