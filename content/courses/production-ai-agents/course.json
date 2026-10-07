@@ -1,0 +1,177 @@
+{
+  "courseSlug": "production-ai-agents",
+  "subtitle": "Ship agents, not demos: evaluation, guardrails, observability, cost control, fallbacks, and the human-review loop — the engineering between prototype and production",
+  "audience": "Developers with working agent prototypes (LangGraph/CrewAI/RAG courses) facing real traffic, real money, and real incidents. All machinery (budgets, cascades, gates, samplers, redactors) runs as executable JS; production systems (tracing backends, model APIs, deploy pipelines) are represented by accurate patterns labeled for your stack.",
+  "outcomes": [
+    "Run a demo-to-prod gap audit and prioritize by user harm, not engineering aesthetics",
+    "Budget latency (p50/p95/p99) across model calls, retrieval, and tools — with streaming and parallelism",
+    "Control cost with token accounting, model routing, caching layers, and batching",
+    "Design fallback cascades (retry → smaller model → cached → deterministic → human) with per-tier triggers",
+    "Gate deploys on gold evals with canary analysis and automatic rollback triggers",
+    "Enforce production guardrails: injection defense at scale, PII redaction, output filters, rate limits",
+    "Instrument traces, token/latency/cost dashboards, and alerts that page on behavior, not just errors",
+    "Operate the human-review loop: sampling, queue design, reviewer UX, feedback-into-gold flywheel",
+    "Respond to incidents with severity levels, runbooks, safe rollbacks, and blameless postmortems",
+    "Pass a launch review: ship checklist with evidence for a production support agent"
+  ],
+  "prereqSlugs": ["prompt-engineering-101", "langgraph-for-e-commerce"],
+  "technologies": ["Model APIs (provider-neutral)", "JavaScript (ES2020+) for production machinery", "Tracing concepts (spans, attributes)", "Gold eval harnesses", "Feature flags + canary deploys"],
+  "skills": ["production readiness", "latency budgeting", "cost control", "fallback design", "deploy gating", "AI observability", "review operations", "incident response"],
+  "assessment": [
+    {
+      "q": "Demo works; production timelines unknown. First artifact?",
+      "options": ["More features", "Demo-to-prod gap audit across eval/guardrails/obs/cost/fallbacks/review, prioritized by user harm", "Bigger model", "More prompts"],
+      "answer": 1,
+      "explain": "Readiness is enumerated gaps priced by harm, not vibes. Audit first, build second (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "p99 12s, p50 1.2s on an agent with 4 sequential model calls. Biggest lever?",
+      "options": ["Faster model everywhere", "Parallelize independent calls + stream partials + timeout the tail — p99 is sequential-chain + tail-latency dominated", "More retries", "Bigger context"],
+      "answer": 1,
+      "explain": "Tail latency compounds serially; parallelism collapses it, streaming hides it, timeouts bound it (Ch.2).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Token bill triples after launch. Ordered response?",
+      "options": ["Cheaper model for everything", "Attribute spend (per-feature accounting) → cache repeats → route by difficulty → batch offline → right-size models per tier", "Cut logging", "Raise prices"],
+      "answer": 1,
+      "explain": "Cost control is measurement then levers in ROI order: accounting first, caching, routing, batching, rightsizing (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Primary model down during peak. Correct behavior?",
+      "options": ["Error page for all", "Fallback cascade: retry → smaller/secondary model → cached/stale-with-label → deterministic safe mode → human queue — degraded, never dead", "Wait for recovery", "Infinite retries"],
+      "answer": 1,
+      "explain": "Reliability tiers degrade gracefully with labeled staleness and human overflow. Dead is the only unacceptable tier (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Deploy passes unit tests, fails customers same day. Missing gate?",
+      "options": ["More unit tests", "Gold conversation evals + canary with automatic rollback on metric breach — behavior gates, not just code gates", "Faster deploys", "Bigger canary"],
+      "answer": 1,
+      "explain": "Code gates don't cover behavior. Gold sets + canary analysis + auto-rollback gate production behavior (Ch.5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Canary shows +2% errors, −1% latency, +5% cost. Ship?",
+      "options": ["Yes — faster", "No: error regression vetoes regardless of latency wins; cost needs its own gate — multi-metric gates with vetoes", "Ship half traffic", "Ignore errors"],
+      "answer": 1,
+      "explain": "Canary gates compose like eval gates: vetoes (errors/safety) overrule improvements. Ship on all-green, never averages (Ch.5).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Attack traffic crafts tickets exfiltrating order data. Layers?",
+      "options": ["Longer system prompt", "Input validation + scope rules + output filters (PII patterns) + rate limits + attempt logging + tool permission audits — defense in depth", "Bigger model", "Disable tickets"],
+      "answer": 1,
+      "explain": "Production guardrails layer: validate in, scope decisions, filter out (PII), throttle, log, audit tools. No single layer holds (Ch.6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Pager fires on 5xx rate only. What's missed?",
+      "options": ["Nothing — errors suffice", "Behavioral degradation: answer quality drops, grounding failures, cost spikes, latency tails — alert on behavior + economics, not just errors", "More dashboards", "Louder pages"],
+      "answer": 1,
+      "explain": "AI incidents are often silent (fluent wrongness). Alert on quality proxies, cost anomalies, and tail latency — errors are the last signal, not the first (Ch.7).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Review queue grows unboundedly. Fix shape?",
+      "options": ["More reviewers", "Risk-based sampling (uncertain + high-stakes + random baseline) with queue SLAs and reviewer UX that makes decisions fast and loggable", "Review everything", "Review nothing"],
+      "answer": 1,
+      "explain": "Review capacity is finite: sample by risk, SLA the queue, instrument reviewer UX. Feedback flows back into gold items (flywheel) (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Refund wrongly issued at 3am. First three actions?",
+      "options": ["Blame the on-call", "Contain (disable path/feature-flag) → assess blast radius from audit logs → safe rollback; postmortem after, blameless, ending in gold items + guardrail", "Retrain", "Ignore until morning"],
+      "answer": 1,
+      "explain": "Contain, assess, roll back — in that order, from runbooks. Postmortems produce prevention (gold items + gates), never blame (Ch.9).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Launch review: one artifact that matters most?",
+      "options": ["Architecture diagram", "Evidence bundle: gold scores, gate results, canary plan, rollback procedure, audit completeness — proof, not prose", "Roadmap", "Headcount plan"],
+      "answer": 1,
+      "explain": "Launch reviews approve evidence: measured behavior, enforced gates, reversible deploys, complete audit. Diagrams support; proof decides (Ch.10).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Caching answers across users with order data inside. Risk?",
+      "options": ["None — cache everything", "Cross-tenant leakage: cached personalized answers served to others — key caches by tenant + data class, never globally", "Slower", "Bigger bills"],
+      "answer": 1,
+      "explain": "Cache keys must include tenant and data sensitivity. Global caches leak PII across users — isolation is a cache-design requirement (Ch.3/6).",
+      "difficulty": "hard"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Launch Review",
+    "summary": "Take the returns-resolution agent from prototype to launch-ready: gap audit, latency/cost budgets with measurements, fallback cascade, eval-gated deploy pipeline with canary + rollback, production guardrails, observability dashboards, review-queue design, incident runbooks — presented as an evidence bundle a launch board would approve.",
+    "requirements": [
+      "Gap audit: prototype scored across eval/guardrails/obs/cost/fallbacks/review with harm-ranked priorities",
+      "Latency budget: p50/p95/p99 targets with per-call allocation, streaming plan, and timeout/parallelism design",
+      "Cost model: per-1k-task projection with caching/routing/batching levers quantified",
+      "Fallback cascade: 4+ tiers with triggers, labels, and human overflow; chaos-tested primary-down path",
+      "Deploy pipeline: gold gates + canary analysis + auto-rollback triggers + feature-flag kill switches",
+      "Guardrails: injection/PII/rate-limit/output-filter layers with attack gold items",
+      "Observability: trace schema, dashboard list (latency/cost/quality), alert rules with behavioral signals",
+      "Review ops: sampling policy, queue SLAs, reviewer UX, feedback-to-gold flywheel",
+      "Incident kit: severity levels, two runbooks (wrong-refund, data-leak suspicion), rollback procedure"
+    ],
+    "technical": [
+      "All machinery (budgets, cascades, gates, samplers, redactors) in runnable JS with asserted behaviors",
+      "Gold sets versioned; canary analysis scripted with veto logic",
+      "Audit completeness: every money path logged with consumer/args/verdict/outcome",
+      "Numbers reproducible: budgets from measurements, costs from projections, gates from gold runs"
+    ],
+    "architecture": "Five sections: (1) Gap audit with harm ranking; (2) Budgets — latency/cost models with measurements; (3) Safety — fallbacks, guardrails, gates, canary, rollback; (4) Operations — observability, review ops, incident kit; (5) Launch evidence — scores, gate results, residual risks with owners and dates.",
+    "steps": [
+      "Audit the prototype; rank gaps by user harm",
+      "Measure latency/cost baselines; write budgets with headroom",
+      "Build fallback cascade; chaos-test primary-down",
+      "Write gold gates + canary analysis + rollback triggers",
+      "Add guardrails, observability, review ops, incident kit in that order",
+      "Assemble the evidence bundle; red-team it (attack gold) before submitting"
+    ],
+    "evaluation": [
+      "Every gap has an owner, a fix, and a verification method",
+      "Budgets derived from measurements with stated headroom; fallbacks chaos-proven",
+      "Gates block on violations (demonstrated with a failing case), canary vetoes honored",
+      "Guardrails layered with attack gold passing; audit complete per money path",
+      "Residual risks named with owners and dates — no silent hope"
+    ],
+    "stretch": [
+      "Load-test to 10x expected traffic and report the breaking tier with graphs",
+      "Add semantic caching with tenant-isolated keys and measure hit-rate + savings",
+      "Run a game-day: simulated wrong-refund incident end to end with timed runbook"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Demo to production: what changes?",
+      "a": "Everything around the model: gold evals with gates, guardrails (injection/PII/rate limits), observability (traces, cost, quality alerts), latency budgets with streaming/parallelism, cost controls (caching, routing), fallback cascades, canary deploys with rollback, human review ops, and incident runbooks. The model call is 10% of production; the other 90% is what this course covers — audited in a gap analysis priced by user harm."
+    },
+    {
+      "q": "p99 is 10x p50 on your agent. Diagnose and fix.",
+      "a": "Diagnose per-call timing distributions: serial model calls stack tails, retrieval outliers, tool timeouts without bounds. Fix in order: parallelize independent calls, stream partials to hide latency, bound every call with timeouts, cache repeats, route easy cases to smaller models. Measure p50/p95/p99 per tier after each change — tails move only when measured, and averages hide them by definition."
+    },
+    {
+      "q": "How do you gate AI deploys differently from code deploys?",
+      "a": "Code gates (tests, types) plus behavior gates: gold conversation sets with per-segment no-regression rules, canary analysis on error/quality/cost metrics with vetoes, automatic rollback triggers, and feature flags for instant kills. Behavior drifts silently where code breaks loudly — gates must measure outcomes (hit-rate, faithfulness, violation counts), not just passage of tests."
+    },
+    {
+      "q": "Design fallbacks for a support agent whose model API dies at peak.",
+      "a": "Cascade: bounded retry → secondary/smaller model → cached/stale-labeled answers → deterministic safe mode (status + human queue) — degraded tiers, never dead. Each tier labeled honestly to users; overflow routes to humans with context attached. Chaos-test the primary-down path quarterly; fallbacks untested are wishes, and wishes fail at peak."
+    },
+    {
+      "q": "Support agent with order data: caching strategy without leaking PII?",
+      "a": "Key caches by (tenant, data-class, query-signature): per-user personalization never shares keys across tenants; public policy answers share broadly with version tags. Never cache across trust boundaries; TTL by freshness class (prices short, policies long); log cache hits for audit. Global caches on personalized data are cross-tenant leaks with extra steps."
+    },
+    {
+      "q": "Wrong refund issued at 3am. Walk me through it.",
+      "a": "Contain first (feature-flag the refund path off — seconds), assess blast radius from audit logs (who/what amounts), roll back deploy if code-caused or revoke scope if abuse, then blameless postmortem producing gold items (the exact attack/edge), a gate (amount validation), and an owner with a date. Page on behavioral signals so 3am becomes 3pm prevention next time."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,53 @@
+{
+  "title": "Latency Budgets: Tails, Streaming, Parallelism",
+  "slug": "02-latency-budgets",
+  "objective": "After this lesson you will be able to budget p50/p95/p99 across agent stages, parallelize independent calls, stream partials to hide latency, and bound every call with timeouts that protect the tail.",
+  "why": "Users feel p99, averages lie: a 1.2s median with 12s tails reads as 'slow and flaky'. Agent latency stacks serially (4 model calls × tails), retrieval outliers add, tool timeouts hang. Budgeting allocates milliseconds per stage like money, then spends parallelism, streaming, and timeouts to fit — measured per tier, never assumed.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Tails dominate, averages deceive" },
+    { "t": "p", "text": "Four serial 300ms-median calls with occasional 3s tails yield p99 ≈ sum of tails, not medians: serial chains **add tail risk**. Measure per-stage p50/p95/p99 separately (model, retrieval, tools) before optimizing — the budget table shows which stage owns the tail, and only that stage deserves surgery." },
+    { "t": "code", "lang": "js", "code": "// Budget table: per-stage percentiles with headroom (plain JS)\nfunction budgetCheck(stages, budgetP99) {\n  const serial = stages.reduce((s, x) => s + x.p99, 0);\n  return stages.map((st) => ({\n    name: st.name,\n    share: Math.round((st.p99 / serial) * 100) + \"% of tail\",\n    over: st.p99 > st.allowance ? `OVER by ${st.p99 - st.allowance}ms` : \"within\",\n  })).concat([{ totalSerialP99: serial, budget: budgetP99, fits: serial <= budgetP99 }]);\n}\n// Tail owner = biggest share: optimize there first, nowhere else.", "caption": "Percentile budgets per stage: tails allocated like money" },
+    { "t": "h", "text": "Parallelism collapses serial tails" },
+    { "t": "p", "text": "Independent calls (policy fetch + order lookup + history) run **concurrently**: tail becomes max-of-tails, not sum. Promise.all with per-call timeouts (slowest bounded, not waited on forever); dependent calls stay serial by necessity. Dependency analysis (which inputs need which outputs?) precedes every parallelization — parallelizing dependent calls corrupts, not accelerates." },
+    { "t": "code", "lang": "js", "code": "// Parallel with per-call timeouts (pattern; production: real fetch calls)\n// const withTimeout = (p, ms) => Promise.race([p, timeoutReject(ms)]);\n// const [policy, order, history] = await Promise.all([\n//   withTimeout(fetchPolicy(), 1500), withTimeout(fetchOrder(id), 1500), withTimeout(fetchHistory(id), 1500),\n// ]);\n// Tail: max(three bounded tails) instead of their sum. Dependents stay serial.", "caption": "Concurrent independents, bounded each, serial only by necessity" },
+    { "t": "h", "text": "Streaming hides, timeouts bound" },
+    { "t": "p", "text": "**Streaming** (token-by-token delivery) converts waiting into reading: perceived latency drops to time-to-first-token even when totals hold. **Timeouts** bound every call with fallback routing on breach (Ch.4 cascades): a 1.5s retrieval timeout failing over beats a 12s hang succeeding. Perceived + bounded beats merely fast on average." },
+    { "t": "practice", "sim": "js-playground", "title": "Find the tail owner", "query": "function budgetCheck(stages, budgetP99) {\n  const serial = stages.reduce((s, x) => s + x.p99, 0);\n  return stages.map((st) => ({ name: st.name, share: Math.round((st.p99 / serial) * 100), over: st.p99 > st.allowance }));\n}\nconst stages = [\n  { name: 'triage', p99: 800, allowance: 1000 },\n  { name: 'retrieval', p99: 4500, allowance: 2000 },\n  { name: 'draft', p99: 2200, allowance: 2500 },\n];\nconst rows = budgetCheck(stages, 8000);\nfor (const r of rows) console.log(r.name + ' share=' + r.share + '% over=' + r.over);\nconsole.log('serial p99=' + stages.reduce((s, x) => s + x.p99, 0));", "note": "Run it: retrieval owns ~60% and breaches allowance — the only stage earning surgery. Triage and draft stay untouched: budgets direct effort, not hunches." },
+    { "t": "keytakeaways", "items": ["Budget p50/p95/p99 per stage; serial tails add — tail owner gets surgery, others don't", "Parallelize independents (max-of-tails) with per-call timeouts; dependents stay serial", "Stream to hide (time-to-first-token), timeout to bound (breach routes to fallbacks)"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice budget and name the tail owner with shares. (b) Parallelize retrieval+draft hypothetically (are they independent? check inputs) and recompute serial p99 honestly. (c) Set a timeout for retrieval with fallback routing and state what users see on breach.",
+    "hints": [
+      "Owner: retrieval ~60% + OVER. Others within allowance — untouched by discipline.",
+      "Dependency check: draft needs retrieval output → dependent, stays serial. Only truly independent calls parallelize (policy fetch + order lookup pattern).",
+      "Timeout 2000ms → fallback (cached/stale-labeled or simplified answer): breach shows degraded-but-fast, never hangs."
+    ],
+    "solution": "// (a) retrieval ~60%, OVER by 2500ms; others within (untouched).\n// (b) draft depends on retrieval → serial stays; parallelize independents only.\n// (c) 2000ms timeout → labeled fallback: fast degraded beats slow perfect.",
+    "why": "Dependency analysis before parallelization plus timeout-with-fallback design are the two latency judgments: speedups must preserve correctness, bounds must preserve experience.",
+    "code": "// Budget-then-parallelize pattern: measure shares, check dependencies, bound tails.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "p50 1.2s, p99 12s, 4 serial model calls. Biggest lever?",
+      "options": ["Faster model", "Parallelize independents + stream + timeout tails: serial chains add tail risk; tails dominate p99", "More retries", "Bigger context"],
+      "answer": 1,
+      "explain": "p99 is tail arithmetic: serial sums, parallel takes max, streaming hides, timeouts bound. Measure per stage first."
+    },
+    {
+      "q": "Parallelize draft (needs retrieval output)?",
+      "options": ["Yes — all parallel", "No: dependents stay serial — parallelizing corrupts inputs; parallelize independents only", "Sometimes", "With bigger timeout"],
+      "answer": 1,
+      "explain": "Dependency analysis gates parallelism: independent calls concurrent, dependent calls serial. Speed never overrides correctness."
+    },
+    {
+      "q": "Retrieval breaches 2s timeout. Users see…",
+      "options": ["Hang until success", "Labeled fallback (cached/stale-marked or simplified) — bounded degraded beats unbounded perfect", "Error page", "Nothing"],
+      "answer": 1,
+      "explain": "Timeouts route to fallbacks (Ch.4): fast-degraded with honesty labels preserves trust that hangs destroy."
+    }
+  ],
+  "summary": "Percentile budgets per stage, parallelism for independents, streaming for perception, timeouts for bounds. Tails measured, owned, and operated.",
+  "next": "Time budgeted — now money: token accounting, routing, caching, and batching that fund the operation. Next: cost control."
+}

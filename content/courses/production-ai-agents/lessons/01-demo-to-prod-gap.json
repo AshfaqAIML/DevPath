@@ -1,0 +1,102 @@
+{
+  "title": "The Demo-to-Prod Gap Audit",
+  "slug": "01-demo-to-prod-gap",
+  "objective": "After this lesson you will be able to audit any agent prototype across eval, guardrails, observability, cost, fallbacks, and review ops — scoring each dimension and prioritizing fixes by user harm, not engineering aesthetics.",
+  "why": "Demos impress precisely because they skip production: curated inputs, no attackers, no bills, no 3am pages. Shipping means enumerating everything the demo avoided and pricing each gap by harm (wrong refunds > slow replies > ugly logs). The gap audit is the course's master tool — every later lesson fills a row it opens, and the capstone is scored against it.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Seven dimensions, scored honestly"
+    },
+    {
+      "t": "p",
+      "text": "Audit across **evaluation** (gold sets? gates?), **guardrails** (injection/PII/rate limits?), **observability** (traces? cost dashboards? behavioral alerts?), **cost** (per-task projection? levers?), **fallbacks** (primary-down behavior?), **review ops** (who checks what, with what SLA?), and **incidents** (runbooks? rollback?). Score 0–2 each (absent/partial/owned); anything unscored is assumed absent — optimism is not a dimension."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Gap audit: dimensions with harm weights (plain JS)\nconst DIMENSIONS = [\n  { name: \"evaluation\", weight: 3 },\n  { name: \"guardrails\", weight: 3 },\n  { name: \"observability\", weight: 2 },\n  { name: \"cost\", weight: 1 },\n  { name: \"fallbacks\", weight: 2 },\n  { name: \"review-ops\", weight: 2 },\n  { name: \"incidents\", weight: 1 },\n];\nfunction auditGap(scores) {\n  // scores: {dimension: 0|1|2} — 0 absent, 1 partial, 2 owned\n  return DIMENSIONS.map((d) => ({\n    ...d,\n    score: scores[d.name] ?? 0,\n    risk: d.weight * (2 - (scores[d.name] ?? 0)),\n  })).sort((a, b) => b.risk - a.risk); // fix highest risk first\n}\n// Priority = harm weight × gap size: money/safety dimensions outrank cost polish.",
+      "caption": "Risk-ranked gaps: weight × absence decides build order"
+    },
+    {
+      "t": "h",
+      "text": "Prioritize by harm, evidence each claim"
+    },
+    {
+      "t": "p",
+      "text": "Each gap needs **harm + evidence**: 'guardrails 0 — untested injection path on refund tool (harm: money loss; evidence: attack gold missing)'. Harm ranks the fix queue; evidence prevents audit theater (scores asserted without probes). Re-audit per release: dimensions regress silently when features outrun their operational wrapping."
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Evidence over adjectives",
+      "text": "Every score needs a probe behind it: gold coverage for evaluation, attack items for guardrails, trace sampling for observability, projections for cost. 'Probably fine' scores zero — audits run on evidence or they run on hope."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Rank the gaps",
+      "query": "const DIMENSIONS = [\n  { name: 'evaluation', weight: 3 },\n  { name: 'guardrails', weight: 3 },\n  { name: 'observability', weight: 2 },\n  { name: 'cost', weight: 1 },\n  { name: 'fallbacks', weight: 2 },\n  { name: 'review-ops', weight: 2 },\n  { name: 'incidents', weight: 1 },\n];\nfunction auditGap(scores) {\n  return DIMENSIONS.map((d) => ({ ...d, score: scores[d.name] ?? 0, risk: d.weight * (2 - (scores[d.name] ?? 0)) })).sort((a, b) => b.risk - a.risk);\n}\nconst ranked = auditGap({ evaluation: 1, guardrails: 0, observability: 1, cost: 2, fallbacks: 0, 'review-ops': 1, incidents: 0 });\nconsole.log(ranked.slice(0, 3).map((r) => r.name + ':' + r.risk).join(','));\nconsole.log('top fix: ' + ranked[0].name);",
+      "note": "Run it: expect guardrails:6, fallbacks:4, then evaluation/incidents... — guardrails top (weight 3 × gap 2). Cost scores owned (risk 0) despite weight 1: owned dimensions never outrank open wounds."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Seven dimensions scored 0/1/2 (absent/partial/owned); unscored means absent",
+        "Priority = harm weight × gap: money/safety first, polish last",
+        "Each gap carries harm + evidence; re-audit per release — dimensions regress silently"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice audit and state the top-3 fix order with risks. (b) Score a hypothetical prototype of yours (or the returns graph from LangGraph) across all seven dimensions with one evidence line each. (c) State which single fix you'd ship this week with the harm argument.",
+    "hints": [
+      "Order: guardrails (6), fallbacks (4), then evaluation/observability/review-ops/incidents tied (2-3) — ties broken by money-adjacency.",
+      "Evidence lines name probes, not feelings ('no attack gold items exist' beats 'probably unsafe').",
+      "This-week fix = top risk with a shippable scope (e.g. refund approval gate + 3 attack gold items)."
+    ],
+    "solution": "// (a) guardrails:6, fallbacks:4, evaluation/observability/review/incidents next.\n// (b) seven scored dimensions with evidence lines (audit discipline).\n// (c) top-risk shippable fix with harm argument (money/safety first).",
+    "why": "Risk-ranked auditing with evidence lines plus shippable scoping is the launch-review skill in miniature: prioritize by harm, prove by probe, ship by scope.",
+    "code": "// Audit pattern: dimensions × weights × evidence → ranked fix queue.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Prototype scores cost=2 (owned), guardrails=0. Fix order?",
+      "options": [
+        "Cost polish first — momentum",
+        "Guardrails: risk 6 vs 0 — owned dimensions never outrank open wounds, whatever their weight",
+        "Both simultaneously",
+        "Neither"
+      ],
+      "answer": 1,
+      "explain": "Priority is weight × gap: owned cost scores risk 0 while absent guardrails score 6. Fix open wounds before polishing strengths."
+    },
+    {
+      "q": "'Guardrails: probably fine' in an audit. Verdict?",
+      "options": [
+        "Acceptable",
+        "Theater: gaps need harm + evidence (probes, gold items, or their documented absence) — unscored means absent",
+        "Sufficient",
+        "Expert judgment"
+      ],
+      "answer": 1,
+      "explain": "Evidence lines separate audits from vibes. Every score traces to a probe or its admitted absence."
+    },
+    {
+      "q": "Dimensions to re-audit per release because…",
+      "options": [
+        "Auditors need work",
+        "Features outrun operational wrapping silently — yesterday's owned guardrail is today's gap after three feature PRs",
+        "Scores expire",
+        "Regulations"
+      ],
+      "answer": 1,
+      "explain": "Operational coverage decays as code grows. Per-release re-audits catch drift before incidents do."
+    }
+  ],
+  "summary": "Seven dimensions, harm-weighted risks, evidence per score, re-audit per release. The audit opens every row this course fills.",
+  "next": "Gaps ranked — now the scarcest resource: time. Latency budgets across model calls, retrieval, and tools. Next: tails, streaming, and parallelism."
+}

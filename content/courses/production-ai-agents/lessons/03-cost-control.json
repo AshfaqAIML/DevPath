@@ -1,0 +1,53 @@
+{
+  "title": "Cost Control: Token Economics",
+  "slug": "03-cost-control",
+  "objective": "After this lesson you will be able to account token spend per feature, project monthly costs, apply caching/routing/batching levers in ROI order, and isolate tenants in caches to prevent cross-user leakage.",
+  "why": "LLM bills scale with success: every user multiplies tokens, and unmeasured spend compounds silently until finance calls. Cost control is accounting first (per-feature spend), then levers in ROI order (cache, route, batch, right-size) — with tenant isolation as a hard constraint, because shared caches across users leak PII with extra steps.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Account first: per-feature token books" },
+    { "t": "p", "text": "Attribute every token to a feature and tier (input/output, model, retriever): per-1k-task cost = Σ(calls × tokens × price). Dashboards per feature reveal the hogs (usually one: verbose drafts, uncached repeats). Unmeasured spend optimizes nothing — accounting precedes all levers, always." },
+    { "t": "code", "lang": "js", "code": "// Cost projector: per-feature books → monthly totals (plain JS)\nfunction projectCost(features, priceIn1k, priceOut1k, tasksPerDay) {\n  return features.map((f) => {\n    const perTask = (f.inTokens / 1000) * priceIn1k + (f.outTokens / 1000) * priceOut1k;\n    return { name: f.name, perTask: +perTask.toFixed(4), monthly: +(perTask * tasksPerDay * 30).toFixed(2) };\n  });\n}\n// projectCost([{name:'triage', inTokens:800, outTokens:60}], 0.005, 0.015, 1000)\n// → perTask $0.0049, monthly $147: the unit economics of one feature.", "caption": "Per-task cost × volume × 30: budgets from arithmetic, not anxiety" },
+    { "t": "h", "text": "Levers in ROI order" },
+    { "t": "p", "text": "**Cache** repeats (identical/similar queries — biggest win, lowest risk). **Route** by difficulty (small model for triage, large for edge judgment). **Batch** offline work (nightly digests at bulk rates). **Right-size** models per tier (downgrade where evals hold). Order by savings-per-effort: caching first (days of work, 30–60% cuts typical), re-architecting last. Each lever re-measured on gold — savings that break quality are losses." },
+    { "t": "code", "lang": "js", "code": "// Cache key discipline: tenant + data-class + signature (plain JS)\nfunction cacheKey(tenant, dataClass, query) {\n  if (dataClass === \"personal\") return `t:${tenant}:q:${hash(query)}`; // NEVER shared\n  if (dataClass === \"public\") return `public:q:${hash(query)}`;       // shared broadly\n  return `t:${tenant}:policy:${hash(query)}`;                          // tenant-scoped\n}\nfunction hash(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return (h >>> 0).toString(16); }\n// Personal data shares keys with NOBODY: isolation is a cache-design requirement.", "caption": "Tenant + class in every key: isolation by construction" },
+    { "t": "h", "text": "Tenant isolation is non-negotiable" },
+    { "t": "p", "text": "Caches keyed without tenant serve Alice's order history to Bob: cross-tenant leakage via performance optimization. Rules: personalized answers keyed per-tenant always; public content shared with version tags; policy content tenant-scoped. Audit cache keys like access-control rules — because they are." },
+    { "t": "practice", "sim": "js-playground", "title": "Project the bill", "query": "function projectCost(features, priceIn1k, priceOut1k, tasksPerDay) {\n  return features.map((f) => {\n    const perTask = (f.inTokens / 1000) * priceIn1k + (f.outTokens / 1000) * priceOut1k;\n    return { name: f.name, perTask: Math.round(perTask * 10000) / 10000, monthly: Math.round(perTask * tasksPerDay * 30 * 100) / 100 };\n  });\n}\nconst rows = projectCost([\n  { name: 'triage', inTokens: 800, outTokens: 60 },\n  { name: 'draft', inTokens: 2500, outTokens: 400 },\n], 0.005, 0.015, 1000);\nfor (const r of rows) console.log(r.name + ' perTask=$' + r.perTask + ' monthly=$' + r.monthly);\nconsole.log('total monthly=$' + rows.reduce((s, r) => s + r.monthly, 0));", "note": "Run it: triage $0.0049/task ($147/mo), draft $0.0185 ($555/mo), total $702/mo at 1k tasks/day. Draft dominates — cache and right-size there first. Budgets direct levers, not hunches." },
+    { "t": "keytakeaways", "items": ["Account per feature/tier first: per-task cost × volume × 30 — unmeasured spend optimizes nothing", "Levers in ROI order: cache → route → batch → right-size, each re-measured on gold", "Tenant + class in every cache key: personalization never shares; isolation audited like access control"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice projector and name the dominant feature with its share. (b) Apply 50% cache hit-rate to triage (halve its calls) and recompute the total; state savings. (c) Write the cache-key rule for: order status (personal), returns policy (public), ticket draft (personal) — with tenant handling each.",
+    "hints": [
+      "Dominant: draft $555 of $702 (~79%) — levers target drafts first, triage second.",
+      "Cached triage: $147 → $73.50; new total $628.50; savings $73.50/mo (~10%). Small lever, measured exactly.",
+      "Keys: order status t:{tenant}:... (personal, isolated); policy public:... (shared, versioned); draft t:{tenant}:... (personal)."
+    ],
+    "solution": "// (a) draft dominates (~79%): lever priority draft-first.\n// (b) cached triage halves to $73.50; total $628.50; saves $73.50/mo.\n// (c) personal→tenant keys; public→shared+versioned; drafts tenant-isolated.",
+    "why": "Dominance analysis (where money goes), lever math (what caching saves), and isolation rules (what shares with whom) are the three cost judgments — each computed, with leakage designed out.",
+    "code": "// Cost-lever pattern: project → target dominant → apply → re-measure on gold.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Token bill triples post-launch. First move?",
+      "options": ["Cheapest model everywhere", "Per-feature accounting first — then levers in ROI order on measured hogs", "Cut logging", "Raise prices"],
+      "answer": 1,
+      "explain": "Unmeasured spend optimizes nothing: account per feature/tier, then cache/route/batch/right-size by savings-per-effort."
+    },
+    {
+      "q": "Global answer cache across users including order data. Risk?",
+      "options": ["None", "Cross-tenant PII leakage: personalized answers served across users — tenant + class in every key", "Slower", "Pricier"],
+      "answer": 1,
+      "explain": "Cache keys are access-control rules: personal data never shares keys across tenants. Isolation by construction, audited like permissions."
+    },
+    {
+      "q": "Caching cuts 40% of calls but gold hit-rate drops. Verdict?",
+      "options": ["Ship the savings", "Loss: savings that break quality are losses — re-measure every lever on gold before keeping", "Cache more", "Drop gold"],
+      "answer": 1,
+      "explain": "Levers re-measured on gold, always. Stale-cache misses are quality regressions wearing savings costumes."
+    }
+  ],
+  "summary": "Account per feature, lever in ROI order with gold re-measurement, isolate tenants in every key. Money managed like latency: measured, budgeted, owned.",
+  "next": "Budgeted operation — now survival: fallback cascades that degrade gracefully instead of dying. Next: never dead, only degraded."
+}

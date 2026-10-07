@@ -1,0 +1,53 @@
+{
+  "title": "Incidents: Severity to Learning",
+  "slug": "09-incident-response",
+  "objective": "After this lesson you will be able to classify incident severity, execute runbooks (contain → assess → roll back), communicate during incidents, and run blameless postmortems that produce gold items, gates, and owners.",
+  "why": "Every production agent fails eventually: wrong refunds, data leaks, cost explosions, silent quality collapse. Response quality decides whether incidents cost hours or quarters — severity routing, practiced runbooks, safe rollbacks, and learning that ships prevention. On-call for AI systems differs from classic ops in exactly one way: failures are often behavioral (fluent wrongness), so detection starts with the Ch.7 signals, not status codes.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Severity: money, data, trust, cost" },
+    { "t": "p", "text": "Classify by harm, not noise: **SEV-1** (money moving wrongly, data leaking, active abuse — all hands, contain in minutes), **SEV-2** (quality collapse, cost explosion, single-feature outage — urgent, hours), **SEV-3** (latency drift, minor misroutes — next sprint). Severity routes paging, staffing, and review depth. Mis-severed incidents (SEV-3 paged as SEV-1) burn on-call trust; under-severed ones (leak as SEV-3) burn users." },
+    { "t": "code", "lang": "js", "code": "// Severity router: harm signals to levels with paging (plain JS)\nfunction severify(signals) {\n  if (signals.moneyWrong || signals.dataLeak || signals.activeAbuse)\n    return { sev: 1, page: true, slaMin: 15 };\n  if (signals.qualityDrop || signals.costSpike || signals.featureDown)\n    return { sev: 2, page: true, slaMin: 120 };\n  return { sev: 3, page: false, slaMin: 10080 };\n}\n// Harm decides: money/data/abuse page in minutes; drift waits for sprint.", "caption": "Severity by harm class with paging + SLA attached" },
+    { "t": "h", "text": "Runbooks: contain, assess, roll back" },
+    { "t": "p", "text": "Runbooks sequence the worst day: **contain** (feature-flag the path off — seconds, reversible), **assess** (blast radius from audit logs: who/what amounts), **roll back** (previous gold-passing version redeployed; scope revoked if abuse). Practice quarterly via game-days (simulated wrong-refund, timed). Runbooks unpracticed are documentation; practiced, they're reflexes." },
+    { "t": "code", "lang": "js", "code": "// Runbook executor: ordered steps with evidence gates (plain JS pattern)\n// steps: [contain(flagOff), assess(auditQuery), rollback(version), verify(goldSpot)]\n// Each step records evidence before proceeding: flag state, affected rows,\n// deployed version, spot-check results. Skipped steps fail the runbook review.", "caption": "Evidence-gated steps: contain → assess → roll back → verify" },
+    { "t": "h", "text": "Blameless postmortems that ship prevention" },
+    { "t": "p", "text": "Postmortems produce **artifacts, not blame**: timeline, root cause (system, never person), the gold item fossilizing the failure, the gate/guardrail preventing recurrence, and an owner with a date. 'Human error' conclusions are banned — humans err; systems allow errors to reach users. The postmortem that ships nothing teaches nothing; the one shipping gold + gates compounds." },
+    { "t": "practice", "sim": "js-playground", "title": "Sever the incident", "query": "function severify(signals) {\n  if (signals.moneyWrong || signals.dataLeak || signals.activeAbuse) return { sev: 1, page: true };\n  if (signals.qualityDrop || signals.costSpike || signals.featureDown) return { sev: 2, page: true };\n  return { sev: 3, page: false };\n}\nconst cases = [\n  [{ moneyWrong: true }, 1, true],\n  [{ dataLeak: true }, 1, true],\n  [{ qualityDrop: true }, 2, true],\n  [{ costSpike: true }, 2, true],\n  [{ latencyDrift: true }, 3, false],\n];\nlet pass = 0;\nfor (const [sig, sev, page] of cases) {\n  const r = severify(sig);\n  if (r.sev === sev && r.page === page) pass++;\n  else console.log('MISS ' + JSON.stringify(sig));\n}\nconsole.log(pass + '/' + cases.length + ' severities correct');", "note": "Run it: expect 5/5 — money/data/abuse page as SEV-1, quality/cost as SEV-2, drift rides SEV-3 silently. Severity routes paging, staffing, and review depth." },
+    { "t": "keytakeaways", "items": ["Severity by harm (money/data/abuse → SEV-1 paging; quality/cost → SEV-2; drift → SEV-3)", "Runbooks: contain → assess → roll back → verify, evidence-gated, game-day practiced", "Blameless postmortems shipping gold + gates + owners; 'human error' banned as a conclusion"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice severifier on all five cases and map levels. (b) Write the contain step for a wrong-refund incident (exact flag/action, seconds-scale). (c) Draft the postmortem artifact list for it (timeline, root cause shape, gold item, gate, owner+date) — with 'human error' explicitly excluded as a conclusion.",
+    "hints": [
+      "Mappings: 1/1/2/2/3 with paging on 1-2 only. Latency drift rides silently to sprint.",
+      "Contain: flag refunds-v2 off (kill switch, seconds, reversible) — before any investigation.",
+      "Artifacts: timeline from audit logs; root cause systemic (missing amount gate); gold attack item; gate added; owner + date."
+    ],
+    "solution": "// (a) 1,1,2,2,3 with paging on SEV-1/2 (in order).\n// (b) kill-switch flag off in seconds (contain before investigate).\n// (c) timeline + systemic cause + gold + gate + owner/date (no blame).",
+    "why": "Severity mapping (harm→level→paging), containment reflex (flag before forensics), and prevention artifacts (gold+gates+owners) are the three incident judgments — each concrete, never heroic.",
+    "code": "// Incident pattern: sever → contain → assess → roll back → fossilize.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Wrong refunds issuing now. First action?",
+      "options": ["Investigate root cause", "Contain: kill-switch the refund path off in seconds — investigation follows containment, never precedes", "Postmortem", "Notify press"],
+      "answer": 1,
+      "explain": "Bleeding stops before diagnosis: reversible containment first, forensics second. Investigation during active harm extends it."
+    },
+    {
+      "q": "Postmortem concludes 'operator error'. Verdict?",
+      "options": ["Accurate", "Banned conclusion: humans err, systems allow errors through — rewrite as missing gate/check/automation with owner + date", "Sufficient", "Blame assigned correctly"],
+      "answer": 1,
+      "explain": "Blameless means systemic: every human error implies an absent guardrail, check, or automation. Conclusions ship prevention artifacts."
+    },
+    {
+      "q": "Latency drift for a month, no page. Correct?",
+      "options": ["Negligence", "Correct SEV-3 handling: drift rides to sprint planning — paging it would burn on-call trust for non-urgent decay", "Page immediately", "Ignore forever"],
+      "answer": 1,
+      "explain": "Severity routes urgency: drift is SEV-3 by design (sprint, not pager). Over-paging trains teams to ignore pages."
+    }
+  ],
+  "summary": "Sever by harm, contain in seconds, assess from logs, roll back safely, fossilize into gold + gates + owners. Incidents handled by reflex, learned from by structure.",
+  "next": "All nine disciplines mapped — now the launch itself: evidence bundles, residual risks, and the review that approves. Next and last: the launch review walkthrough."
+}

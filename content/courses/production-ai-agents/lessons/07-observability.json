@@ -1,0 +1,53 @@
+{
+  "title": "Observability: Traces That Teach",
+  "slug": "07-observability",
+  "objective": "After this lesson you will be able to emit trace spans per agent stage, build latency/cost/quality dashboards, and alert on behavioral signals (quality drops, cost spikes, tail latency) instead of errors alone.",
+  "why": "'The bot got worse Tuesday' without traces is archaeology: no inputs, no stage timings, no way to bisect. Observability (traces with spans per node/tool/retrieval, token accounting, quality proxies, cost attribution) converts mysteries into measurements — and behavioral alerts catch the silent failures (fluent wrongness) that error rates never see.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Spans per stage, attributes per span" },
+    { "t": "p", "text": "Every run emits a **trace**: spans for triage/router/nodes/tools/retrieval/generation, each with attributes (inputs hash, tokens, latency, model, verdicts, citations count). Spans nest (run → stage → call) so slow runs expand into slow stages, then slow calls. Untraced stages are unmeasurable stages — instrument at boundaries (Ch.3 handoffs make natural span edges)." },
+    { "t": "code", "lang": "js", "code": "// Trace emitter: spans nest, attributes attach (plain JS pattern)\nfunction makeTracer() {\n  const spans = [];\n  return {\n    span(name, parent = null) {\n      const s = { name, parent, t0: Date.now(), attrs: {} };\n      spans.push(s);\n      return {\n        set: (k, v) => (s.attrs[k] = v),\n        end: (status = \"ok\") => { s.ms = Date.now() - s.t0; s.status = status; },\n      };\n    },\n    report: () => spans.map((s) => ({ name: s.name, ms: s.ms, status: s.status, ...s.attrs })),\n  };\n}\n// Boundaries emit spans: router decisions, tool calls, citation counts, token use.", "caption": "Span per boundary: timing, tokens, verdicts attached where work happens" },
+    { "t": "h", "text": "Dashboards: latency, cost, quality" },
+    { "t": "p", "text": "Three dashboards, three questions. **Latency**: p50/p95/p99 per stage + tail attribution (which stage owns p99?). **Cost**: tokens per feature/tier/tenant + projection vs budget. **Quality**: gold pass rates, abstention rate, citation coverage, human-override rate, thumbs distribution. Quality dashboards need proxies (override rate ≈ correctness signal) because truth is expensive — choose proxies deliberately, document their limits." },
+    { "t": "h", "text": "Alert on behavior, not just errors" },
+    { "t": "p", "text": "Error-rate paging misses silent degradation: confident wrongness has no 5xx. Behavioral alerts: abstention spikes (corpus gaps), override-rate jumps (quality drops), cost-per-task anomalies (prompt bloat/attacks), tail-latency breaches (dependency decay), refusal spikes (campaigns). Each alert names runbook + owner: paging without a runbook is noise with adrenaline." },
+    { "t": "code", "lang": "js", "code": "// Behavioral alert rules: signals with thresholds + runbooks (plain JS)\nconst ALERTS = [\n  { signal: \"overrideRate\", when: (v, b) => v > b * 1.5, runbook: \"quality-drop\", owner: \"agent-team\" },\n  { signal: \"costPerTask\", when: (v, b) => v > b * 2, runbook: \"cost-spike\", owner: \"platform\" },\n  { signal: \"abstentionRate\", when: (v, b) => v > b * 2, runbook: \"corpus-gap\", owner: \"data-team\" },\n  { signal: \"p99\", when: (v, b) => v > b * 1.5, runbook: \"tail-hunt\", owner: \"agent-team\" },\n  { signal: \"refusalSpike\", when: (v, b) => v > b * 3, runbook: \"campaign-check\", owner: \"security\" },\n];\n// Relative thresholds (× baseline) adapt to growth; absolutes rot within quarters.", "caption": "Relative-to-baseline alerts with runbooks and owners attached" },
+    { "t": "practice", "sim": "js-playground", "title": "Fire the right alert", "query": "const ALERTS = [\n  { signal: 'overrideRate', when: (v, b) => v > b * 1.5 },\n  { signal: 'costPerTask', when: (v, b) => v > b * 2 },\n  { signal: 'p99', when: (v, b) => v > b * 1.5 },\n];\nconst baselines = { overrideRate: 0.1, costPerTask: 0.02, p99: 2000 };\nconst current = { overrideRate: 0.18, costPerTask: 0.021, p99: 2100 };\nfor (const a of ALERTS) {\n  const firing = a.when(current[a.signal], baselines[a.signal]);\n  console.log(a.signal + ': ' + (firing ? 'PAGE' : 'quiet'));\n}\nconsole.log('pages=' + ALERTS.filter((a) => a.when(current[a.signal], baselines[a.signal])).length);", "note": "Run it: expect overrideRate PAGE (0.18 > 0.15), cost quiet, p99 quiet, pages=1. Relative thresholds with baselines: quality degradation pages while normal variance stays silent." },
+    { "t": "keytakeaways", "items": ["Spans per stage boundary with timing/tokens/verdicts; nested traces expand slow runs into slow calls", "Three dashboards (latency/cost/quality) with deliberate proxies, documented limits", "Behavioral alerts (quality/cost/tail/refusal signals) with runbooks + owners; relative thresholds adapt"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice alerts and confirm only overrideRate pages. (b) Add an abstentionRate alert (2x baseline) with a corpus-gap scenario proving it fires. (c) Write the runbook stub for override-rate pages (first 3 checks in order).",
+    "hints": [
+      "Baseline: override 0.18 > 0.15 PAGE; cost 0.021 < 0.04 quiet; p99 2100 < 3000 quiet. One page, correct one.",
+      "Abstention scenario: baseline 0.05, current 0.12 → fires (>0.10); runbook: corpus-gap (new content unchunked?).",
+      "Runbook: (1) sample overridden runs (what changed?), (2) check deploy log (which version introduced it?), (3) compare gold segment scores (which kind regressed?)."
+    ],
+    "solution": "// (a) overrideRate PAGEs alone (0.18 > 1.5×0.1); others quiet.\n// (b) abstention alert added + firing scenario (0.12 > 2×0.05).\n// (c) sample → deploy-log → gold-segments (ordered investigation).",
+    "why": "Threshold design (relative, baselined), coverage extension (new signal, proven firing), and runbook ordering (samples → versions → segments) are the three alerting judgments — each verified, with owners attached.",
+    "code": "// Alert-addition pattern: signal + relative threshold + runbook + owner.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Answer quality drops 30% with zero 5xx change. Detection?",
+      "options": ["Error paging", "Behavioral alerts: override-rate/abstention movement pages where error rates stay silent", "More logs", "Bigger dashboard"],
+      "answer": 1,
+      "explain": "Fluent wrongness has no status code. Quality proxies (overrides, abstention, thumbs) with relative thresholds catch silent degradation."
+    },
+    {
+      "q": "Absolute alert thresholds set once, never revisited. Fate?",
+      "options": ["Stable forever", "Rot within quarters as traffic/usage grows — relative-to-baseline thresholds adapt; absolutes need constant retuning", "Finer", "Cheaper"],
+      "answer": 1,
+      "explain": "Growth moves every absolute: relative thresholds (×baseline) scale with the system. Absolutes become noise or silence."
+    },
+    {
+      "q": "Pager fires with no runbook attached. Problem?",
+      "options": ["None — smart on-call", "Noise with adrenaline: alerts need runbooks (ordered checks) + owners, or pages produce panic instead of procedure", "Louder pager needed", "More alerts"],
+      "answer": 1,
+      "explain": "Alerting contracts: signal + threshold + runbook + owner. Missing runbooks convert pages into improvisation."
+    }
+  ],
+  "summary": "Boundary spans, three dashboards with honest proxies, behavioral alerts with runbooks. Silent failures need behavioral signals; errors alone arrive last.",
+  "next": "Visible and alarmed — now the humans in the loop: sampling, queues, and reviewer UX that closes the flywheel. Next: review operations."
+}

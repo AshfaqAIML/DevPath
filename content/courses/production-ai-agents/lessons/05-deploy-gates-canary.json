@@ -1,0 +1,53 @@
+{
+  "title": "Deploy Gates: Gold, Canary, Rollback",
+  "slug": "05-deploy-gates-canary",
+  "objective": "After this lesson you will be able to gate deploys on gold behavior evals, analyze canaries with multi-metric vetoes, trigger automatic rollbacks, and kill instantly via feature flags.",
+  "why": "Code gates pass while behavior regresses: a prompt tweak tanks VIP handling, a model swap shifts tone, a reranker change drops prices. Behavior gates (gold sets + canary analysis + auto-rollback) catch what unit tests structurally cannot. Shipping AI without them is hoping at scale — hope is not a deploy strategy.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Gold gates block merges" },
+    { "t": "p", "text": "Every deploy runs the **gold conversation set** with per-segment no-regression rules (LangGraph Ch.9 / CrewAI Ch.8 discipline): overall improvement required, zero segment regressions tolerated, money/attack segments veto-weighted. Failing gold blocks the pipeline exactly like failing tests — behavior is a merge criterion, not a monitoring concern." },
+    { "t": "code", "lang": "js", "code": "// Deploy gate: gold + segments + vetoes (plain JS)\nfunction deployGate(baseline, candidate) {\n  // {overall, segments: {kind: score}, vetoes: [failed hard gates]}\n  if (candidate.vetoes.length) return { ship: false, reason: \"veto:\" + candidate.vetoes.join(\",\") };\n  for (const [kind, score] of Object.entries(candidate.segments)) {\n    if (score < (baseline.segments[kind] ?? 0)) return { ship: false, reason: \"regression:\" + kind };\n  }\n  if (candidate.overall <= baseline.overall) return { ship: false, reason: \"no-gain\" };\n  return { ship: true };\n}\n// Vetoes → segments → gain: same gating order as eval, now blocking deploys.", "caption": "Behavior gates with the same severity order as eval gates" },
+    { "t": "h", "text": "Canary analysis with vetoes" },
+    { "t": "p", "text": "**Canary**: route 5% traffic to the candidate, compare error/quality/cost/latency metrics against baseline over a fixed window. **Vetoes** (error spikes, safety violations) block regardless of wins; **segments** (VIP, money paths) gate independently; **aggregate gain** required last. Auto-promote on all-green, auto-rollback on veto — humans review promotions, machines execute rollbacks (speed matters more than deliberation mid-incident)." },
+    { "t": "code", "lang": "js", "code": "// Canary verdict: multi-metric with vetoes (plain JS)\nfunction canaryVerdict(base, cand) {\n  if (cand.errors > base.errors * 1.1) return { action: \"rollback\", reason: \"error-regression\" };\n  if (cand.safetyViolations > 0) return { action: \"rollback\", reason: \"safety-veto\" };\n  for (const seg of Object.keys(base.segments))\n    if ((cand.segments[seg] ?? 1) < base.segments[seg]) return { action: \"rollback\", reason: \"segment:\" + seg };\n  if (cand.quality <= base.quality) return { action: \"hold\", reason: \"no-gain\" };\n  return { action: \"promote\" };\n}\n// Rollback automatic on vetoes; hold (not promote) on flat gains.", "caption": "Vetoes roll back, flat gains hold, all-green promotes" },
+    { "t": "h", "text": "Flags kill instantly" },
+    { "t": "p", "text": "**Feature flags** separate deploy from release (ship code dark) and enable instant kills (flag off in seconds, no redeploy). Every risky change rides a flag with an owner and an expiry (flags without expiry become permanent branches). Rollback = previous gold-passing version redeployed automatically on veto — rehearsed quarterly, never improvised." },
+    { "t": "practice", "sim": "js-playground", "title": "Gate the deploy", "query": "function deployGate(baseline, candidate) {\n  if (candidate.vetoes.length) return { ship: false, reason: 'veto:' + candidate.vetoes.join(',') };\n  for (const [kind, score] of Object.entries(candidate.segments)) {\n    if (score < (baseline.segments[kind] || 0)) return { ship: false, reason: 'regression:' + kind };\n  }\n  if (candidate.overall <= baseline.overall) return { ship: false, reason: 'no-gain' };\n  return { ship: true };\n}\nconst base = { overall: 0.8, segments: { happy: 0.9, edge: 0.7 } };\nconst bad = { overall: 0.85, segments: { happy: 0.95, edge: 0.6 }, vetoes: [] };\nconst vetoed = { overall: 0.9, segments: { happy: 0.95, edge: 0.75 }, vetoes: ['money'] };\nconst good = { overall: 0.85, segments: { happy: 0.95, edge: 0.75 }, vetoes: [] };\nconsole.log(JSON.stringify(deployGate(base, bad)));\nconsole.log(JSON.stringify(deployGate(base, vetoed)));\nconsole.log(JSON.stringify(deployGate(base, good)));", "note": "Run it: expect regression:edge (averages hide it), veto:money (gains don't excuse it), then ship true. Three verdicts, three gate layers — behavior blocking merges." },
+    { "t": "keytakeaways", "items": ["Gold gates block merges: no segment regressions, vetoes enforced, gains required", "Canary: 5% traffic, multi-metric vetoes, auto-rollback on breach, auto-promote on green", "Flags separate deploy from release; kills instant; rollbacks rehearsed, never improvised"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice gate on all three candidates and map verdicts to layers. (b) Write the canary verdict for: errors +15%, quality +5%, cost −10% — with the action and reason. (c) State the flag policy for a refund-policy rewrite (owner, expiry, kill condition).",
+    "hints": [
+      "Verdicts: regression:edge / veto:money / ship:true — vetoes, segments, gains in order.",
+      "Canary: error regression vetoes → rollback, despite quality/cost wins. Vetoes overrule improvements, always.",
+      "Flag: owner named, 14-day expiry, kill on any money-segment dip or veto — flags with owners and deaths, never orphans."
+    ],
+    "solution": "// (a) regression / veto / ship (layered verdicts in order).\n// (b) rollback: error-regression (wins elsewhere irrelevant).\n// (c) owned flag, dated expiry, kill on money-dip or veto.",
+    "why": "Layered verdicts (vetoes → segments → gains), canary veto logic, and flag hygiene (owners + expiries) are the three deploy judgments — each verified against concrete candidates.",
+    "code": "// Gate-order pattern: vetoes, segments, gains — for gold and canary alike.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Deploy beats baseline overall, regresses edge. Ship?",
+      "options": ["Yes — averages win", "No: per-segment no-regression gate — localized harm blocks regardless of averages", "Ship half", "Widen segments"],
+      "answer": 1,
+      "explain": "Segment gates exist because averages hide localized harm. Fix the segment, then ship the gain."
+    },
+    {
+      "q": "Canary: errors +15%, quality +5%, cost −10%. Action?",
+      "options": ["Promote — net positive", "Rollback: error veto overrules all wins — vetoes exist precisely for attractive-but-harmful candidates", "Hold forever", "Ignore errors"],
+      "answer": 1,
+      "explain": "Vetoes (errors, safety) are non-compensatory: no win offsets them. Roll back automatically, investigate deliberately."
+    },
+    {
+      "q": "Feature flag without owner or expiry. Status?",
+      "options": ["Fine", "Orphaned branch-in-waiting: flags need owners + expiries or they fossilize into permanent conditional complexity", "Faster deploys", "Safer"],
+      "answer": 1,
+      "explain": "Flags are temporary by design: owners retire them, expiries force the question. Orphan flags rot into untested branches."
+    }
+  ],
+  "summary": "Gold gates block merges, canaries analyze with vetoes, flags kill instantly, rollbacks rehearse. Behavior ships on proof, never hope.",
+  "next": "Shippable process — now the walls: injection at scale, PII, rate limits, and output filters. Next: production guardrails."
+}

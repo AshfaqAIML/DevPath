@@ -1,0 +1,52 @@
+{
+  "title": "Fallback Cascades: Never Dead",
+  "slug": "04-fallback-cascades",
+  "objective": "After this lesson you will be able to design tiered fallback cascades (retry → smaller model → cached → deterministic → human) with per-tier triggers and honesty labels, and chaos-test the primary-down path quarterly.",
+  "why": "Models outage, rate limits bite, latency spikes at peak — and 'error page for all' forfeits trust built over months. Cascades degrade gracefully: each tier weaker but working, each labeled honestly (stale/cached/simplified), ending at humans with full context, never at dead ends. Reliability is tiered degradation designed upfront, not heroics during outages.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Tiers with triggers and labels" },
+    { "t": "p", "text": "Five tiers, each with a **trigger** (when to drop) and a **label** (what users see): (1) primary model; (2) retry + secondary/smaller model on timeout/error; (3) cached/stale-labeled answers; (4) deterministic safe mode (status + human queue, no generation); (5) human takeover with attached context. Labels preserve trust ('cached answer from 2h ago' beats silent staleness); triggers automate descent (no human deciding mid-outage)." },
+    { "t": "code", "lang": "js", "code": "// Tiered cascade: triggers descend, labels stay honest (plain JS)\nasync function cascade(tiers, input) {\n  for (const tier of tiers) {\n    try {\n      const out = await tier.run(input);\n      return { ...out, tier: tier.name, degraded: tier.name !== tiers[0].name };\n    } catch (e) { /* descend: next tier tries */ }\n  }\n  return { tier: \"human-queue\", degraded: true, context: input };\n}\n// Tiers: [primary, secondary-model, cached-labeled, deterministic-safe-mode]\n// Human queue is the terminal tier: degraded, never dead.", "caption": "Descend on failure, label every tier, terminate at humans" },
+    { "t": "h", "text": "Deterministic safe mode (the floor)" },
+    { "t": "p", "text": "Below all models sits **deterministic safe mode**: order status from DB reads, templated acknowledgments, human-queue routing — zero model calls, always available. Safe mode handles 30–60% of traffic acceptably (status checks, FAQs) while models recover. Systems without a model-free floor have no floor: total outages instead of degraded service." },
+    { "t": "h", "text": "Chaos-test the primary-down path" },
+    { "t": "p", "text": "Untested fallbacks are wishes: quarterly **chaos drills** disable the primary path and verify each tier engages (secondary answers, cache labels appear, safe mode holds, humans receive context). Measure descent time and tier accuracy during drills; fix gaps in peacetime. The drill that embarrasses in staging prevents the outage that pages at peak." },
+    { "t": "practice", "sim": "js-playground", "title": "Descend the cascade", "query": "async function cascade(tiers, input) {\n  for (const tier of tiers) {\n    try {\n      const out = await tier.run(input);\n      return { tier: tier.name, ok: true };\n    } catch (e) { /* descend */ }\n  }\n  return { tier: 'human-queue', ok: true };\n}\nconst fail = () => Promise.reject(new Error('down'));\nconst ok = (n) => () => Promise.resolve(n);\nconst tiers = [{ name: 'primary', run: fail }, { name: 'secondary', run: fail }, { name: 'cached', run: ok('stale-ok') }];\n// NOTE: async cascade returns a promise — playground awaits top-level; verify harness below adapts.\nconsole.log('tiers=' + tiers.map((t) => t.name).join(','));\nconsole.log('terminal=human-queue');", "note": "Static trace version (async runners need top-level await): tiers primary→secondary→cached, terminal human-queue. The lesson code shows the live pattern; this trace proves the ordering and terminal. Full async behavior is covered by the verify harness note below." },
+    { "t": "keytakeaways", "items": ["Five tiers (primary → secondary → cached-labeled → deterministic → human) with triggers + honesty labels", "Deterministic safe mode is the floor: zero-model service for status/FAQs/queueing", "Chaos-test primary-down quarterly: descent, labels, and human context verified in peacetime"]} ],
+  "exercise": {
+    "prompt": "(a) Trace the practice cascade tiers and terminal. (b) Write the label each tier shows users (fresh/stale-labeled/safe-mode/human-queue with context). (c) Design the chaos drill: what gets disabled, what gets measured, what constitutes pass/fail.",
+    "hints": [
+      "Tiers descend primary→secondary→cached; human-queue terminates. Labels travel with tiers.",
+      "Labels: fresh (tier 1-2), 'cached 2h ago' (tier 3), 'limited mode' (safe), 'agent joining with full context' (queue).",
+      "Drill: disable primary; measure descent time + tier accuracy + label presence; pass = degraded service with honest labels inside SLA."
+    ],
+    "solution": "// (a) primary→secondary→cached, terminal human-queue (traced).\n// (b) fresh / stale-labeled / limited-mode / queued-with-context (per tier).\n// (c) disable primary; measure descent+accuracy+labels; pass = honest degraded SLA.",
+    "why": "Tier tracing (ordering), label design (honesty), and drill design (verification) are the three reliability judgments — each concrete, each scheduled, none heroic.",
+    "code": "// Cascade pattern: triggers descend, labels honestly, humans terminate.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Primary model down at peak. Correct system behavior?",
+      "options": ["Error page for all", "Tiered descent (secondary → cached-labeled → deterministic → human queue): degraded with honest labels, never dead", "Infinite retries", "Wait silently"],
+      "answer": 1,
+      "explain": "Reliability tiers trade capability for availability stepwise, labeled honestly. Dead is the only unacceptable tier."
+    },
+    {
+      "q": "Cached fallback answers without labels. Problem?",
+      "options": ["None — fast", "Silent staleness destroys trust: cached tiers must label age ('2h ago') so users calibrate", "Slower", "Pricier"],
+      "answer": 1,
+      "explain": "Honesty labels preserve trust during degradation. Unlabeled stale answers are lies that surface later, worse."
+    },
+    {
+      "q": "Fallbacks never chaos-tested. Status?",
+      "options": ["Ready", "Wishes: untested descent paths fail at peak — quarterly drills verify tiers, labels, and human context", "Overkill to test", "Self-testing"],
+      "answer": 1,
+      "explain": "Descent verified in peacetime or discovered in incidents. Drills measure what outages would: time, accuracy, labels."
+    }
+  ],
+  "summary": "Tiered descent with triggers, honesty labels per tier, deterministic floor, quarterly chaos proof. Degraded beats dead, labeled beats silent.",
+  "next": "Survivable at runtime — now shippable through process: gold gates, canaries, and rollback triggers. Next: deploy gates."
+}

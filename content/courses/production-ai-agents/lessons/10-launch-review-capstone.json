@@ -1,0 +1,52 @@
+{
+  "title": "Capstone: The Launch Review",
+  "slug": "10-launch-review-capstone",
+  "objective": "After this lesson you will be able to assemble a launch evidence bundle (scores, gates, budgets, guardrails, runbooks, residual risks), present it for approval, and operate the shipped agent with the dashboards and rituals this course built.",
+  "why": "Courses end with artifacts that survive stakeholders: the launch bundle proves readiness with evidence, names residual risks with owners, and hands operations a running system with dashboards, runbooks, and rituals. This walkthrough performs the review once — your capstone repeats it on your own agent, and your career repeats it on every launch after.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    { "t": "h", "text": "The bundle: proof, not prose" },
+    { "t": "p", "text": "Five sections, all evidenced: (1) **Gap closure** — audit re-run, every dimension owned with proof links; (2) **Budgets** — latency/cost models from measurements with headroom; (3) **Safety** — fallback chaos results, guardrail attack-gold scores, gate/canary/rollback proof; (4) **Operations** — dashboards live, alerts firing-correctly (tested), review queue staffed, runbooks practiced; (5) **Residual risks** — what remains, with owners and dates (no silent hope)." },
+    { "t": "code", "lang": "js", "code": "// Launch bundle manifest: evidence per section (plain JS)\nconst bundle = {\n  gaps: { reaudit: \"7/7 owned\", proofLinks: true },\n  budgets: { p99margin: \"+25% under SLA\", costMargin: \"+30% under budget\" },\n  safety: { chaosPass: true, attackGold: \"12/12\", canaryVetoes: \"armed\" },\n  ops: { dashboards: 3, alertsTested: true, queueStaffed: true, gameDay: \"passed\" },\n  residual: [{ risk: \"novel attack shapes\", owner: \"security\", date: \"2027-01-15\" }],\n};\n// Reviewers approve evidence; residual risks need owners + dates, never silence.", "caption": "Manifest-first launch: every claim has proof attached or an owner dated" },
+    { "t": "h", "text": "The review meeting (how approval works)" },
+    { "t": "p", "text": "Present weakest-first (residual risks open, not buried): scores per segment with the weakest named, one iterated fix with delta, gate health, chaos results, then the ask (launch scope + rollback plan). Approval is conditional by default (launch to 10% with canary armed) — full traffic follows measured canary, never meeting optimism." },
+    { "t": "h", "text": "Day-two rituals (launch is day one)" },
+    { "t": "p", "text": "Operating cadence post-launch: weekly gold re-scores with per-segment review, monthly cost/latency budget reviews, quarterly chaos + gate audits, per-release gap re-audits. Rituals compound: each cycle's findings become next cycle's gold items, gates, and guardrails. Launched systems improve monotonically or decay silently — rituals choose." },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the bundle", "query": "const bundle = {\n  gaps: { reaudit: '7/7 owned' },\n  budgets: { p99margin: 25, costMargin: 30 },\n  safety: { chaosPass: true, attackGold: '12/12' },\n  ops: { dashboards: 3, alertsTested: true },\n  residual: [{ risk: 'novel attacks', owner: 'security', date: '2027-01-15' }],\n};\nconst checks = [\n  ['gaps closed', bundle.gaps.reaudit === '7/7 owned'],\n  ['headroom positive', bundle.budgets.p99margin > 0 && bundle.budgets.costMargin > 0],\n  ['chaos proven', bundle.safety.chaosPass === true],\n  ['attack gold full', bundle.safety.attackGold === '12/12'],\n  ['residuals owned', bundle.residual.every((r) => r.owner && r.date)],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'launch approved (conditional)' : 'launch BLOCKED');", "note": "Run it: expect five PASS lines then conditional approval. Residual risks with owners/dates pass review; silent hopes block it — the bundle proves readiness, the residuals prove honesty." },
+    { "t": "keytakeaways", "items": ["Bundle: gap closure + budgets + safety proof + ops readiness + owned residual risks", "Present weakest-first; approve conditionally (canary-gated %) by default", "Day-two rituals (weekly/monthly/quarterly/per-release) compound improvements or decay silently"]} ],
+  "exercise": {
+    "prompt": "(a) Run the bundle audit and confirm conditional approval. (b) Break it (drop attack gold to 10/12) and state the review outcome + required fix. (c) Draft your capstone bundle skeleton (same five sections) with one evidence line per section for your domain.",
+    "hints": [
+      "Baseline: 5 PASS + conditional approval (residuals owned, not absent).",
+      "Broken: attack-gold check FAILs → launch BLOCKED until 12/12 (gates gate launches, not just merges).",
+      "Your skeleton needs per-section evidence lines (scores, margins, proofs, staffing, owned residuals) — coverage thinking for launches."
+    ],
+    "solution": "// (a) 5 PASS + conditional approval (owned residuals pass review).\n// (b) 10/12 attack gold → BLOCKED; fix coverage, re-audit, then approve.\n// (c) domain bundle with evidence per section (launch-grade coverage).",
+    "why": "Break-then-block practices gate enforcement at launch scale: missing proof blocks shipping, with the exact fix named. Coverage thinking extends from code to launches.",
+    "code": "// Launch-audit pattern: per-section evidence checks + owned-residual rule.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Launch bundle shows green averages, one weak segment unnamed. Verdict?",
+      "options": ["Approve", "Block until weakest named with fix-or-accept decision: unnamed weak segments hide localized harm", "Approve with hope", "More averages"],
+      "answer": 1,
+      "explain": "Weakest-first presentation is the honesty rule: per-segment truth with named handling beats green averages that conceal."
+    },
+    {
+      "q": "Approve full traffic at the review meeting?",
+      "options": ["Yes — confidence", "Conditionally (canary-gated %) with measured promotion after — full traffic follows canary evidence, never meeting optimism", "No launches ever", "Flip a coin"],
+      "answer": 1,
+      "explain": "Conditional approval is the default: canary percentages with vetoes armed, promotion on measured green. Meetings decide scope; canaries decide scale."
+    },
+    {
+      "q": "Post-launch improvement system?",
+      "options": ["Hope", "Rituals: weekly re-scores, monthly budgets, quarterly chaos/audits, per-release gap audits — findings become gold/gates/guardrails cyclically", "More features", "Bigger team"],
+      "answer": 1,
+      "explain": "Monotonic improvement is ritual-driven: each cycle's findings feed the next cycle's prevention. Hope is not a system."
+    }
+  ],
+  "summary": "Evidence bundles, weakest-first reviews, conditional canary approvals, day-two rituals. Launches approved on proof with owned residuals — then operated into monotonic improvement.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship The Launch Review capstone — and step into Agent Harnesses."
+}

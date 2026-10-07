@@ -1,0 +1,52 @@
+{
+  "title": "Review Ops: Humans at Scale",
+  "slug": "08-review-operations",
+  "objective": "After this lesson you will be able to sample by risk (uncertainty + stakes + random baseline), design queues with SLAs, build reviewer UX that decides fast and logs richly, and close the feedback-into-gold flywheel.",
+  "why": "Review-everything doesn't scale; review-nothing ships incidents. Risk-based sampling routes human judgment where it pays (uncertain + high-stakes + random baseline for calibration), queues respect SLAs, and reviewer UX determines throughput and log quality. Reviews are finite attention budgeted like tokens — spent where expected harm is highest.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Sample by risk, not by volume" },
+    { "t": "p", "text": "Review budget covers a fraction: spend on **uncertainty** (low confidence, novel patterns), **stakes** (money, external messages, legal), plus a **random baseline** (calibration: are samplers missing whole classes?). Pure uncertainty sampling blinds to confident-wrong; pure stakes sampling wastes reviewers on routine. All three strata, proportions stated, reviewed quarterly." },
+    { "t": "code", "lang": "js", "code": "// Risk sampler: uncertainty + stakes + random baseline (plain JS)\nfunction sampleForReview(items) {\n  const picked = [];\n  for (const it of items) {\n    const uncertain = it.confidence < 0.7;\n    const stakes = it.money || it.external;\n    const baseline = Math.random() < 0.05; // 5% random calibration slice\n    if (uncertain || stakes || baseline) picked.push({ id: it.id, reason: uncertain ? \"uncertain\" : stakes ? \"stakes\" : \"baseline\" });\n  }\n  return picked;\n}\n// Reasons travel with samples: reviewers see WHY each item needs eyes.", "caption": "Three strata with stated reasons — sampling as policy, not luck" },
+    { "t": "h", "text": "Queues with SLAs, UX that decides" },
+    { "t": "p", "text": "Review queues carry **SLAs** (money items < 1h, standard < 24h) with breach escalation and aging dashboards. Reviewer UX shows: the decision, the evidence (trace + citations + diffs), one-click approve/edit/reject with reason codes — decisions in seconds, logs rich enough for gold mining. Slow UX queues rot; rich logs feed the flywheel." },
+    { "t": "h", "text": "Flywheel: reviews become gold" },
+    { "t": "p", "text": "Every reviewed item with its verdict returns as a **gold item** (input + expected + reviewer note): edge corrections expand edge coverage, attack attempts expand attack sets, overrides become regression tests. The flywheel compounds: reviews cost once, prevent forever. Unlogged reviews evaporate — log format designed for gold ingestion, not just audit." },
+    { "t": "practice", "sim": "js-playground", "title": "Sample the queue", "query": "function sampleForReview(items) {\n  const picked = [];\n  for (const it of items) {\n    const uncertain = it.confidence < 0.7;\n    const stakes = !!(it.money || it.external);\n    if (uncertain || stakes) picked.push({ id: it.id, reason: uncertain ? 'uncertain' : 'stakes' });\n  }\n  return picked;\n}\nconst queue = [\n  { id: 'a', confidence: 0.9 },\n  { id: 'b', confidence: 0.5 },\n  { id: 'c', confidence: 0.95, money: true },\n  { id: 'd', confidence: 0.95 },\n];\nconst picked = sampleForReview(queue);\nconsole.log('picked=' + picked.map((p) => p.id).join(','));\nconsole.log('reasons=' + picked.map((p) => p.reason).join(','));\nconsole.log('coverage=' + picked.length + '/4');", "note": "Run it: expect picked b,c with reasons uncertain,stakes (coverage 2/4). High-confidence routine work flows untouched; risk concentrates reviewer attention where harm concentrates." },
+    { "t": "keytakeaways", "items": ["Sample uncertainty + stakes + random baseline, proportions stated, reasons attached", "Queues with SLAs + breach escalation; reviewer UX decides in seconds, logs for gold mining", "Flywheel: reviewed items return as gold (edge/attack/override coverage compounds)"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice sampler and map picks to reasons. (b) Add the 5% random baseline stratum and argue its purpose in one sentence (what failures does randomness catch that risk-strata miss?). (c) Write the SLA pair (money vs standard) with breach actions.",
+    "hints": [
+      "Baseline: b (uncertain 0.5), c (money stakes); a/d flow. Reasons travel with samples.",
+      "Random baseline catches confident-wrong and unknown-unknown classes that risk signals systematically miss — calibration against sampler blind spots.",
+      "SLAs: money <1h (breach → page + auto-hold payouts); standard <24h (breach → expand reviewer pool)."
+    ],
+    "solution": "// (a) b/uncertain, c/stakes (2/4 coverage).\n// (b) 5% random: catches confident-wrong + unknown-unknowns (calibration).\n// (c) money <1h (page + hold payouts); standard <24h (expand pool).",
+    "why": "Stratified sampling (risk + calibration), SLA design (time + breach actions), and flywheel closure (reviews → gold) are the three review-ops judgments — attention budgeted like tokens.",
+    "code": "// Sampling policy: strata + proportions + reasons + SLA pair.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Review queue grows unboundedly. Fix shape?",
+      "options": ["Hire infinitely", "Risk-based sampling (uncertainty + stakes + random baseline) with SLAs + reviewer UX — finite attention budgeted by harm", "Review everything faster", "Delete the queue"],
+      "answer": 1,
+      "explain": "Unbounded queues need sampling, not staffing: risk strata concentrate finite attention where harm concentrates, SLAs bound the rest."
+    },
+    {
+      "q": "Random 5% baseline sampling seems wasteful. Purpose?",
+      "options": ["None — cut it", "Calibration: catches confident-wrong and unknown-unknown classes that risk signals systematically miss", "Reviewer entertainment", "Compliance theater"],
+      "answer": 1,
+      "explain": "Risk signals have blind spots by construction (they sample what they measure). Random slices audit the sampler itself."
+    },
+    {
+      "q": "Reviewed items vanish after decisions. Loss?",
+      "options": ["None", "Flywheel fuel: verdicts with reasons become gold items (edge/attack/regression coverage) — unlogged reviews evaporate value", "Disk space saved", "Faster reviews"],
+      "answer": 1,
+      "explain": "Reviews cost once; gold items prevent forever. Log formats designed for ingestion close the loop from operations to evaluation."
+    }
+  ],
+  "summary": "Sample by risk + baseline, queue with SLAs, decide via UX in seconds, log for gold. Finite attention budgeted where harm concentrates; flywheel compounds every review.",
+  "next": "Humans looped in — now the worst day: severity, runbooks, rollbacks, and blameless learning. Next: incidents."
+}
