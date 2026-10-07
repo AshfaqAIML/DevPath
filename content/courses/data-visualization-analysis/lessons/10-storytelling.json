@@ -1,0 +1,52 @@
+{
+  "title": "Storytelling With Data",
+  "slug": "10-storytelling",
+  "objective": "After this lesson you will be able to structure findings as narratives (context, tension, resolution), annotate charts to guide reading, title with takeaways, and attach caveats without undermining conclusions.",
+  "why": "Correct charts undecided change nothing: stakeholders fund narratives, not plots. Storytelling structures (situation → complication → resolution), annotated guidance (what to look at, in what order), takeaway titles (claims, checkable), and honest caveats (limits stated) convert analysis into decisions — the entire point of the previous nine lessons.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Narrative spine: context, tension, resolution" },
+    { "t": "p", "text": "Every data story: **context** (what we sell, to whom, since when), **tension** (the cliff/gap/anomaly with numbers), **resolution** (recommended action with expected effect + caveats). Tension without context confuses; resolution without tension underwhelms. One story per presentation — three findings need three narratives or one ranked with explicit priority, never a data dump." },
+    { "t": "h", "text": "Annotate the reading path" },
+    { "t": "p", "text": "Charts don't self-narrate: **annotate** the cliff ('views→carts −78%'), the anomaly ('March spike = campaign X'), the comparison ('vs 55% benchmark'). Annotations order reading (look here, then here) and preempt misreads. Unannotated charts invite every wrong conclusion equally — guidance is kindness to busy readers." },
+    { "t": "code", "lang": "js", "code": "// Story spec: narrative + annotated charts + caveats (plain JS)\nconst story = {\n  title: \"Shoes drove Q3 growth; hats need attention\",\n  context: \"4 categories, $637 tracked revenue, Sep-Oct window\",\n  tension: \"hats convert views at 5.6% vs shoes 25% (funnel Ch.8)\",\n  resolution: \"Fix hats PDP media first (expected +$X); shoes inventory second\",\n  caveats: [\"n=14 developers sample\", \"Oct-12 week missing (flagged)\"],\n};\n// Title argues, tension quantifies, resolution acts, caveats bound — complete.", "caption": "Story as data structure: claim, evidence pointers, bounds" },
+    { "t": "h", "text": "Takeaways argue; caveats bound" },
+    { "t": "p", "text": "**Takeaway titles** state conclusions ('Shoes drove Q3 growth') — checkable against the chart below, falsifiable by design. **Caveats** bound claims (samples, windows, methods) without undermining them: bounded confidence beats false precision. Stories without caveats invite the first skeptical question to demolish them; stated limits disarm it in advance." },
+    { "t": "practice", "sim": "js-playground", "title": "Title the takeaway", "query": "function titleScore(title, chart) {\n  const argues = /drove|beats|grew|fell|leads|lags/i.test(title);\n  const cited = chart.numbers >= 2 && chart.caveats >= 1;\n  return { argues, cited, strong: argues && cited };\n}\nconst good = { numbers: 3, caveats: 1 };\nconst vague = { numbers: 0, caveats: 0 };\nconsole.log(JSON.stringify({ t: 'Shoes drove Q3 growth', ...titleScore('Shoes drove Q3 growth', good) }));\nconsole.log(JSON.stringify({ t: 'Sales by month', ...titleScore('Sales by month', vague) }));\nconsole.log('rule: argue + cite, or describe nothing');", "note": "Run it: argued+cited scores strong true; descriptive title with no numbers/caveats fails both. Titles argue (falsifiable), charts evidence (numbers), caveats bound — the complete contract." },
+    { "t": "keytakeaways", "items": ["Spine: context → tension (quantified) → resolution (action + expected effect)", "Annotate reading paths (what/where/order); takeaway titles argue falsifiably", "Caveats bound claims (samples/windows/methods) — stated limits disarm skeptics in advance"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice title scorer on both titles and map verdicts. (b) Write a takeaway title + two annotations + one caveat for the shoes/hats funnel finding. (c) State what makes a caveat strengthen rather than undermine a story.",
+    "hints": [
+      "Verdicts: strong-true (argues + cited) vs false/false (describes nothing, evidences nothing).",
+      "Title argues ('Fix hats PDP first: 5.6% vs 25%'); annotations point (cliff, benchmark); caveat bounds (n, window).",
+      "Caveats strengthen by preempting the demolishing question: bounded confidence beats false precision; hidden limits detonate on discovery."
+    ],
+    "solution": "// (a) strong-true vs false/false (argue+cite vs describe-nothing).\n// (b) takeaway + annotations + caveat per hints (complete story unit).\n// (c) preemption: stated limits disarm skeptics; hidden limits detonate.",
+    "why": "Title scoring (argue + cite), story units (claim + guidance + bounds), and caveat framing (preemption vs detonation) are the three storytelling judgments.",
+    "code": "// Story-unit pattern: takeaway title + annotations + caveats, always together.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Sales by month' as a deck title. Upgrade?",
+      "options": ["Bigger font", "Takeaway form ('Shoes drove Q3 growth') + numbers + caveats: argue falsifiably with evidence attached", "More colors", "Animation"],
+      "answer": 1,
+      "explain": "Descriptive titles abdicate interpretation; takeaway titles argue checkably. Claims invite verification — descriptions invite misreading."
+    },
+    {
+      "q": "Caveats section: weaken or strengthen?",
+      "options": ["Weaken — hide limits", "Strengthen when stated upfront: bounded confidence preempts demolishing questions; hidden limits detonate on discovery", "Neutral", "Required legally only"],
+      "answer": 1,
+      "explain": "Stated bounds disarm skeptics in advance. Concealed limits convert routine questions into credibility crises."
+    },
+    {
+      "q": "Three findings, one meeting. Structure?",
+      "options": ["Data dump all", "One narrative each (or one ranked with explicit priority): context → tension → resolution per story, never undifferentiated plots", "Longest first", "Alphabetical"],
+      "answer": 1,
+      "explain": "Stories need arcs: undifferentiated plots diffuse attention across unranked findings. Rank explicitly or narrate separately."
+    }
+  ],
+  "summary": "Spine (context/tension/resolution), annotated paths, arguing titles, bounding caveats. Analysis becomes decisions through narrative discipline.",
+  "next": "Stories structured — now perform the full report: profile to recommendation with honesty audit. Next and last: the category report capstone."
+}

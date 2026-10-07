@@ -1,0 +1,137 @@
+{
+  "title": "Chart Selection by Question",
+  "slug": "02-chart-selection",
+  "objective": "After this lesson you will be able to map any stakeholder question to a chart family (trend/comparison/composition/relationship/distribution) and reject mismatches with the encoding reason.",
+  "why": "Most bad charts are right answers to wrong mappings: pies for trends, lines for categories, 3D for everything. Selection by question class (what relationship does the question ask about?) plus encoding honesty (position/length over angle/area) makes chart choice mechanical — and mismatches reviewable with reasons, not taste.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Five question families"
+    },
+    {
+      "t": "p",
+      "text": "**Trend** (change over time → line, ordered x). **Comparison** (magnitudes across groups → sorted bars). **Composition** (parts of wholes → stacked bars/treemap; pies only 2–4 familiar shares). **Relationship** (x vs y → scatter/heatmap + confounder brainstorm). **Distribution** (spread/shape → histogram/box). Name the family first; the chart follows."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Question",
+        "Family",
+        "Chart",
+        "Never"
+      ],
+      "rows": [
+        [
+          "Sales over months?",
+          "Trend",
+          "Line (resampled)",
+          "Pie"
+        ],
+        [
+          "Which category leads?",
+          "Comparison",
+          "Sorted bars",
+          "3D bars"
+        ],
+        [
+          "Revenue mix?",
+          "Composition",
+          "Stacked bars / treemap",
+          "12-slice pie"
+        ],
+        [
+          "Price vs rating?",
+          "Relationship",
+          "Scatter + confounders",
+          "Dual axes"
+        ],
+        [
+          "Hours spread?",
+          "Distribution",
+          "Histogram/box, varied bins",
+          "Single mean"
+        ]
+      ]
+    },
+    {
+      "t": "h",
+      "text": "Encoding hierarchy (why bars beat pies)"
+    },
+    {
+      "t": "p",
+      "text": "Humans decode **position/length** precisely, **angle/area/color** poorly: sorted bars (position) > pies (angle) > bubble areas (squared lies) > 3D effects (distortion as decoration). Choose the most precise channel the question allows; relegate weak channels to secondary encoding (color for categories on positioned bars, never as the message)."
+    },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "When families collide",
+      "text": "Trend-of-composition (mix over time) and distribution-comparison (spreads by group) blend families: lead with the primary question, layer the secondary (stacked areas for mix-trends, grouped boxes for group-spreads). Mixed questions get layered charts, never forced singles."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Route the question",
+      "query": "function chartFor(q) {\n  if (/over time|trend|monthly|months|growth/i.test(q)) return 'line';\n  if (/vs|compar|which|rank|leads?|highest|largest|top|most|best/i.test(q)) return 'sorted-bars';\n  if (/mix|share|composition|breakdown/i.test(q)) return 'stacked-bars';\n  if (/versus|relation|correlation|scatter/i.test(q)) return 'scatter';\n  if (/distribution|spread|histogram/i.test(q)) return 'histogram';\n  return 'clarify-question';\n}\nconst cases = [\n  ['Revenue over months?', 'line'],\n  ['Which category leads?', 'sorted-bars'],\n  ['Revenue mix?', 'stacked-bars'],\n  ['Price versus rating?', 'scatter'],\n  ['Hours spread?', 'histogram'],\n  ['Make it pop?', 'clarify-question'],\n];\nlet pass = 0;\nfor (const [q, expected] of cases) {\n  const got = chartFor(q);\n  if (got === expected) pass++;\n  else console.log('MISS ' + q + ' -> ' + got);\n}\nconsole.log(pass + '/' + cases.length + ' questions routed');",
+      "note": "Run it: expect 6/6 with the vague brief routing to clarify-question. Question classification precedes charting — unclassifiable briefs get clarified, never decorated."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Five families (trend/comparison/composition/relationship/distribution) decide chart type",
+        "Encoding hierarchy: position/length precise; angle/area weak; 3D distortion, never information",
+        "Unclassifiable briefs route to clarification, not decoration"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice router on all six briefs and map families. (b) For 'revenue mix across 12 categories', argue stacked-bars over pie with the encoding reason. (c) State what 'make it pop' needs before any chart exists.",
+    "hints": [
+      "Baseline 6/6 incl. clarify-question fallback (vague briefs route out).",
+      "12-slice pies defeat angle judgment; stacked bars encode in position/length with sortability — precision argument, not taste.",
+      "Clarification: the actual question (trend? comparison?) — charting unasked questions decorates confusion."
+    ],
+    "solution": "// (a) 6/6 routed by family (clarify fallback included).\n// (b) stacked bars: position/length precision vs angle failure at 12 slices.\n// (c) the question itself (family unknown → clarify, never decorate).",
+    "why": "Family routing (question→chart), encoding argument (precision hierarchy), and brief discipline (clarify before charting) are the three selection judgments.",
+    "code": "// Selection pattern: classify question → encode precisely → clarify if unclassifiable.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Monthly revenue trend as a pie. Verdict?",
+      "options": [
+        "Creative",
+        "Category error: trends need time-ordered lines; pies show static composition — wrong family entirely",
+        "Fine with 12 slices",
+        "Needs 3D"
+      ],
+      "answer": 1,
+      "explain": "Family mismatches aren't style choices: pies can't show change over time. Classify first, chart second."
+    },
+    {
+      "q": "Bubble areas encoding revenue 2x. Problem?",
+      "options": [
+        "Beautiful",
+        "Quadratic lie: doubled radius quadruples area — encode in position/length or scale radius by square root with labels",
+        "Bigger bubbles fix it",
+        "More colors"
+      ],
+      "answer": 1,
+      "explain": "Area perception follows actual area: linear radius mapping squares messages. Honest channels or explicit labels."
+    },
+    {
+      "q": "'Make the dashboard pop.' First response?",
+      "options": [
+        "Gradients and 3D",
+        "Clarify the questions first: unasked briefs get questions, not decoration",
+        "More charts",
+        "Animations"
+      ],
+      "answer": 1,
+      "explain": "Decoration without questions produces impressive confusion. Family classification precedes all visual work."
+    }
+  ],
+  "summary": "Classify by family, encode by precision hierarchy, clarify the unclassifiable. Selection is mechanical and reviewable — taste enters nowhere.",
+  "next": "Families mapped — now their shapes: distributions with honest bins, skew, and outliers. Next: spread without lies."
+}

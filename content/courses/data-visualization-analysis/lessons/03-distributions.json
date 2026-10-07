@@ -1,0 +1,102 @@
+{
+  "title": "Distributions Without Lies",
+  "slug": "03-distributions",
+  "objective": "After this lesson you will be able to show spread honestly (bin-stability notes, box plots, skew language), choose bins deliberately, and reject single-number summaries where shape matters.",
+  "why": "Averages hide bimodality, coarse bins merge peaks, and 'normal-ish' assumptions break on skew: two customer groups (budget + premium) average into a middle that exists nowhere. Distribution views reveal what summaries conceal — and bin choices determine what's visible, making bins a methodological decision with notes, not defaults.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Bins choose the story"
+    },
+    {
+      "t": "p",
+      "text": "Bin count/width decides visible shape: 3 bins merge modes into uniformity; 50 bins noise every wiggle into false peaks. Practice: try 5/10/20 bins, keep conclusions stable across all three, report the chosen bins with the stability note. Single-binning conclusions are binning artifacts until proven otherwise."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Binned histogram with stability across counts (plain JS)\nfunction histogram(values, bins) {\n  const lo = Math.min(...values), hi = Math.max(...values);\n  const w = (hi - lo) / bins || 1;\n  const counts = new Array(bins).fill(0);\n  for (const v of values) counts[Math.min(bins - 1, Math.floor((v - lo) / w))]++;\n  return counts;\n}\n// Stability check: bimodal stays bimodal at 5, 10, 20 bins (else: artifact suspected).",
+      "caption": "Bin-count sweep: stable shapes earn conclusions"
+    },
+    {
+      "t": "h",
+      "text": "Box plots: five numbers, zero hiding"
+    },
+    {
+      "t": "p",
+      "text": "Box plots compress distributions honestly: median (typical), quartiles (middle-50 spread), whiskers (1.5×IQR range), points beyond (outliers named individually). Pair with sample sizes — identical boxes from n=8 vs n=8000 mean different things. Skew reads directly (median off-center, long whisker side). No bin decisions required: boxes dodge the binning problem entirely."
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Means need company",
+      "text": "A mean without spread and n is a rumor with decimals: pair every reported mean with its distribution shape (or at minimum SD + n). Decision-makers acting on lone means inherit hidden skew."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Stabilize the shape",
+      "query": "function histogram(values, bins) {\n  const lo = Math.min(...values), hi = Math.max(...values);\n  const w = (hi - lo) / bins || 1;\n  const counts = new Array(bins).fill(0);\n  for (const v of values) counts[Math.min(bins - 1, Math.floor((v - lo) / w))]++;\n  return counts.join(',');\n}\nconst bimodal = [1, 1, 2, 2, 9, 9, 10, 10];\nconsole.log('bins5=' + histogram(bimodal, 5));\nconsole.log('bins2=' + histogram(bimodal, 2));\nconsole.log('peaks-stable: ' + (histogram(bimodal, 5).split(',').filter((c) => +c >= 2).length >= 2));",
+      "note": "Run it: 5 bins show two peaks (4,0,0,0,4 shape); 2 bins merge everything (4,4 — uniformity lie). Stability across counts separates shapes from artifacts."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Sweep bin counts (5/10/20): stable shapes conclude, shifting shapes suspect artifacts",
+        "Box plots compress honestly (median/quartiles/whiskers/outliers) + always with n",
+        "Skew language precise (direction + whisker side); single means never substitute for shapes"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice histograms and map both shapes. (b) Add a uniform dataset (1..8) at 5 bins and contrast its shape with bimodal's. (c) State the bin-stability note you would publish alongside the bimodal chart.",
+    "hints": [
+      "Bimodal 5-bin: two peaks separated; 2-bin: merged uniformity (the lie demonstrated).",
+      "Uniform 1..8 at 5 bins: roughly even counts — compare against bimodal's clustered shape (same bins, different truth).",
+      "Note names bins tried (5/10/20), stability verdict (peaks persist), and n (8 points — small-sample caveat attached)."
+    ],
+    "solution": "// (a) 5-bin twin peaks vs 2-bin merged uniformity.\n// (b) uniform-even vs clustered-bimodal at identical bins (shape, not bins).\n// (c) bins tried + stability + n-caveat (honest bin note).",
+    "why": "Artifact demonstration (merged uniformity), contrast control (uniform at same bins), and published bin notes (method transparency) are the three distribution judgments.",
+    "code": "// Bin-sweep pattern: multiple counts, stability verdict, published note.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "3-bin histogram shows uniform demand. Trust?",
+      "options": [
+        "Yes — clean",
+        "No: sweep 5/10/20 first — coarse bins merge modes into false uniformity; stability earns conclusions",
+        "Finer always",
+        "Drop histograms"
+      ],
+      "answer": 1,
+      "explain": "Bin width chooses visible shape: uniformity at one count is a candidate artifact until multi-count stability proves otherwise."
+    },
+    {
+      "q": "Mean revenue reported alone, n=12, skewed. Missing?",
+      "options": [
+        "Nothing",
+        "Distribution + n: skew pulls means from typicals; box/histogram plus sample size, never lone means on skew",
+        "Median instead always",
+        "More decimals"
+      ],
+      "answer": 1,
+      "explain": "Single summaries conceal spread and skew; small n amplifies the lie. Shapes plus counts, always."
+    },
+    {
+      "q": "Box plot without n, two groups compared. Gap?",
+      "options": [
+        "None",
+        "Sample sizes: identical boxes at n=8 vs n=8000 mean different things (noise vs truth)",
+        "Colors",
+        "Whiskers"
+      ],
+      "answer": 1,
+      "explain": "Boxes compress; n contextualizes. Comparisons need both shape and evidence weight."
+    }
+  ],
+  "summary": "Sweep bins, note stability, box with n, language skew precisely. Shapes earn conclusions; single numbers don't.",
+  "next": "Spread understood — now change over time: resampling, baselines, and the dual-axis trap. Next: honest trends."
+}

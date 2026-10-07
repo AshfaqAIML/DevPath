@@ -1,0 +1,102 @@
+{
+  "title": "Part-to-Whole Without Pie Lies",
+  "slug": "06-part-to-whole",
+  "objective": "After this lesson you will be able to show shares with stacked bars/treemaps, restrict pies to 2–4 familiar shares, and normalize shares that don't sum (overlaps, missing other) explicitly.",
+  "why": "Pies dominate dashboards and disappoint readers: 12 slices defeat angle judgment, similar shares blur, and missing 'other' inflates shares silently. Part-to-whole has better shapes (100% stacked bars sortable, treemaps for hierarchies) with pies reserved for the rare case they serve (few familiar shares, one emphasized part). Share honesty is normalization honesty.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Pies: two uses, both narrow"
+    },
+    {
+      "t": "p",
+      "text": "Pies work for **2–4 familiar shares** (market halves, budget split) and **one emphasized part vs rest** (our share vs market). Beyond that, angles fail: 12-slice pies rank nothing, similar slices merge visually, legends force color-matching labor. The test: can readers rank all parts in 5 seconds? No → bars."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Share normalizer: parts sum to 100 with explicit other (plain JS)\nfunction shares(parts) {\n  const total = parts.reduce((s, p) => s + p.value, 0);\n  const out = parts.map((p) => ({ ...p, pct: (p.value / total) * 100 }));\n  const sum = out.reduce((s, p) => s + p.pct, 0);\n  return { parts: out, check: Math.abs(sum - 100) < 1e-9 };\n}\n// Overlaps (multi-category items) must NOT sum to 100 silently: state basis\n// (share of revenue vs share of items) or split attributions explicitly.",
+      "caption": "Normalization with a 100-check: shares that don't sum lie by construction"
+    },
+    {
+      "t": "h",
+      "text": "Stacked bars and treemaps instead"
+    },
+    {
+      "t": "p",
+      "text": "**100% stacked bars** compare compositions across groups (mix by quarter, sortable, shared baseline). **Treemaps** show hierarchical shares (category → subcategory areas, labeled). **Waffle/unit charts** make small shares countable (each square = 1%). All beat pies on rankability while keeping part-to-whole readable."
+    },
+    {
+      "t": "callout",
+      "variant": "warn",
+      "title": "Percentages need populations",
+      "text": "Every share states its whole (share of what, among whom, over what window) — shares without populations compare nothings. '60% prefer X' means nothing until the denominator is named."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Normalize the shares",
+      "query": "function shares(parts) {\n  const total = parts.reduce((s, p) => s + p.value, 0);\n  return parts.map((p) => ({ name: p.name, pct: Math.round((p.value / total) * 1000) / 10 }));\n}\nconst mix = [\n  { name: 'shoes', value: 368 },\n  { name: 'hats', value: 210 },\n  { name: 'apparel', value: 59 },\n];\nconst s = shares(mix);\nconsole.log(s.map((p) => p.name + '=' + p.pct + '%').join(' '));\nconsole.log('sums-to-100: ' + (Math.abs(s.reduce((t, p) => t + p.pct, 0) - 100) < 0.2));",
+      "note": "Run it: shoes≈57.8%, hats≈33%, apparel≈9.3%, summing to ~100 (rounding dust noted, not hidden). Shares normalized explicitly with the sum check — then pick bars over pie for three ranked parts."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Pies for 2–4 familiar shares or one-vs-rest only; rankability test decides the rest",
+        "Stacked bars (sortable compositions), treemaps (hierarchies), waffles (countable small shares)",
+        "Normalize explicitly with sum-checks; overlaps need stated basis, never silent sums"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice normalizer and confirm shares + sum check. (b) Argue bars vs pie for these three parts with the rankability test. (c) State how overlapping categories (item in two groups) must be handled before any share math.",
+    "hints": [
+      "Shares ≈57.8/33/9.3 summing ~100 (rounding dust stated).",
+      "Rank test: order the three shares in 5 seconds from pie angles vs bar lengths — bars win by construction.",
+      "Overlaps: split attribution or state basis (share of revenue with multi-count noted); silent sums double-count."
+    ],
+    "solution": "// (a) 57.8/33/9.3 ~100 (dust noted).\n// (b) bars: rankable in position; pie angles fail at 3+ similar shares.\n// (c) attribution split or basis-stated; silent overlap sums lie.",
+    "why": "Normalization proof (sum checks), rankability argument (encoding precision), and overlap discipline (basis stated) are the three composition judgments.",
+    "code": "// Share pattern: normalize + sum-check + rankability test + overlap basis.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "12-slice market pie in a deck. Fix?",
+      "options": [
+        "Bigger pie",
+        "Sorted bars (or treemap for hierarchy): 12 angles rank nothing; position encodes precisely",
+        "3D pie",
+        "Exploded slices"
+      ],
+      "answer": 1,
+      "explain": "Rankability test fails at 12 slices: angles blur, legends labor. Bars rank; treemaps hierarchize."
+    },
+    {
+      "q": "Shares sum to 140% silently. Cause + fix?",
+      "options": [
+        "Better pie",
+        "Overlapping categories double-counted: split attribution or state basis (share of X with multi-count noted)",
+        "Round harder",
+        "Fewer categories"
+      ],
+      "answer": 1,
+      "explain": "Sums over 100 expose overlap: items counted multiply. Basis stated explicitly or attributions split — silent sums lie by construction."
+    },
+    {
+      "q": "When IS a pie acceptable?",
+      "options": [
+        "Never",
+        "2–4 familiar shares or one-vs-rest emphasis where angles suffice and rankability isn't needed",
+        "Always with legend",
+        "Only in 3D"
+      ],
+      "answer": 1,
+      "explain": "Narrow license: few familiar parts or single emphasis. Beyond that, precision channels (bars) take over."
+    }
+  ],
+  "summary": "Rankable compositions via bars/treemaps, pies on narrow license, normalized shares with sum checks, overlaps with stated basis. Parts honest to wholes.",
+  "next": "Shares settled — now variables against each other: scatters, confounders, and causation discipline. Next: relationships without illusions."
+}

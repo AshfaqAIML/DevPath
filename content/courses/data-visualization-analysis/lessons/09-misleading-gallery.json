@@ -1,0 +1,51 @@
+{
+  "title": "Misleading Gallery: Traps & Fixes",
+  "slug": "09-misleading-gallery",
+  "objective": "After this lesson you will be able to spot the six classic visualization traps (truncated axes, dual axes, cherry-picked ranges, area distortion, survivorship framing, hidden denominators) and fix each with a before/after pair.",
+  "why": "Every trap in this gallery ships regularly in real decks — including, statistically, yours. Recognition plus mechanical fixes (zero baselines, indexed comparisons, full windows, per-unit areas, stated denominators) turns honesty from taste into checklist. Self-caught traps with before/after pairs are credibility evidence in the capstone.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "The six traps with fixes" },
+    { "t": "p", "text": "Each trap: signature, mechanism, fix. **Truncated axes** (82-vs-85 doubling visually → zero baseline or declared zoom with context). **Dual axes** (manufactured correlation → indexed/paneled). **Cherry-picked ranges** (spike theater → full comparable windows + selection criteria). **Area distortion** (radius-doubled bubbles quadrupling → sqrt scaling or labels). **Survivorship framing** (success stories without denominators → rates with populations). **Hidden denominators** (percentages without n → always paired)." },
+    { "t": "table", "headers": ["Trap", "Signature", "Fix"], "rows": [["Truncated axis", "Small gap looks huge", "Zero baseline; declared zoom only with context"], ["Dual axes", "Unrelated series 'correlate'", "Indexed (=100) or shared-x panels"], ["Cherry-picked range", "Spike without context", "Full comparable windows + stated criteria"], ["Area distortion", "Bubbles exaggerate 4x", "Sqrt scaling or direct labels"], ["Survivorship", "Winners without losers", "Denominators: rates over populations"], ["Hidden n", "Bold % from n=3", "n paired with every rate"]] },
+    { "t": "h", "text": "Lie factor: quantify the distortion" },
+    { "t": "p", "text": "The **lie factor** (visual effect size ÷ data effect size; honest = 1.0) makes distortion discussable: truncated 82-vs-85 bars score ~10+ (visual doubling of 3.6% gaps). Compute it for suspect charts (effect in pixels vs effect in data) — numbers move designers where adjectives don't. Anything far from 1.0 gets fixed or explicitly justified." },
+    { "t": "code", "lang": "js", "code": "// Lie factor: visual ratio over data ratio (plain JS)\nfunction lieFactor(dataA, dataB, pxA, pxB) {\n  const dataRatio = (dataB - dataA) / dataA;\n  const pxRatio = (pxB - pxA) / pxA;\n  return pxRatio / dataRatio;\n}\n// Truncated 82-vs-85 bars (px 10 vs 100): data 3.6%, visual 900% → factor ~250.\n// Zero-based same bars: factor ≈ 1.0 (honest by construction).", "caption": "Quantified distortion: pixels lie louder than data" },
+    { "t": "practice", "sim": "js-playground", "title": "Score the lie", "query": "function lieFactor(dataA, dataB, pxA, pxB) {\n  const dataRatio = (dataB - dataA) / dataA;\n  const pxRatio = (pxB - pxA) / pxA;\n  return Math.round((pxRatio / dataRatio) * 10) / 10;\n}\nconsole.log('truncated bars: ' + lieFactor(82, 85, 10, 100));\nconsole.log('honest bars: ' + lieFactor(82, 85, 82, 85));\nconsole.log('acceptable band: 0.95-1.05, else fix or justify');", "note": "Run it: expect ~250 for truncated bars vs 1.0 honest — same data, 250x visual lie. Lie factors turn 'misleading' from accusation into arithmetic." },
+    { "t": "keytakeaways", "items": ["Six traps with signatures + mechanical fixes (baselines, indexing, windows, sqrt, denominators, n)", "Lie factor quantifies distortion (visual ÷ data effect; ~1.0 honest)", "Self-caught before/after pairs are capstone credibility evidence"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice lie factors and interpret both numbers. (b) Audit one of your own past charts (or the course's Ch.5 example) for two traps from the table, with verdicts. (c) Write the fix for the worse finding as a before/after spec (what changes, what stays).",
+    "hints": [
+      "Numbers: ~250 (visual violence) vs 1.0 (honest) — same data, framing decides truth value.",
+      "Self-audit honestly: check axes, ranges, denominators on your own work first (the gallery applies inward).",
+      "Before/after spec: baseline restored + range extended + n attached (each fix mechanical, verifiable)."
+    ],
+    "solution": "// (a) 250× lie vs 1.0 honest (framing decides, data identical).\n// (b) two-trap self-audit with verdicts (inward application first).\n// (c) before/after spec per hints (mechanical verifiable fixes).",
+    "why": "Quantification (lie factors), self-application (own work audited first), and specified fixes (before/after mechanics) are the three honesty judgments — each practiced, with pairs preserved as evidence.",
+    "code": "// Honesty-audit pattern: trap table sweep + lie factors + before/after pairs.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "82-vs-85 bars, axis from 80. Lie factor ~250. Action?",
+      "options": ["Keep — dramatic", "Zero baseline (factor →1.0) or declared zoom with full context — 250× distortion is never emphasis", "Start at 81", "Log scale"],
+      "answer": 1,
+      "explain": "Quantified lies demand mechanical fixes: baselines for magnitudes, declared zooms only with context. Drama is not a defense."
+    },
+    {
+      "q": "'90% success!' with n hidden. Missing + fix?",
+      "options": ["Nothing", "Denominator: pair every rate with n (9/10 vs 900/1000 differ totally); hidden-n rates are claims without evidence", "Bigger font", "More decimals"],
+      "answer": 1,
+      "explain": "Rates without denominators conceal evidence weight. Pairing n is non-negotiable honesty infrastructure."
+    },
+    {
+      "q": "Spike chart, range unexplained. Demand?",
+      "options": ["Accept the spike", "Full comparable windows + stated selection criteria — ranges are framing, criteria make them reviewable", "Bigger spike", "Red color"],
+      "answer": 1,
+      "explain": "Unexplained ranges cherry-pick by default suspicion. Comparable windows with criteria turn spikes into findings."
+    }
+  ],
+  "summary": "Six traps, lie-factor arithmetic, before/after fixes, self-audits preserved. Honesty mechanical, credibility evidenced.",
+  "next": "Traps cataloged — now the telling: narrative structure, annotations, and takeaway titles. Next: stories with data."
+}
