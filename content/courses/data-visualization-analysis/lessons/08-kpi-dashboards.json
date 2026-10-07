@@ -1,0 +1,53 @@
+{
+  "title": "KPI Dashboards: Funnels & Cohorts",
+  "slug": "08-kpi-dashboards",
+  "objective": "After this lesson you will be able to compute funnel stage conversions with absolute sizing, read cohort tables diagonally and horizontally, and define every dashboard metric with formula + window + exclusions.",
+  "why": "Dashboards drive weekly decisions on numbers nobody defined: conversion of what over whom, retention of which event, active meaning what? Metric definitions (formula + population + window + exclusions) plus funnel/cohort discipline turn dashboards from wallpaper into instruments — and undefined metrics into arguments nobody can settle.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Funnels: rates diagnose, counts size" },
+    { "t": "p", "text": "Each stage shows **conversion rate from previous** (diagnosis: where the cliff is) **and absolute count** (sizing: what fixing it wins). Biggest relative drop × volume = priority. Funnel definitions state windows (checkout within session? 7 days?) and dedup rules (one conversion per user or per attempt?) — same shape, different numbers." },
+    { "t": "code", "lang": "js", "code": "// Funnel math: rates + absolutes with drop ranking (plain JS)\nfunction funnel(stages) {\n  // stages: [{name, n}] ordered\n  return stages.map((s, i) => ({\n    ...s,\n    rate: i === 0 ? 1 : s.n / stages[i - 1].n,\n    drop: i === 0 ? 0 : 1 - s.n / stages[i - 1].n,\n  }));\n}\n// Priority = max drop × upstream volume: rates locate, counts size the prize.", "caption": "Stage rates with absolutes: diagnose relatively, size absolutely" },
+    { "t": "h", "text": "Cohorts: rows age, diagonals compare" },
+    { "t": "p", "text": "**Rows** age one cohort (lifecycle shape); **diagonals** compare same-age across cohorts (true retention shifts vs mix effects). Newcomers read rows only and mistake mix changes for retention changes. Always pair with cohort sizes (small cohorts wobble) and precise event definitions (any order? completed? which window?)." },
+    { "t": "code", "lang": "js", "code": "// Cohort diagonal read: same-age retention across cohorts (plain JS)\nfunction diagonals(matrix) {\n  // matrix[cohort][ageIndex] = retention\n  const out = [];\n  for (let age = 0; age < matrix[0].length; age++) {\n    const col = matrix.map((row) => row[age]).filter((v) => v != null);\n    out.push({ age, avg: col.reduce((s, v) => s + v, 0) / col.length });\n  }\n  return out;\n}\n// Diagonals answer 'is retention improving?' — rows answer 'how cohorts age?'", "caption": "Two readings, two questions: diagonals for trends, rows for lifecycles" },
+    { "t": "h", "text": "Metric definitions (the dashboard contract)" },
+    { "t": "p", "text": "Every metric ships **formula + population + window + exclusions + owner**: 'checkout conversion = unique purchasers / unique product-viewers, 7-day window, excluding staff, owned by growth'. Undefined metrics generate unresolvable arguments ('conversion is down' — which conversion?). Definitions live beside dashboards, versioned with changes." },
+    { "t": "practice", "sim": "js-playground", "title": "Rank the drops", "query": "function funnel(stages) {\n  return stages.map((s, i) => ({\n    name: s.name,\n    rate: i === 0 ? 100 : Math.round((s.n / stages[i - 1].n) * 1000) / 10,\n    drop: i === 0 ? 0 : Math.round((1 - s.n / stages[i - 1].n) * 1000) / 10,\n  }));\n}\nconst f = funnel([\n  { name: 'visits', n: 1000 },\n  { name: 'views', n: 900 },\n  { name: 'carts', n: 200 },\n  { name: 'checkout', n: 50 },\n]);\nfor (const s of f) console.log(s.name + ' rate=' + s.rate + '% drop=' + s.drop + '%');\nconsole.log('fix-first: views->carts (77.8% drop on 900 volume)');", "note": "Run it: views→carts collapses 77.8% on 900 volume — the cliff to work first. Rates locate (77.8%), counts size (900 at stake): priority needs both numbers." },
+    { "t": "keytakeaways", "items": ["Funnels: stage rates (diagnose) + absolutes (size); priority = drop × volume", "Cohorts read rows (aging) + diagonals (true trends) with sizes and event definitions", "Metric contracts: formula + population + window + exclusions + owner, versioned"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice funnel and confirm the four stage lines + priority. (b) Compute the diagonal averages for cohorts [[0.5,0.3],[0.6,0.4]] (two cohorts, two ages) by hand. (c) Write the conversion metric definition (formula/population/window/exclusions/owner) for checkout.",
+    "hints": [
+      "Lines: visits 100/0, views 90/10, carts 22.2/77.8, checkout 25/75; priority views→carts (rate×volume).",
+      "Diagonals: age0 (0.5+0.6)/2=0.55, age1 (0.3+0.4)/2=0.35 — same-age comparison across cohorts.",
+      "Definition: purchasers/viewers, 7-day window, exclude staff/test, owner growth (versioned beside dashboard)."
+    ],
+    "solution": "// (a) four stage lines + views→carts priority (rate×volume).\n// (b) diagonals 0.55/0.35 (same-age truth vs row aging).\n// (c) full metric contract per hints (formula→owner, versioned).",
+    "why": "Stage math (rates+absolutes), diagonal reading (trends vs lifecycles), and contract writing (five-part definitions) are the three dashboard judgments.",
+    "code": "// Dashboard pattern: funnel rates + cohort diagonals + metric contracts.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "'Conversion is down!' — first response?",
+      "options": ["Panic", "Which conversion? (formula/population/window/exclusions/owner) — undefined metrics generate unresolvable arguments", "More traffic", "Redesign"],
+      "answer": 1,
+      "explain": "Metric contracts precede incident response: definition first, diagnosis second. Arguing undefined numbers wastes the crisis."
+    },
+    {
+      "q": "Cohort rows improve over time. Conclusion?",
+      "options": ["Retention improving", "Check diagonals first: row aging vs same-age comparison — mix effects mimic retention shifts", "Celebrate", "More cohorts"],
+      "answer": 1,
+      "explain": "Rows age cohorts (lifecycle); diagonals compare same-age across time (true trends). Conclusions need both readings plus sizes."
+    },
+    {
+      "q": "Funnel stage with biggest drop but tiny volume vs smaller drop, huge volume. Priority?",
+      "options": ["Biggest drop always", "Drop × volume product: rates locate, absolutes size — priority maximizes expected win", "Biggest volume always", "Alphabetical"],
+      "answer": 1,
+      "explain": "Priority needs both numbers: relative diagnosis times absolute prize. Either alone misallocates effort."
+    }
+  ],
+  "summary": "Rates + absolutes in funnels, rows + diagonals in cohorts, five-part contracts on every metric. Dashboards as instruments, not wallpaper.",
+  "next": "Dashboards instrumented — now their failure modes: the classic traps with before/after fixes. Next: the misleading gallery."
+}

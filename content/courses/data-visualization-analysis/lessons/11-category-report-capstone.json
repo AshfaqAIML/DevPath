@@ -1,0 +1,102 @@
+{
+  "title": "Capstone: Category Performance Report",
+  "slug": "11-category-report-capstone",
+  "objective": "After this lesson you will be able to deliver a decision-grade category report — profiled data, honest distributions, declared trends, ranked comparisons, funnel + cohort views, self-audited traps, takeaway narrative with caveats — ready for the final assessment and your capstone project.",
+  "why": "Ten lessons of craft converge on one deliverable: a report stakeholders fund and auditors respect. The walkthrough performs it once — profile to recommendation with honesty audit — so your project repeats a demonstrated shape with numbers attached. Reporting is the final visualization skill because it uses all the others.",
+  "minutes": 20,
+  "xp": 80,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Assembly manifest (gates per section)"
+    },
+    {
+      "t": "p",
+      "text": "Build in dependency order with verification per section: (1) **profile** (shapes/missing/outliers with dispositions); (2) **views** (distributions with bin notes, trends with granularity + gaps, comparisons sorted, funnel + cohort with math); (3) **honesty audit** (three self-caught traps with before/after pairs); (4) **story** (takeaway titles, annotations, recommendation with numbers); (5) **caveats** (samples, windows, methods). No section starts on unverified prior output."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Report manifest: sections with gates (plain JS)\nconst manifest = {\n  profile: { rows: 4, missing: \"mapped\", outliers: \"dispositioned\" },\n  views: { distributions: true, trends: \"weekly+ gaps\", comparisons: \"sorted\", funnel: true, cohort: true },\n  honesty: { trapsCaught: 3, pairsPreserved: true },\n  story: { takeaways: 3, recommendation: true },\n  caveats: { samples: true, windows: true, methods: true },\n};\n// Every entry measured, justified, or preserved — manifest as machine-checkable report.",
+      "caption": "Manifest-first: gates per section, numbers per claim"
+    },
+    {
+      "t": "h",
+      "text": "The recommendation (one decision, priced)"
+    },
+    {
+      "t": "p",
+      "text": "Reports end in exactly one priced recommendation ('fix hats PDP media: 5.6%→15% closes $X gap at $Y cost') with the math shown, alternatives named (shoes inventory second), and caveats attached. Unpriced recommendations ('improve hats') delegate thinking back upward; multi-recommendation dumps diffuse accountability. One decision, priced, caveated."
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Drafts are evidence",
+      "text": "Preserve pre-fix drafts alongside corrected charts: the honesty audit trail proves diligence to reviewers and teaches the team. Deleted drafts look like hidden mistakes; paired drafts read as rigor."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Audit the report",
+      "query": "const manifest = {\n  profile: { rows: 4, missing: 'mapped', outliers: 'dispositioned' },\n  views: { distributions: true, trends: true, comparisons: true, funnel: true, cohort: true },\n  honesty: { trapsCaught: 3 },\n  story: { takeaways: 3, recommendation: true },\n  caveats: { samples: true, windows: true, methods: true },\n};\nconst checks = [\n  ['profile complete', manifest.profile.rows > 0 && !!manifest.profile.missing],\n  ['all views present', ['distributions', 'trends', 'comparisons', 'funnel', 'cohort'].every((k) => manifest.views[k])],\n  ['honesty evidenced', manifest.honesty.trapsCaught >= 3],\n  ['story argues', manifest.story.takeaways >= 1 && manifest.story.recommendation],\n  ['caveats bound', manifest.caveats.samples && manifest.caveats.windows && manifest.caveats.methods],\n];\nfor (const [label, ok] of checks) console.log((ok ? 'PASS ' : 'FAIL ') + label);\nconsole.log(checks.every(([, ok]) => ok) ? 'report shippable' : 'report BLOCKED');",
+      "note": "Run it: expect five PASS lines then 'report shippable'. Manifest auditing makes report completeness machine-checkable — coverage thinking for deliverables."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Assemble in dependency order with per-section gates: profile → views → honesty → story → caveats",
+        "One priced recommendation with alternatives named; caveats attached, never appended",
+        "Drafts preserved with fixes: honesty audit trail as credibility evidence"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the manifest audit and confirm shippable. (b) Break it (honesty trapsCaught 1) and state the review outcome. (c) Draft your capstone manifest (same shape, your catalog domain) with one measured-or-contracted entry per section.",
+    "hints": [
+      "Baseline: 5 PASS + shippable (all gates green).",
+      "Broken honesty → BLOCKED: un-audited visuals ship traps; fix with before/after pairs to 3+.",
+      "Your manifest needs per-section entries with numbers-or-contracts: rows, views, traps, takeaways, caveats."
+    ],
+    "solution": "// (a) 5 PASS + shippable.\n// (b) honesty FAILs → BLOCKED; fix with 3+ before/after pairs.\n// (c) domain manifest with measured/contracted entries per section.",
+    "why": "Gate-driven assembly (failed gates halt downstream) plus manifest auditing makes reporting verifiable at every arrow — practiced on breakage, not just success.",
+    "code": "// Report-audit pattern: per-section requirements as runnable checks.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Assembly order for the report?",
+      "options": [
+        "Story first",
+        "Profile → views → honesty audit → story → caveats — dependencies first, verified per section",
+        "Charts first",
+        "Caveats optional"
+      ],
+      "answer": 1,
+      "explain": "Dependency order with per-section gates: profile grounds views, views feed audit, audit precedes story. Each stage verified before downstream builds."
+    },
+    {
+      "q": "Three recommendations of equal weight. Fix?",
+      "options": [
+        "Present all equally",
+        "One priced recommendation with alternatives named — dumps diffuse accountability; pricing forces choice",
+        "More analysis",
+        "Vote"
+      ],
+      "answer": 1,
+      "explain": "Decisions need singularity: one priced recommendation with named alternatives. Equal-weight lists return thinking upward."
+    },
+    {
+      "q": "No traps found in self-audit. Reading?",
+      "options": [
+        "Perfect work",
+        "Suspicious: three-trap expectation means look harder (axes, ranges, denominators) — clean audits on complex work indicate audit failure, not purity",
+        "Ship immediately",
+        "Delete audit"
+      ],
+      "answer": 1,
+      "explain": "Honesty audits that find nothing on real work indict the audit. Complex visuals always contain judgment calls worth stress-testing."
+    }
+  ],
+  "summary": "Manifest-audited assembly, one priced recommendation, honesty pairs preserved, caveats attached. Ten lessons become one decision-grade report — assessment next, capstone after.",
+  "next": "Course complete: take the 12-question final assessment (70% to pass), then ship the Category Performance Report capstone."
+}

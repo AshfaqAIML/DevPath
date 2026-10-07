@@ -1,0 +1,102 @@
+{
+  "title": "Honest Trends Over Time",
+  "slug": "04-time-trends",
+  "objective": "After this lesson you will be able to resample time series with declared granularity, handle gaps explicitly, index baselines for comparison, and reject dual-axis correlations.",
+  "why": "Time plots lie by granularity (daily noise vs monthly signal), gaps (missing months silently connected), and scaling (dual axes manufacturing correlation). Honest trends declare granularity, flag gaps, and compare via indexed baselines — the same series tells opposite stories under different choices, so choices get stated, not hidden.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Granularity is a decision"
+    },
+    {
+      "t": "p",
+      "text": "Daily (noise + events), weekly (patterns), monthly (trends): each answers different questions, and switching granularities reverses conclusions (Simpson-adjacent effects over time). Declare granularity with reason (weekly: weekday effects smoothed, events visible); show alternatives in appendix when stakes are high."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Resample daily points to weekly means with gap flags (plain JS)\nfunction resampleWeekly(points) {\n  // points: [{day: 'YYYY-MM-DD', v}] sorted; weeks keyed by Monday\n  const weeks = new Map();\n  for (const p of points) {\n    const d = new Date(p.day + \"T00:00:00Z\");\n    const monday = new Date(d);\n    monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));\n    const k = monday.toISOString().slice(0, 10);\n    if (!weeks.has(k)) weeks.set(k, []);\n    weeks.get(k).push(p.v);\n  }\n  return [...weeks].map(([week, vs]) => ({ week, n: vs.length, mean: vs.reduce((s, v) => s + v, 0) / vs.length }));\n}\n// Missing weeks absent (not zero!): gaps flagged downstream, never interpolated silently.",
+      "caption": "Regularize with explicit gaps: absent weeks ≠ zero weeks"
+    },
+    {
+      "t": "h",
+      "text": "Indexed baselines kill dual axes"
+    },
+    {
+      "t": "p",
+      "text": "Comparing series of different scales: index both to 100 at start (relative change comparable) or panel separately with shared x. Dual y-axes let scaling choices manufacture any correlation — banned except with locked, justified scales (which is to say: effectively banned). Baselines make growth comparable honestly."
+    },
+    {
+      "t": "callout",
+      "variant": "info",
+      "title": "Calendar traps",
+      "text": "Unequal months, 53-week years, holiday shifts, and timezone cutoffs all warp time comparisons — normalize periods (equal lengths, like-for-like holidays) before trending, and state the calendar rules beside the chart."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Resample the weeks",
+      "query": "function resampleWeekly(points) {\n  const weeks = new Map();\n  for (const p of points) {\n    const d = new Date(p.day + 'T00:00:00Z');\n    const monday = new Date(d);\n    monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));\n    const k = monday.toISOString().slice(0, 10);\n    if (!weeks.has(k)) weeks.set(k, []);\n    weeks.get(k).push(p.v);\n  }\n  return [...weeks].map(([week, vs]) => week + ':' + vs.length + 'pts');\n}\nconst pts = [\n  { day: '2026-09-28', v: 10 }, { day: '2026-09-30', v: 20 },\n  { day: '2026-10-05', v: 30 }, { day: '2026-10-19', v: 40 },\n];\nconsole.log(resampleWeekly(pts).join(' | '));\nconsole.log('gap visible: ' + !resampleWeekly(pts).some((w) => w.startsWith('2026-10-12')));",
+      "note": "Run it: two populated weeks plus a missing Oct-12 week (absent, not zero). Gaps surface as missing entries — flagged downstream, never interpolated silently."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Declare granularity with reason; alternatives in appendix when stakes high",
+        "Missing periods absent (flagged), never zero-filled silently",
+        "Indexed baselines or shared-x panels; dual axes effectively banned"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice resampler and confirm weeks + gap. (b) Index two series (100→120, 50→65) to base 100 and state growth verdicts vs raw comparison. (c) Write the granularity note for a weekly revenue chart (why weekly, what daily would add/hide).",
+    "hints": [
+      "Weeks: 09-28 (2pts), 10-05 (1pt), 10-19 (1pt); Oct-12 absent (gap flagged).",
+      "Indexed: 120 vs 130 (second grew faster relatively) — raw gap (+20 vs +15) misleads; indexed compares growth honestly.",
+      "Weekly note: smooths weekday noise, keeps event visibility; daily adds noise/hides trend; monthly hides events."
+    ],
+    "solution": "// (a) 3 populated weeks + flagged Oct-12 gap.\n// (b) indexed 120 vs 130 (second wins relatively; raw misleads).\n// (c) granularity note per hints (reason + alternatives + trade-offs).",
+    "why": "Gap visibility (absent ≠ zero), indexed comparison (relative honesty), and granularity justification (reason + alternatives) are the three trend judgments.",
+    "code": "// Trend-note pattern: granularity + gap policy + comparison basis, stated.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Missing October in a monthly series, line connects across. Fix?",
+      "options": [
+        "Leave it — smooth",
+        "Break the line + flag the gap: connected gaps fabricate continuity; absent periods display as absent",
+        "Zero-fill silently",
+        "Delete adjacent months"
+      ],
+      "answer": 1,
+      "explain": "Connected lines imply measured continuity. Gaps display as breaks with flags — honesty about missingness."
+    },
+    {
+      "q": "Ad spend vs sales dual-axis 'correlation'. Response?",
+      "options": [
+        "Publish it",
+        "Redraw indexed (=100) or paneled with shared x: dual scales manufacture correlation visually",
+        "Add third axis",
+        "Bigger chart"
+      ],
+      "answer": 1,
+      "explain": "Independent y-scales make any two risers 'correlate'. Indexed/paneled views remove the scaling degree of freedom."
+    },
+    {
+      "q": "Daily noise obscures the quarterly question. Move?",
+      "options": [
+        "More daily points",
+        "Resample up (weekly/monthly) with declared granularity: match grain to question, appendix alternatives",
+        "Smooth with averages secretly",
+        "Fewer data"
+      ],
+      "answer": 1,
+      "explain": "Grain follows question: quarterly questions need aggregated views. Declared resampling with alternatives beats secret smoothing."
+    }
+  ],
+  "summary": "Declared granularity, flagged gaps, indexed comparisons, banned dual axes. Time honest by construction.",
+  "next": "Time tamed — now groups compared: sorted bars, rankings, and magnitude honesty. Next: comparisons that rank."
+}

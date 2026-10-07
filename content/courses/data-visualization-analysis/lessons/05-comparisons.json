@@ -1,0 +1,102 @@
+{
+  "title": "Comparisons That Rank Honestly",
+  "slug": "05-comparisons",
+  "objective": "After this lesson you will be able to rank categories with sorted bars (zero baselines, value labels, uncertainty where it matters) and choose grouped vs stacked layouts by the comparison question.",
+  "why": "Unsorted bars hide rankings, truncated axes exaggerate gaps, missing values sort arbitrarily — comparison charts fail more often in framing than in data. Sorted position-encoded bars with zero baselines and labeled values make magnitudes undeniable; grouped-vs-stacked choice follows whether the question compares across or within groups.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Sort, baseline zero, label values"
+    },
+    {
+      "t": "p",
+      "text": "Three non-negotiables: **sort descending** (rank readable without eye-measuring), **zero baseline** (bar length ∝ value — truncation lies ratios), **value labels** (exact numbers beside bars for the precise readers). Unsorted bars force O(n²) eye comparisons; sorted bars answer rank in one glance."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Ranked comparison prep: sort desc, keep values, flag small-n (plain JS)\nfunction ranked(rows) {\n  return [...rows]\n    .sort((a, b) => b.value - a.value)\n    .map((r, i) => ({ ...r, rank: i + 1, thin: r.n != null && r.n < 30 }));\n}\n// thin flags small-sample bars: rank shown, trust qualified (Ch.1 honesty).",
+      "caption": "Sort + label + qualify: rank readable, precision honest"
+    },
+    {
+      "t": "h",
+      "text": "Grouped vs stacked: across or within"
+    },
+    {
+      "t": "p",
+      "text": "**Grouped bars** compare across categories within series (Q3 across regions — side-by-side lengths). **Stacked bars** compose totals within categories (region mix per quarter — parts + whole). Wrong choice hides the asked comparison: stacked obscures cross-group ranks (baselines shift); grouped obscures totals. Question wording decides ('across regions' → grouped; 'mix within' → stacked)."
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Small multiples scale comparisons",
+      "text": "Beyond ~8 categories, single charts crowd: small multiples (one mini-chart per group, shared scales) preserve readability where mega-charts collapse. Same scales across panels, or comparisons lie by framing."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Rank the categories",
+      "query": "function ranked(rows) {\n  return [...rows].sort((a, b) => b.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }));\n}\nconst cats = [\n  { name: 'shoes', value: 368 },\n  { name: 'apparel', value: 59 },\n  { name: 'hats', value: 210 },\n];\nconst r = ranked(cats);\nconsole.log(r.map((x) => x.rank + '.' + x.name).join(','));\nconsole.log('leader=' + r[0].name + ' margin=' + (r[0].value - r[1].value));",
+      "note": "Run it: expect 1.shoes,2.hats,3.apparel with leader margin 158. Sorted once, rank readable instantly — the one-line difference between data and insight."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Sort descending + zero baseline + value labels: rank in one glance, ratios honest",
+        "Grouped compares across (shared baselines); stacked composes within (totals + mix)",
+        "Flag small-n bars: rank shown, trust qualified"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice ranking and confirm order + margin. (b) Reorder input (apparel first) and confirm identical output (sort stability vs input order). (c) Choose grouped vs stacked for 'Q3 share across regions' vs 'regional mix within Q3' with one-line reasons.",
+    "hints": [
+      "Baseline: shoes/hats/apparel + 158 margin (sorted, not input-ordered).",
+      "Input order irrelevant post-sort: ranking derives from values (order-independence proven).",
+      "Across regions → grouped (shared baselines compare); mix within → stacked (totals + parts together)."
+    ],
+    "solution": "// (a) 1.shoes/2.hats/3.apparel + 158 margin.\n// (b) identical output (sort erases input order).\n// (c) grouped-across / stacked-within (question wording decides).",
+    "why": "Order-independence (sort erases input bias), margin reporting (gaps quantified), and layout-by-question (grouped/stacked semantics) are the three comparison judgments.",
+    "code": "// Comparison pattern: sort desc, zero baseline, label values, flag thin.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Unsorted bars, truncated axis, no labels. Fix order?",
+      "options": [
+        "Colors first",
+        "Sort desc + zero baseline + value labels (rank, ratios, precision — in that repair order)",
+        "Bigger fonts",
+        "3D effects"
+      ],
+      "answer": 1,
+      "explain": "Each repair fixes a lie class: order (rank), baseline (ratios), labels (precision). Cosmetics after honesty, never before."
+    },
+    {
+      "q": "'Regional mix within Q3' as grouped bars. Issue?",
+      "options": [
+        "None",
+        "Wrong layout: within-composition needs stacked (totals + parts); grouped serves across-comparisons",
+        "More groups",
+        "Log scale"
+      ],
+      "answer": 1,
+      "explain": "Layout follows the question's preposition: within→stacked, across→grouped. Mismatches hide the asked comparison."
+    },
+    {
+      "q": "n=8 bar ranked #1. Presentation?",
+      "options": [
+        "Crown it",
+        "Rank shown with thin-data flag: position earned, trust qualified (small samples wobble)",
+        "Hide it",
+        "Merge it"
+      ],
+      "answer": 1,
+      "explain": "Rank and reliability separate: show the order, flag the evidence weight. Hidden uncertainty misleads more than shown weakness."
+    }
+  ],
+  "summary": "Sorted, zero-based, labeled, layout-matched comparisons with thin-data flags. Rank readable, ratios honest, questions answered.",
+  "next": "Ranked magnitudes done — now shares of wholes: pies, their limits, and better part-to-whole shapes. Next: composition without pie lies."
+}

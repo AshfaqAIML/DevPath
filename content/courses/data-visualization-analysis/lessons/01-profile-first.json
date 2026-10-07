@@ -1,0 +1,102 @@
+{
+  "title": "Profile Before You Plot",
+  "slug": "01-profile-first",
+  "objective": "After this lesson you will be able to profile any dataset (shapes, types, missingness, distributions, outliers) and state what each finding implies for chart choice — before drawing a single chart.",
+  "why": "Charts drawn on unprofiled data visualize assumptions: string prices, missing months, outlier-dominated scales, single-category 'comparisons'. Profiling (ten minutes: shapes, dtypes, nulls, ranges, value counts) determines what can honestly be shown — chart choice follows data reality, never precedes it.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "The profile quartet plus outliers"
+    },
+    {
+      "t": "p",
+      "text": "**Shape** (rows × columns vs source claims — row loss detected here), **types** (parsed as intended?), **missingness** (per-column rates + patterns: random vs structural), **ranges** (min/max exposing negatives, futures, impossibles), **value counts** (single-category comparisons and dominant classes caught early). Each finding constrains chart choice downstream."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Profiler: shape, types, missingness, ranges, top values (plain JS)\nfunction profile(rows) {\n  const cols = Object.keys(rows[0] || {});\n  const report = { rows: rows.length, cols: cols.length, columns: {} };\n  for (const c of cols) {\n    const vals = rows.map((r) => r[c]);\n    const missing = vals.filter((v) => v == null || v === \"\").length;\n    const nums = vals.filter((v) => typeof v === \"number\");\n    report.columns[c] = {\n      missing, missingRate: rows.length ? missing / rows.length : 0,\n      min: nums.length ? Math.min(...nums) : null,\n      max: nums.length ? Math.max(...nums) : null,\n    };\n  }\n  return report;\n}\n// Decisions, not stats: each number routes to a charting choice or a fix.",
+      "caption": "Profile output feeds chart choice and cleaning queues alike"
+    },
+    {
+      "t": "h",
+      "text": "Outliers: investigate, don't delete"
+    },
+    {
+      "t": "p",
+      "text": "Extreme values are guilty until proven data-entry: $1M order (whale or typo?), year-2099 timestamps (default-fill bugs?), 200-character names (concatenation errors). Rule: investigate each extreme (source check), then **cap, flag, or exclude with note** — never silently drop (dropped extremes bias means) nor blindly keep (one whale rescales every axis)."
+    },
+    {
+      "t": "callout",
+      "variant": "tip",
+      "title": "Profile output is a deliverable",
+      "text": "Save the profile (shapes, nulls, ranges, value counts) as the dataset's dossier section — downstream chart choices cite it, cleaning queues consume it, and reviewers audit against it. Profiling unwritten never happened."
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Profile the orders",
+      "query": "function profile(rows) {\n  const cols = Object.keys(rows[0] || {});\n  const report = { rows: rows.length, cols: cols.length, columns: {} };\n  for (const c of cols) {\n    const vals = rows.map((r) => r[c]);\n    const missing = vals.filter((v) => v == null || v === '').length;\n    const nums = vals.filter((v) => typeof v === 'number');\n    report.columns[c] = { missing, min: nums.length ? Math.min(...nums) : null, max: nums.length ? Math.max(...nums) : null };\n  }\n  return report;\n}\nconst orders = [\n  { id: 1, total: 129, coupon: null },\n  { id: 2, total: 59.5, coupon: 'SAVE10' },\n  { id: 3, total: 99999, coupon: null },\n  { id: 4, total: null, coupon: null },\n];\nconst r = profile(orders);\nconsole.log('rows=' + r.rows + ' cols=' + r.cols);\nconsole.log('total missing=' + r.columns.total.missing + ' max=' + r.columns.total.max);\nconsole.log('outlier flagged: ' + (r.columns.total.max === 99999));",
+      "note": "Run it: 4×3 shape, 1 missing total, max 99999 flagged for investigation. Profile outputs route work: missingness to cleaning, extremes to investigation, shapes to chart choice."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "Profile quartet + outliers before any chart: shapes, types, missingness, ranges, value counts",
+        "Outliers investigated (source check) then capped/flagged/excluded-with-note — never silent either way",
+        "Every finding routes somewhere: chart choice, cleaning queue, or investigation"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice profiler and map each output to its route (chart/clean/investigate). (b) Decide the 99999 and null-total rows (investigate? cap? quarantine?) with one-line reasons. (c) State what single-category value-counts would do to a comparison chart.",
+    "hints": [
+      "Outputs: 4×3 shape, total missing 1 (cleaning), max 99999 (investigate: whale vs typo).",
+      "99999: investigate source first (whale→cap+flag, typo→quarantine); null total: quarantine (money needs truth).",
+      "Single category: comparison with one bar — vacuous; pivot to distribution-over-time or drop the chart."
+    ],
+    "solution": "// (a) shape→chart scope; missing→cleaning; max→investigation.\n// (b) investigate-then-cap/flag vs quarantine-truth (per hints).\n// (c) vacuous comparison → change question (time/distribution) or drop.",
+    "why": "Finding-to-route mapping (profile outputs drive chart/clean/investigate), disposition judgment (whale vs typo handling), and vacuity detection (single-category comparisons) are the three profiling disciplines.",
+    "code": "// Profile-route pattern: every finding maps to chart, cleaning, or investigation.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "One $99999 order among $100s. Chart it raw?",
+      "options": [
+        "Yes — data is data",
+        "Investigate first (whale vs typo), then cap/flag/exclude-with-note — raw extremes rescale everything silently",
+        "Delete it",
+        "Log scale always"
+      ],
+      "answer": 1,
+      "explain": "Extremes need source verdicts before rendering decisions. Uninvestigated outliers corrupt scales and means alike."
+    },
+    {
+      "q": "Null totals in 20% of rows. Handling?",
+      "options": [
+        "Treat as zero",
+        "Quarantine with reasons (money needs truth) + report the rate — zeros fabricate revenue, drops need justification",
+        "Mean-impute",
+        "Ignore"
+      ],
+      "answer": 1,
+      "explain": "Missing money is a data-quality finding with a rate attached, not a fill-in-the-blank. Quarantine preserves truth."
+    },
+    {
+      "q": "Value counts show one category only. Comparison chart?",
+      "options": [
+        "Single-bar chart",
+        "Vacuous — change the question (distribution over time?) or drop it; one bar compares nothing",
+        "Pie with one slice",
+        "Bigger bar"
+      ],
+      "answer": 1,
+      "explain": "Comparisons need ≥2 groups by definition. Single-category data asks different questions — pivot, don't decorate."
+    }
+  ],
+  "summary": "Profile quartet + outliers with routes: chart, clean, or investigate. Chart choice follows data reality — established here, assumed everywhere after.",
+  "next": "Reality established — now match questions to charts: the selection matrix. Next: chart choice by question."
+}

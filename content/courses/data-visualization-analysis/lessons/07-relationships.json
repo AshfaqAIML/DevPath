@@ -1,0 +1,52 @@
+{
+  "title": "Relationships Without Illusions",
+  "slug": "07-relationships",
+  "objective": "After this lesson you will be able to explore x-vs-y with scatters (stratified, de-overplotted), brainstorm confounders before claiming patterns, and use heatmaps for matrix relationships — never confusing correlation with causation.",
+  "why": "Scatters seduce: visible trends invite causal stories ('higher prices cause ratings!') while brand, quality, and selection confound silently. Honest relationship analysis pairs every pattern with confounder candidates, stratifies by suspected lurkers, and handles overplotting (transparency, binning, sampling) so density doesn't masquerade as consensus.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    { "t": "h", "text": "Scatter with stratification" },
+    { "t": "p", "text": "Plot x vs y, then **stratify by suspected confounders** (brand, category, time): aggregate trends routinely reverse within strata (Simpson's paradox is common, not exotic). Color/shape strata distinctly; overall trend lines without strata are claims awaiting refutation. One unstratified scatter has launched a thousand wrong pricing meetings." },
+    { "t": "code", "lang": "js", "code": "// Stratified means: overall vs per-group direction check (plain JS)\nfunction groupMeans(rows, groupKey, xKey, yKey) {\n  const groups = {};\n  for (const r of rows) {\n    const g = r[groupKey];\n    groups[g] = groups[g] || { sx: 0, sy: 0, n: 0 };\n    groups[g].sx += r[xKey]; groups[g].sy += r[yKey]; groups[g].n++;\n  }\n  return Object.entries(groups).map(([g, s]) => ({ group: g, meanX: s.sx / s.n, meanY: s.sy / s.n }));\n}\n// Compare overall slope vs per-group slopes: reversals indict confounders.", "caption": "Stratify first: overall trends vs within-group truths" },
+    { "t": "h", "text": "Overplotting: density honesty" },
+    { "t": "p", "text": "Thousands of points stack into black blobs hiding distribution: fix with **transparency** (alpha reveals density), **binning** (hexbin counts per cell), or **sampling** (stated random subset with n). Each preserves a different truth (individuals vs density vs overview) — choose by question, state the method, never present blobs as consensus." },
+    { "t": "h", "text": "Correlation needs confounders listed" },
+    { "t": "p", "text": "Every reported correlation ships with **candidate confounders** (brand, quality tier, seasonality, selection effects) and the design that would test causation (experiment, instrument, discontinuity — out of scope but named). 'Associated with' language, never 'drives'/'causes' from observational scatters. Causal vocabulary is earned by design, not granted by trendlines." },
+    { "t": "practice", "sim": "js-playground", "title": "Stratify the trend", "query": "function groupMeans(rows) {\n  const groups = {};\n  for (const r of rows) {\n    const g = r.brand;\n    groups[g] = groups[g] || { sx: 0, sy: 0, n: 0 };\n    groups[g].sx += r.price; groups[g].sy += r.rating; groups[g].n++;\n  }\n  return Object.entries(groups).map(([g, s]) => g + ':' + (s.sx / s.n).toFixed(0) + '/' + (s.sy / s.n).toFixed(2));\n}\nconst rows = [\n  { brand: 'A', price: 100, rating: 4.0 }, { brand: 'A', price: 120, rating: 4.2 },\n  { brand: 'B', price: 200, rating: 4.8 }, { brand: 'B', price: 220, rating: 4.9 },\n];\nconsole.log(groupMeans(rows).join(' | '));\nconsole.log('overall-trend-up: true (but brand explains it: B costs more AND rates higher)');", "note": "Run it: A averages 110/4.10, B averages 210/4.85 — the overall price-rating 'trend' is brand composition, not price effects. Stratification dissolves the illusion into segments." },
+    { "t": "keytakeaways", "items": ["Stratify by suspected confounders before claiming patterns (Simpson checks are routine)", "De-overplot with transparency/binning/sampling — method stated, density honest", "Correlation ships with confounder candidates + causal-design names; causal verbs earned, never assumed"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice stratification and confirm brand means. (b) State the confounder story in one sentence (why overall trend misleads). (c) Design the experiment that would test price→rating causation (treatment, control, metric, duration).",
+    "hints": [
+      "Means: A 110/4.10, B 210/4.85 — overall slope confounds brand with price.",
+      "Story: brand determines both price and rating (quality tier), so price 'effects' are brand composition wearing a trendline.",
+      "Experiment: randomized discount levels on identical items (treatment), holdout control, rating/purchase metric, 4-week run with pre-registered analysis."
+    ],
+    "solution": "// (a) A 110/4.10 vs B 210/4.85 (segments, not slope).\n// (b) brand confounds price and rating jointly (composition, not causation).\n// (c) randomized discounts + holdout + pre-registered metric/window.",
+    "why": "Stratified reading (segments over slopes), confounder narration (joint causes named), and experimental design (causal claims need designs) are the three relationship judgments.",
+    "code": "// Confounder checklist per correlation: list candidates, stratify top two, design the test.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Price-rating scatter trends up. Claim 'prices drive ratings'?",
+      "options": ["Yes — visible", "No: brand/quality confounds lurk — stratify first, list confounders, name the experiment; association only until designed", "With trendline", "After log scale"],
+      "answer": 1,
+      "explain": "Observational slopes never license causal verbs. Stratification tests confounders; experiments test causes."
+    },
+    {
+      "q": "10k-point black blob scatter. Fix?",
+      "options": ["Bigger dots", "Transparency/binning/sampling with stated method — density honesty per question asked", "Fewer data", "3D scatter"],
+      "answer": 1,
+      "explain": "Overplotting masquerades density as consensus. Method-matched de-cluttering (individuals/density/overview) with disclosure."
+    },
+    {
+      "q": "Overall trend reverses within every brand. Name + action?",
+      "options": ["Simpson's paradox: report stratified truths, lead with segments — overall slope retired with explanation", "Average harder", "Drop brands", "New chart type"],
+      "answer": 1,
+      "explain": "Reversal indicts the aggregate: segments tell truth, overall misleads. Report strata first with the paradox named."
+    }
+  ],
+  "summary": "Stratify before claiming, de-overplot with stated methods, list confounders with every correlation, design for causation. Slopes describe; designs decide.",
+  "next": "Relationships disciplined — now the business views: funnels, cohorts, and retention done right. Next: KPI dashboards."
+}

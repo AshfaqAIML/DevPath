@@ -1,0 +1,174 @@
+{
+  "courseSlug": "data-visualization-analysis",
+  "subtitle": "Turn data into decisions: exploratory analysis, chart selection, encoding, storytelling with dashboards — and the classic visualization traps that quietly mislead readers",
+  "audience": "Developers and analysts who finished the Python/Pandas/ML course (or aggregate confidently in any tool) and now present findings: choosing charts by question, encoding honestly, building KPI dashboards, and telling data stories that survive scrutiny. All shaping logic runs as executable JS; chart targets are provider-neutral (recharts/matplotlib shapes).",
+  "outcomes": [
+    "Profile datasets fast (distributions, missingness, outliers) before choosing any chart",
+    "Select chart types by question (trend/comparison/composition/relationship/distribution)",
+    "Show distributions honestly (bins, skew, box plots) without histogram lies",
+    "Chart time series with resampling, baselines, and dual-axis discipline",
+    "Compare categories with sorted bars and ranked tables that respect magnitude",
+    "Replace pies with bars/treemaps except where part-to-whole truly serves",
+    "Explore relationships with scatters, heatmaps, and correlation-vs-causation discipline",
+    "Build e-commerce KPI dashboards (funnel, cohort, retention) with defined metrics",
+    "Spot and fix misleading visuals (truncated axes, cherry-picked ranges, area distortion)",
+    "Tell data stories: narrative structure, annotations, takeaway titles, and caveats",
+    "Deliver a category performance report with cited charts and honest limitations"
+  ],
+  "prereqSlugs": ["python-pandas-ml-genai-for-e-commerce"],
+  "technologies": ["JavaScript data shaping (ES2020+)", "recharts concepts", "matplotlib concepts", "pandas analysis", "Dashboard design"],
+  "skills": ["EDA", "chart selection", "honest encoding", "time series", "KPI dashboards", "misleading-viz detection", "data storytelling"],
+  "assessment": [
+    {
+      "q": "First step on a new 100k-row orders CSV?",
+      "options": ["Bar chart immediately", "Profile: shapes, dtypes, missingness, distributions, outliers — questions follow from data reality, not assumptions", "Train a model", "Build the dashboard"],
+      "answer": 1,
+      "explain": "EDA precedes visualization: chart choices depend on distributions, missingness, and outliers discovered by profiling (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "'Sales over time' — chart and first check?",
+      "options": ["Pie chart", "Line over resampled periods after checking granularity/gaps (missing periods flagged, not interpolated silently)", "Scatter", "Word cloud"],
+      "answer": 1,
+      "explain": "Trends need time-ordered lines on regularized periods with explicit gap policy. Granularity choice changes the story (Ch.2/4).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Histogram with 3 giant bins shows 'uniform demand'. Risk?",
+      "options": ["None — clean", "Binning lies: coarse bins hide modality (two peaks merged); vary bin counts and report stability before concluding", "Finer bins always", "Drop histograms"],
+      "answer": 1,
+      "explain": "Bin width chooses the story: test multiple binnings; stable shapes across them earn conclusions (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Dual axes showing 'correlation' between ad spend and sales. Required scrutiny?",
+      "options": ["Accept it", "Axis scaling arbitrariness: dual axes manufacture correlation visually — use indexed baselines (both =100) or separate panels with shared x", "Add a third axis", "Bigger chart"],
+      "answer": 1,
+      "explain": "Independent y-scales make any two rising series 'correlate'. Indexed or paneled views remove the scaling degree of freedom (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "12-category market share as a pie. Better?",
+      "options": ["Bigger pie", "Sorted bars (angle/area judgments are weak; position/length precise) — pies only for 2–4 familiar shares", "3D pie", "Donut with 3D"],
+      "answer": 1,
+      "explain": "Human angle/area perception is poor beyond few slices. Sorted bars encode magnitude in position — the precise channel (Ch.6).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Scatter shows price vs rating trending up. Claim 'higher prices cause ratings'?",
+      "options": ["Yes — trend visible", "No: correlation without causal design (brand confounds lurk) — report association + candidate confounders, never causation from scatter", "With bigger dots", "After log scale"],
+      "answer": 1,
+      "explain": "Scatters show association; causation needs design (experiments/instruments). Confounder brainstorming is mandatory alongside (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Funnel: 1000 visits → 900 views → 50 checkouts. Key metric + presentation?",
+      "options": ["Total visits", "Stage conversion rates (90%, 5.6%) with absolute counts — rates diagnose, counts size the prize; biggest relative drop first", "Bounce rate only", "Average everything"],
+      "answer": 1,
+      "explain": "Funnels diagnose via stage rates (relative drops) sized by absolutes. The 900→50 cliff dominates; views volume doesn't (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Y-axis starts at 80 on a 82-vs-85 comparison. Effect + fix?",
+      "options": ["Honest emphasis", "Truncation exaggerates 3.6% into visual doubling — start at zero for magnitudes, or state the zoom explicitly with full context", "Start at 81", "Log scale always"],
+      "answer": 1,
+      "explain": "Axis choice is rhetoric: truncated bars lie about ratios. Zero baselines for magnitudes; declared zooms only with context (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Takeaway title vs descriptive title ('Sales by month'). Why takeaway?",
+      "options": ["Shorter", "States the conclusion ('Shoes drove Q3 growth') so readers test the claim against the chart — titles argue, labels describe", "Prettier", "SEO"],
+      "answer": 1,
+      "explain": "Takeaway titles make claims checkable against visuals; descriptive titles abdicate interpretation. Stories argue explicitly (Ch.10).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Chart shows cherry-picked March spike without context. Missing?",
+      "options": ["Nothing — spikes matter", "Full window + baseline: selected ranges mislead by construction — show comparable periods and state selection criteria", "Bigger spike", "Red color"],
+      "answer": 1,
+      "explain": "Range selection is framing: comparable windows and stated criteria prevent spike theater. Context or it didn't happen (Ch.9).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Cohort retention table: values dropping across columns. Read order?",
+      "options": ["Columns are independent", "Diagonals track same-age behavior across cohorts (retention curves); rows track cohort aging — read both, compare diagonals for true trends", "Average all", "First column only"],
+      "answer": 1,
+      "explain": "Cohort tables read two ways: rows age one cohort, diagonals compare same-age across time. Diagonal comparison separates retention shifts from mix effects (Ch.8).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Area-as-radius bubble chart doubling values. Problem?",
+      "options": ["Beautiful", "Quadratic lie: radius doubling quadruples area — encode magnitude in position/length, or scale radius by square root with labels", "Bigger bubbles", "More colors"],
+      "answer": 1,
+      "explain": "Area perception follows actual area: linear radius mapping squares the message. Honest encoding or explicit labels (Ch.9).",
+      "difficulty": "hard"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Category Performance Report",
+    "summary": "Deliver a decision-grade report on catalog category performance: profiled data, honest distributions, time trends with declared granularity, ranked comparisons, funnel + cohort views, a misleading-viz audit of your own drafts, and takeaway-titled charts with caveats — the full visualization craft on real numbers.",
+    "requirements": [
+      "Data profile: shapes, missingness, outlier inventory with handling decisions",
+      "Distribution views: per-category histograms/box data with bin-stability notes",
+      "Trend views: resampled series with granularity justification + gap policy stated",
+      "Comparison views: sorted bars/ranked tables (no pies beyond 4 slices with justification)",
+      "Funnel + cohort views with conversion rates and diagonal reads",
+      "Misleading-viz audit: three self-caught traps (axes/ranges/areas) with before/after fixes",
+      "Story: takeaway titles, annotations, caveats, and one decision recommendation with numbers"
+    ],
+    "technical": [
+      "All shaping logic in runnable JS with asserted outputs; chart specs provider-neutral (recharts/matplotlib shapes)",
+      "Bins/granularity/thresholds parameterized and recorded; no magic constants",
+      "Every chart cites its query/provenance; numbers reproducible from committed code",
+      "Drafts preserved alongside fixes (audit trail of honesty)"
+    ],
+    "architecture": "Five sections: (1) Data dossier — profile + quality decisions; (2) Views — distributions/trends/comparisons/funnel/cohort with justifications; (3) Honesty audit — three caught traps with fixes; (4) Story — takeaway-titled narrative with recommendation; (5) Caveats — what the data can't say.",
+    "steps": [
+      "Profile the category/order data; record quality decisions",
+      "Build distribution + trend + comparison views with granularity/bin justifications",
+      "Build funnel + cohort views with conversion math and diagonal reads",
+      "Audit your own drafts for the classic traps; fix with before/after pairs",
+      "Write the takeaway-titled story; attach caveats; recommend one decision with numbers"
+    ],
+    "evaluation": [
+      "Profile complete with decisions (not just stats); bins/granularity justified with stability notes",
+      "Comparisons sorted and magnitude-honest; pies absent or justified (≤4 slices)",
+      "Funnel conversion math correct; cohort diagonals read (not just rows)",
+      "Three self-caught traps documented with fixes; takeaways argue with caveats attached"
+    ],
+    "stretch": [
+      "Add an interactive variant (recharts) with brush/zoom and state the new risks (zoom cherry-picking)",
+      "Benchmark two bin counts on the key distribution and report stability verdict",
+      "Present the story to a real stakeholder and record which takeaway survived contact"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "How do you choose a chart type?",
+      "a": "By question class: trend→line (time-ordered, resampled), comparison→sorted bars, composition→bars/treemap (pies only 2–4 familiar shares), relationship→scatter/heatmap, distribution→histogram/box with bin-stability notes. Then by encoding honesty (position/length over angle/area), then by audience (takeaway titles for decisions, exploratory grids for analysis). Question first, encoding second, decoration never."
+    },
+    {
+      "q": "A histogram looks uniform. How do you trust it?",
+      "a": "Vary bin counts/widths and watch shape stability; check raw counts per bin (small-n uniformity is noise); compare against box summary (skew/outliers bins hide); state the chosen bins with justification. Uniformity surviving multiple binnings earns belief; single-binning uniformity is a binning artifact until proven otherwise."
+    },
+    {
+      "q": "Dual-axis chart in a stakeholder deck — your response?",
+      "a": "Challenge it: independent scales manufacture correlation visually. Redraw as indexed series (both =100 at start) or shared-x panels, then compare conclusions. If the story survives honest scales, keep it with the indexed version; if it needed the dual axes, it was never true. Axis choices are rhetoric requiring justification."
+    },
+    {
+      "q": "Funnel shows 90% then 5.6% conversion. Where do you work first?",
+      "a": "The 5.6% cliff (views→checkout): biggest relative drop with absolute volume behind it. Diagnose with segment splits (device/category/new-vs-returning), session replays or field-level drop analysis, then fix and re-measure the same funnel. Absolute counts size the prize; rates locate the leak — work the leak with the biggest rate×volume product."
+    },
+    {
+      "q": "How do you read a cohort retention table?",
+      "a": "Two directions: rows age one cohort (lifecycle shape), diagonals compare same-age across cohorts (true retention shifts vs mix effects). Diagonals decide whether retention improved or the mix changed. Always pair with cohort sizes (small cohorts wobble) and define retention events precisely (any order? completed? window?)."
+    },
+    {
+      "q": "Your own draft misleads (truncated axis). Process?",
+      "a": "Celebrate the catch (self-audit working), fix to zero-baseline (or declared zoom with full context), preserve the before/after pair in the honesty audit, and add the trap to the team checklist. Misleading drafts are normal; uncaught ones ship. The audit trail of caught traps is credibility evidence, not embarrassment."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}
