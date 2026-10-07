@@ -53,7 +53,7 @@ export function SiteHeader({ data, onOpenSearch, activeCategory, onOpenShortcuts
           </span>
         </Link>
 
-        {/* Desktop category nav — the five-part IA as primary navigation */}
+        {/* Desktop category nav — the information architecture as primary navigation */}
         <nav
           aria-label="Primary"
           className="ml-2 hidden items-center gap-1 md:flex"

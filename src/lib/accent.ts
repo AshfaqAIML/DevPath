@@ -1,4 +1,4 @@
-// Accent theming for the five-category system.
+// Accent theming for the category system.
 // All class strings are static so Tailwind can compile them.
 
 export type AccentKey = "amber" | "emerald" | "orange" | "rose" | "teal" | "zinc";

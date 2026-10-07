@@ -1,8 +1,9 @@
 "use client";
 
-// CategoryHub — the five-category navigation system rendered near the top of
-// the resources landing experience. Card data comes from the live categories
-// query (SSR-seeded), never hardcoded in JSX.
+// CategoryHub — the category navigation system rendered near the top of
+// the resources landing experience (five content types + the Completed
+// collection of fully written courses). Card data comes from the live
+// categories query (SSR-seeded), never hardcoded in JSX.
 import { motion } from "framer-motion";
 
 import { ResourceCategoryCard } from "./ResourceCategoryCard";
@@ -31,7 +32,7 @@ export function CategoryHub({ data }: CategoryHubProps) {
             id="category-hub-heading"
             className="mt-1.5 text-xl font-bold tracking-tight sm:text-2xl"
           >
-            Five ways to level up
+            {categories.length} ways to level up
           </h2>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -48,7 +49,7 @@ export function CategoryHub({ data }: CategoryHubProps) {
 
       <nav
         aria-label="Resource categories"
-        className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
         {categories.map((c, i) => (
           <ResourceCategoryCard
@@ -67,7 +68,7 @@ export function CategoryHub({ data }: CategoryHubProps) {
         ))}
       </nav>
 
-      {/* the five-part information architecture, readable as one system */}
+      {/* the information architecture, readable as one system */}
       <motion.ol
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

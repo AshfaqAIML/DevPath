@@ -1,6 +1,6 @@
 "use client";
 
-// HomeView — the resources landing experience: hero, the five-category hub
+// HomeView — the resources landing experience: hero, the category hub
 // (the primary navigation mechanism), trending content, featured picks and
 // the personalized "jump back in" strip from the local library.
 import * as React from "react";
@@ -130,8 +130,8 @@ export function HomeView({ categoriesData, featuredItems, trendingItems, onOpenS
             className="text-pretty text-balance text-sm leading-relaxed text-muted-foreground sm:text-base"
           >
             Deep masterclasses, guided career roadmaps, focused mini courses,
-            practical guides and interactive simulators — five content types,
-            one cohesive learning system.
+            practical guides and interactive simulators — five content types
+            plus finished courses, one cohesive learning system.
           </motion.p>
 
           <motion.div
