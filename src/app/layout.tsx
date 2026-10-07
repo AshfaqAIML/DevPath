@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/platform/Providers";
+import { AppPromptProvider } from "@/components/app-install/AppPromptProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,15 @@ export const metadata: Metadata = {
     siteName: "DevPath",
   },
   robots: { index: true, follow: true },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "DevPath",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    apple: "/icons/app/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -59,6 +69,7 @@ export default function RootLayout({
       >
         <Providers>
           {children}
+          <AppPromptProvider />
           <Toaster />
         </Providers>
       </body>

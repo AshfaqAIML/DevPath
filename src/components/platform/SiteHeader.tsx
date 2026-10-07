@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { Compass, Keyboard, Menu, Moon, Search, Settings2, Sun, Bookmark } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { GetAppButton } from "@/components/app-install/GetAppButton";
 import {
   Sheet,
   SheetContent,
@@ -179,6 +180,13 @@ export function SiteHeader({ data, onOpenSearch, activeCategory, onOpenShortcuts
             </Link>
           </Button>
 
+          {/* Get the App — direct download when published, PWA sheet otherwise */}
+          <GetAppButton
+            variant="outline"
+            size="sm"
+            className="hidden h-9 gap-1.5 rounded-lg md:inline-flex"
+          />
+
           {/* Mobile nav */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
@@ -230,7 +238,13 @@ export function SiteHeader({ data, onOpenSearch, activeCategory, onOpenShortcuts
                   })}
                 </nav>
                 <div className="border-t p-3">
-                  <Button asChild variant="outline" className="w-full justify-start gap-2">
+                  {/* No auto-close wrapper: the install sheet must stay mounted */}
+                  <GetAppButton
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1.5"
+                  />
+                  <Button asChild variant="outline" className="mt-2 w-full justify-start gap-2">
                     <Link href="/?view=library" onClick={() => setMobileOpen(false)}>
                       <Bookmark className="size-4" aria-hidden />
                       My library

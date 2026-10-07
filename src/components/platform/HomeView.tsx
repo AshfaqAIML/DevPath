@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import { ArrowDown, ArrowRight, Flame, History, Play, Search, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { GetAppButton } from "@/components/app-install/GetAppButton";
 import { getAccent } from "@/lib/accent";
 import { cn } from "@/lib/utils";
 import { SPOTLIGHT_SIM, isPlayableSimulator, simulatorViewHref } from "@/lib/simulators";
@@ -157,6 +158,7 @@ export function HomeView({ categoriesData, featuredItems, trendingItems, onOpenS
                 ⌘K
               </kbd>
             </Button>
+            <GetAppButton size="lg" variant="outline" className="gap-2 rounded-xl" />
           </motion.div>
 
           {/* Spotlight: the newly shipped interactive sandbox */}
