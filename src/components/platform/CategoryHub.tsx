@@ -18,7 +18,13 @@ interface CategoryHubProps {
 }
 
 export function CategoryHub({ data }: CategoryHubProps) {
-  const categories = data.categories.filter((c) => c.enabled);
+  // The Completed collection lives on its own page (?category=completed) and
+  // in the Courses track filter — not as a hub card next to the five content
+  // types. (Slug mirrors COMPLETED_CATEGORY_SLUG in src/lib/platform.ts;
+  // kept literal here to avoid pulling server code into this client module.)
+  const categories = data.categories.filter(
+    (c) => c.enabled && c.slug !== "completed"
+  );
   const totalPublished = data.categories.reduce((sum, c) => sum + c.count, 0);
 
   return (
