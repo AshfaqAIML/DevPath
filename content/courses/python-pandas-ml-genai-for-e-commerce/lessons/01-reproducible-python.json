@@ -1,0 +1,51 @@
+{
+  "title": "Reproducible Python: Envs That Hold",
+  "slug": "01-reproducible-python",
+  "objective": "After this lesson you will be able to scaffold reproducible data projects (venv, pinned requirements, env config, logging, module layout) and state why notebook-only work doesn't operate.",
+  "why": "'Works on my machine' kills data projects at handoff: unpinned pandas shifts APIs quarterly, secrets in cells leak, unlogged runs can't be audited. Reproducibility (isolated envs, pinned deps, config from environment, logged runs, modular code) makes analysis rerunnable by anyone, anywhere — the precondition for every later lesson's numbers to mean anything.",
+  "minutes": 13,
+  "xp": 50,
+  "blocks": [
+    { "t": "h", "text": "Isolate, pin, configure, log" },
+    { "t": "p", "text": "**Isolate** (venv per project — system Python is shared mutable state). **Pin** (requirements with == versions + lockfile; unpinned data-stack deps drift quarterly). **Configure** from environment (.env for paths/keys, never hardcoded secrets or absolute paths). **Log** every run (parameters, input hashes, versions, outputs) — reruns reproduce, audits trace." },
+    { "t": "code", "lang": "bash", "code": "python -m venv .venv && source .venv/bin/activate  # Windows: .venv\\Scripts\\activate\npip install -r requirements.txt   # pandas==2.2.3 scikit-learn==1.6.1 numpy==2.2.4\n# .env: DATA_PATH=./data/orders.csv  (code reads os.environ, never literals)" },
+    { "t": "h", "text": "Modules, not just notebooks" },
+    { "t": "p", "text": "Notebooks explore; **modules operate**: cleaning rules as tested functions, pipelines as scripts with entry points, analysis as importable code. The migration path is gradual (notebook → functions → module → tests → scheduled script), and production starts where cells end. Every capstone deliverable in this course is runnable scripts, never .ipynb-only." },
+    { "t": "code", "lang": "python", "code": "import logging, os\nlogging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(message)s\")\nlog = logging.getLogger(\"storepack\")\nDATA_PATH = os.environ.get(\"DATA_PATH\", \"./data/orders.csv\")\nlog.info(\"reading %s\", DATA_PATH)\nprint(\"configured:\", bool(DATA_PATH))" },
+    { "t": "practice", "sim": "js-playground", "title": "Audit the pins", "query": "function auditRequirements(lines) {\n  const issues = [];\n  for (const line of lines) {\n    const t = line.trim();\n    if (!t || t.startsWith('#')) continue;\n    if (!t.includes('==')) issues.push('unpinned: ' + t);\n  }\n  return { total: lines.filter((l) => l.trim() && !l.trim().startsWith('#')).length, issues };\n}\nconst reqs = ['pandas==2.2.3', 'scikit-learn>=1.0', 'numpy', '# data stack', 'python-dotenv==1.0.1'];\nconst r = auditRequirements(reqs);\nconsole.log('deps=' + r.total);\nconsole.log('unpinned=' + r.issues.length);\nfor (const i of r.issues) console.log(i);", "note": "Run it: expect 4 deps, 2 unpinned (>= and bare are both drift vectors). Pin everything data touches — quarterly API shifts break unpinned installs silently." },
+    { "t": "keytakeaways", "items": ["venv per project; pinned requirements + lockfiles; env config; logged runs with versions", "Modules operate, notebooks explore: functions → tests → scripts → schedules", "Unpinned deps drift quarterly; secrets never in cells/code"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice auditor and list unpinned entries. (b) Write the .env + loader pair for a data path and API key (no literals in code). (c) State the notebook-to-production migration order for a cleaning analysis.",
+    "hints": [
+      "Unpinned: scikit-learn>=1.0 (range drifts), numpy (bare drifts); pinned: pandas, dotenv.",
+      ".env holds DATA_PATH + keys; code reads os.environ with sane defaults; secrets never committed (.gitignore .env).",
+      "Functions → module → tests → script entry → scheduled run with logging (each step verifiable)."
+    ],
+    "solution": "// (a) 2 unpinned (range + bare); 4 total deps.\n// (b) .env values + os.environ reads (no literals, .env ignored).\n// (c) functions → module → tests → script → schedule (verifiable steps).",
+    "why": "Pin auditing (drift vectors named), secret hygiene (env + gitignore), and migration order (verifiable steps) are the three reproducibility judgments.",
+    "code": "# Reproducibility checklist: venv, pins, env, logs, modules.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "CI installs latest pandas weekly. Risk + fix?",
+      "options": ["None — freshest best", "Quarterly drift breakage: pin versions + lockfiles, verify in CI", "Faster installs", "Smaller envs"],
+      "answer": 1,
+      "explain": "Data-stack APIs shift regularly: unpinned installs break on schedules you don't control. Pin + lock + verify."
+    },
+    {
+      "q": "API key in a notebook cell, committed. Issues (plural)?",
+      "options": ["None if private repo", "Secret in history (rotation needed) + unreviewable config + unreproducible env — env vars + gitignore + rotation", "Just re-run", "Rename the key"],
+      "answer": 1,
+      "explain": "Committed secrets require rotation (history never forgets), plus config and reproducibility discipline going forward."
+    },
+    {
+      "q": "Notebook-only handoff to production. Gaps?",
+      "options": ["None", "Modules, tests, logging, pinned env, scheduling — cells explore, systems operate", "More plots", "Bigger notebook"],
+      "answer": 1,
+      "explain": "Production needs importable tested logged scheduled code. Notebooks are the draft, never the deployment."
+    }
+  ],
+  "summary": "Isolated envs, pinned deps, env config, logged runs, modular code. Reproducibility precedes all analysis.",
+  "next": "Scaffolded reproducibly — now first contact with data: loading, inspecting, and slicing CSVs. Next: DataFrames first."
+}

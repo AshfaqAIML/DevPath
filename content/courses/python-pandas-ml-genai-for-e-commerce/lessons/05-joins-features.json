@@ -1,0 +1,53 @@
+{
+  "title": "Joins & Features Without Leakage",
+  "slug": "05-joins-features",
+  "objective": "After this lesson you will be able to merge orders/customers/products with cardinality validation, engineer RFM-style features with as-of discipline, and prove no leakage with temporal cutoffs.",
+  "why": "Enriched data powers models — and joins are where row counts silently multiply (fanout) and futures leak into training (as-of violations). Merges with validate= guards plus row-count reconciliation plus as-of feature cutoffs make enrichment safe: every joined row traceable, every feature timestamped before its decision point.",
+  "minutes": 16,
+  "xp": 65,
+  "blocks": [
+    { "t": "h", "text": "Merges with cardinality guards" },
+    { "t": "p", "text": "`validate=` declares expected cardinality (`many_to_one` for orders→customers, `one_to_one` for lookups): violations raise instead of multiplying silently. Pre/post row counts reconcile (left rows preserved exactly for left joins); indicator=True audits match rates (how many found partners?). Unvalidated merges are fanout incidents awaiting discovery." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\norders = pd.read_csv(StringIO(\"oid,cid,amt\\n1,C1,100\\n2,C2,50\\n3,C1,75\\n\"))\ncust = pd.read_csv(StringIO(\"cid,tier\\nC1,gold\\nC2,silver\\n\"))\nm = orders.merge(cust, on=\"cid\", how=\"left\", validate=\"many_to_one\", indicator=True)\nprint(\"rows:\", len(m), \"preserved:\", len(m) == len(orders))\nprint(m[\"_merge\"].value_counts().to_dict())" },
+    { "t": "h", "text": "RFM features with as-of discipline" },
+    { "t": "p", "text": "**Recency/Frequency/Monetary** features summarize customers: days since last order, order count, total spend — each computed **as of a cutoff** (features see only pre-cutoff rows). Post-cutoff data in features is leakage: training scores inflate, live scores collapse. As-of joins (filter ≤ cutoff before aggregating) plus a written leakage statement per feature set." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\ncsv = \"cid,day,amt\\nC1,2026-09-01,100\\nC1,2026-10-05,75\\nC2,2026-09-15,50\\n\"\ndf = pd.read_csv(StringIO(csv), parse_dates=[\"day\"])\ncutoff = pd.Timestamp(\"2026-10-01\")\npre = df[df[\"day\"] < cutoff]  # as-of: C1's Oct row EXCLUDED from features\nrfm = pre.groupby(\"cid\").agg(n=(\"amt\", \"size\"), total=(\"amt\", \"sum\"))\nprint(rfm.to_dict(\"index\"))\nprint(\"C1 uses pre-cutoff rows only:\", rfm.loc[\"C1\", \"n\"] == 1)" },
+    { "t": "h", "text": "Leakage statements (write them)" },
+    { "t": "p", "text": "Every feature set ships a **leakage statement**: cutoff rule, excluded columns (ids, post-decision timestamps, targets-in-disguise like 'refunded_at'), and the verification performed (temporal split re-run). Unwritten leakage discipline doesn't exist — reviewers can't verify what authors never stated." },
+    { "t": "practice", "sim": "js-playground", "title": "Guard the merge", "query": "function mergeLeft(orders, custMap) {\n  return orders.map((o) => ({ ...o, tier: custMap[o.cid] ?? null }));\n}\nconst orders = [{ oid: 1, cid: 'C1' }, { oid: 2, cid: 'C9' }, { oid: 3, cid: 'C1' }];\nconst custMap = { C1: 'gold', C2: 'silver' };\nconst merged = mergeLeft(orders, custMap);\nconsole.log('rows preserved: ' + (merged.length === orders.length));\nconsole.log('unmatched: ' + merged.filter((r) => r.tier === null).length);\nconsole.log('tiers=' + merged.map((r) => r.tier || 'NULL').join(','));", "note": "Run it: 3 rows preserved, 1 unmatched (C9 → NULL, the indicator's job), tiers gold,NULL,gold. Left-join semantics with explicit unmatched visibility — matches audited, never assumed." },
+    { "t": "keytakeaways", "items": ["validate= declares cardinality (violations raise); row counts reconcile; indicator audits match rates", "RFM as-of cutoffs exclude post-decision rows; leakage statements per feature set", "Unmatched keys surface as NULL + counts — audited, never silently dropped"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice merge and confirm preservation + unmatched count. (b) In Python, merge with validate='many_to_one' on the same data and report _merge counts. (c) Write the leakage statement for RFM features with cutoff 2026-10-01 (rule, excluded columns, verification).",
+    "hints": [
+      "Twin outputs: 3 preserved, 1 unmatched (C9), gold,NULL,gold.",
+      "Python: left merge + validate + indicator counts (both/must all match or left_only explained).",
+      "Statement: features use rows < cutoff only; exclude ids/post-decision timestamps/targets-in-disguise; verified by temporal re-run."
+    ],
+    "solution": "// (a) preserved 3, unmatched 1 (C9 NULL), tiers as stated.\n// (b) validate passes + both/left_only counts reported.\n// (c) as-of rule + exclusions + temporal verification (written statement).",
+    "why": "Twin parity (JS mirrors merge semantics), guard mechanics (validate + indicator), and leakage writing (as-of rules stated) are the three enrichment disciplines.",
+    "code": "# Merge pattern: validate= + indicator + count reconciliation, always.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Row count triples after a merge. First check?",
+      "options": ["Bigger machine", "validate='many_to_one' (or correct cardinality) + pre/post counts: fanout from a many-many surprise", "More memory", "Fewer columns"],
+      "answer": 1,
+      "explain": "Count explosions mean cardinality violated: validate= raises instead of multiplying; counts isolate the offending join."
+    },
+    {
+      "q": "Unmatched left rows vanish silently. Fix?",
+      "options": ["Inner join harder", "Left join + indicator + unmatched counts audited (NULL handling decided explicitly per column)", "Drop them faster", "Ignore"],
+      "answer": 1,
+      "explain": "Vanishing rows hide coverage gaps: indicator surfaces match rates; NULL policies decide per column (drop/fill/flag)."
+    },
+    {
+      "q": "Feature uses full-history recency including outcome window. Issue + fix?",
+      "options": ["More features", "Leakage: as-of cutoff excludes post-decision rows + written leakage statement; verify by temporal re-run", "Bigger window", "Smoother recency"],
+      "answer": 1,
+      "explain": "Post-decision data in features inflates training scores that collapse live. As-of discipline with stated cutoffs, verified temporally."
+    }
+  ],
+  "summary": "Guarded merges (validate + indicator + counts), as-of RFM features, written leakage statements. Enrichment safe by construction.",
+  "next": "Features honestly built — now the first model: splits, baselines, and metrics that don't lie. Next: churn, carefully."
+}

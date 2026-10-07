@@ -1,0 +1,51 @@
+{
+  "title": "Basket Analysis Without Superstition",
+  "slug": "07-basket-analysis",
+  "objective": "After this lesson you will be able to mine item co-occurrence pairs with support/confidence gates, validate rules on holdout baskets, and reject high-confidence rare rules as noise.",
+  "why": "'Customers who buy X also buy Y' drives bundles, placement, and recommendations — and also drives nonsense when rare coincidences get promoted. Support × confidence gating plus holdout validation separates patterns from coincidences: rules earn deployment by surviving unseen baskets, not by impressing in-sample.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Support × confidence: both gates, always" },
+    { "t": "p", "text": "**Support** (fraction of baskets containing both items) measures evidence volume; **confidence** (P(Y|X)) measures rule strength. High confidence with tiny support is anecdote with math (2 co-buys from 2 chances). Gate both: minimum support (evidence exists) AND minimum confidence (strength matters). Either alone admits noise — together they admit patterns." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\nfrom itertools import combinations\ncsv = \"basket,item\\n1,shoes\\n1,socks\\n2,shoes\\n2,socks\\n3,shoes\\n3,hat\\n4,socks\\n4,hat\\n\"\ndf = pd.read_csv(StringIO(csv))\nbaskets = df.groupby(\"basket\")[\"item\"].apply(set)\nN = len(baskets)\npairs = {}\nfor b in baskets:\n    for a, c in combinations(sorted(b), 2):\n        pairs[(a, c)] = pairs.get((a, c), 0) + 1\nrules = []\nfor (a, c), n in pairs.items():\n    sup = n / N\n    conf = n / sum(1 for b in baskets if a in b)\n    if sup >= 0.25 and conf >= 0.5:\n        rules.append(((a, c), round(sup, 2), round(conf, 2)))\nprint(\"rules:\", rules)" },
+    { "t": "h", "text": "Holdout validation: patterns survive unseen baskets" },
+    { "t": "p", "text": "Split baskets (not rows) into mine/validate sets: rules mined on one half must hold (support × confidence rechecked) on the other. In-sample-only rules overfit coincidence — holdout is where superstition dies. Report both halves' numbers; large gaps mean the 'pattern' was sampling noise." },
+    { "t": "code", "lang": "python", "code": "import pandas as pd\nfrom io import StringIO\nfrom itertools import combinations\ncsv = \"basket,item\\n1,shoes\\n1,socks\\n2,shoes\\n2,socks\\n3,shoes\\n3,hat\\n4,socks\\n4,hat\\n\"\ndf = pd.read_csv(StringIO(csv))\nmine = df[df[\"basket\"].isin([1, 2])]\nhold = df[df[\"basket\"].isin([3, 4])]\n\ndef pair_support(frame):\n    b = frame.groupby(\"basket\")[\"item\"].apply(set)\n    d, n = {}, len(b)\n    for s in b:\n        for a, c in combinations(sorted(s), 2):\n            d[(a, c)] = d.get((a, c), 0) + 1\n    return {k: v / n for k, v in d.items()}\n\nprint(\"mine:\", pair_support(mine))\nprint(\"holdout:\", pair_support(hold))" },
+    { "t": "practice", "sim": "js-playground", "title": "Gate the rules", "query": "function rulesFor(baskets, minSup, minConf) {\n  const N = baskets.length;\n  const counts = {};\n  const single = {};\n  for (const b of baskets) {\n    const items = [...new Set(b)];\n    for (const it of items) single[it] = (single[it] || 0) + 1;\n    for (let i = 0; i < items.length; i++)\n      for (let j = i + 1; j < items.length; j++) {\n        const k = items[i] + '|' + items[j];\n        counts[k] = (counts[k] || 0) + 1;\n      }\n  }\n  const out = [];\n  for (const [k, n] of Object.entries(counts)) {\n    const sup = n / N;\n    const conf = n / single[k.split('|')[0]];\n    if (sup >= minSup && conf >= minConf) out.push(k + ' s=' + sup.toFixed(2) + ' c=' + conf.toFixed(2));\n  }\n  return out;\n}\nconst baskets = [['shoes', 'socks'], ['shoes', 'socks'], ['shoes', 'hat'], ['socks', 'hat']];\nconsole.log('gated=' + JSON.stringify(rulesFor(baskets, 0.25, 0.5)));\nconsole.log('strict=' + JSON.stringify(rulesFor(baskets, 0.5, 0.9)));", "note": "Run it: gated keeps shoes|socks (s=0.5, c≈0.67); strict (0.5/0.9) keeps nothing — gates decide what exists. Same data, different standards, different rule sets: thresholds are policy." },
+    { "t": "keytakeaways", "items": ["Support (evidence volume) × confidence (rule strength) gates together — either alone admits noise", "Holdout baskets validate: mine on half, recheck on half; gaps expose coincidence", "Thresholds are policy (business cost of false bundles), not statistics"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice gater on both thresholds and map surviving rules. (b) In Python (your env), run both lesson snippets and confirm mine/holdout supports. (c) State the business cost of a false bundle rule (wrong cross-sell) vs a missed rule, and how gates encode the trade.",
+    "hints": [
+      "Twin outputs: gated keeps shoes|socks; strict keeps nothing (0.5/0.9 kills all four-basket evidence).",
+      "Python: mine supports vs holdout supports per pair (small data, visible numbers).",
+      "False bundles waste placement/promotion spend and erode trust; missed rules cost opportunity silently — gates set by promotion economics, reviewed per campaign."
+    ],
+    "solution": "// (a) gated: shoes|socks only; strict: empty (thresholds decide existence).\n// (b) mine vs holdout supports reported per pair (coincidence check).\n// (c) false-positive cost (wasted spend + trust) vs false-negative (silent opportunity) — gates priced per campaign.",
+    "why": "Threshold-as-policy (gates decide rule sets), holdout discipline (coincidence dies unseen baskets), and cost framing (false bundles vs missed rules) are the three association judgments.",
+    "code": "# Association pattern: support × confidence gates + holdout recheck, always.",
+    "lang": "python"
+  },
+  "quiz": [
+    {
+      "q": "Rule with 100% confidence from 2 baskets. Deploy?",
+      "options": ["Yes — perfect", "No: support 2/N fails evidence gates — high-confidence rare rules are noise until holdout-validated at scale", "Lower the bar", "More rules"],
+      "answer": 1,
+      "explain": "Confidence without support is anecdote with math. Gates require evidence volume AND strength, validated on unseen baskets."
+    },
+    {
+      "q": "Mine/holdout supports diverge sharply. Reading?",
+      "options": ["Average them", "Coincidence exposed: in-sample pattern fails unseen data — reject or re-mine with stricter gates", "Trust mine", "Trust holdout blindly"],
+      "answer": 1,
+      "explain": "Divergence falsifies the pattern: it was sampling noise, not signal. Holdout exists precisely to kill such rules."
+    },
+    {
+      "q": "Who sets support/confidence thresholds?",
+      "options": ["Statistics textbooks", "Business economics per campaign (promotion cost vs opportunity) — thresholds are policy, reviewed per use", "Defaults forever", "The algorithm"],
+      "answer": 1,
+      "explain": "Gates price false positives vs false negatives in campaign terms. Fixed universal thresholds misprice most applications."
+    }
+  ],
+  "summary": "Support × confidence gates, holdout validation, thresholds as campaign policy. Patterns earn deployment by surviving unseen baskets.",
+  "next": "Patterns validated — now narrate them: guarded natural-language answers over computed results. Next and last: the GenAI layer."
+}

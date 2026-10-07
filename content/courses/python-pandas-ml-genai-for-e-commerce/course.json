@@ -1,0 +1,157 @@
+{
+  "courseSlug": "python-pandas-ml-genai-for-e-commerce",
+  "subtitle": "Analyze, predict, and generate: pandas for storefront data, scikit-learn basics for churn and basket analysis, then a GenAI layer — Python end to end for e-commerce",
+  "audience": "Developers who can write basic Python loops and functions and now do real data work: cleaning order CSVs, aggregating sales, training a first churn model, and wrapping results in guarded natural-language answers. Python 3.10+ with pandas 2.x and scikit-learn 1.x (verified locally during authoring); JavaScript logic-twins run in the playground where the platform needs runnable cells.",
+  "outcomes": [
+    "Set up reproducible Python projects (venvs, pinned requirements, env vars, logging, layout)",
+    "Load, inspect, and slice e-commerce CSVs with pandas (read_csv, head/info/describe, filtering, sorting)",
+    "Clean real mess: missing values, duplicates, types, dates, and currency strings — with quarantine discipline",
+    "Aggregate with groupby (sales by category/country, pivots, time resampling) and verify totals reconcile",
+    "Join orders/customers/products and engineer RFM-style features without leakage",
+    "Train and evaluate a first churn classifier (split, logistic regression, precision/recall) honestly",
+    "Mine basket co-occurrence pairs and evaluate them against holdout baskets",
+    "Wrap analysis in a guarded GenAI layer (templated answers, cited numbers, abstention paths)"
+  ],
+  "prereqSlugs": ["opendataloader-pdf"],
+  "technologies": ["Python 3.10+", "pandas 2.x", "scikit-learn 1.x", "NumPy", "venv + pip", "JSON contracts"],
+  "skills": ["pandas wrangling", "data cleaning", "aggregation", "feature engineering", "churn modeling", "basket analysis", "GenAI wrapping"],
+  "assessment": [
+    {
+      "q": "CSV loads with prices as '$129.00' strings and dates as mixed formats. Order of operations?",
+      "options": ["Model first, clean later", "Parse types on load (dtype/converters), standardize dates/currency explicitly, quarantine unparseable rows with reasons — types before analysis", "Drop the columns", "Average the strings"],
+      "answer": 1,
+      "explain": "Analysis on strings silently corrupts (sorting '$100' > '$20' lexicographically). Types first, with quarantine for the unparseable (Ch.2–3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "groupby totals don't match the raw row count. First check?",
+      "options": ["Bigger machine", "Join fanout or dropped NaN groups: verify merge cardinality (validate='many_to_one') and dropna behavior before trusting aggregates", "More group keys", "Round differently"],
+      "answer": 1,
+      "explain": "Totals must reconcile: fanout multiplies, NaN keys vanish silently. Merge validation + count reconciliation prove aggregates (Ch.4–5).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Churn model scores 0.97 accuracy with 4% churn rate. Verdict?",
+      "options": ["Excellent", "Suspicious: majority-class baseline is 0.96 — report precision/recall/F1 per class and beat a dummy classifier, not accuracy", "Ship it", "More features"],
+      "answer": 1,
+      "explain": "Imbalanced accuracy lies by default. Precision/recall per class plus dummy baselines separate signal from majority-vote theater (Ch.6).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Features include 'days_since_last_order' computed on full history including the prediction window. Problem?",
+      "options": ["None — more data", "Leakage: future information in training features inflates scores that collapse live — cut features at the decision point (as-of joins)", "Need more features", "Normalize harder"],
+      "answer": 1,
+      "explain": "Leakage is the silent killer of ML evals: features must reflect only pre-decision knowledge. As-of discipline, always (Ch.5–6).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Basket rule 'buys X → buys Y' has high confidence but support 2. Action?",
+      "options": ["Deploy it", "Demand support thresholds: high-confidence rare rules are noise — support × confidence gates, validated on holdout baskets", "Lower confidence bar", "More rules"],
+      "answer": 1,
+      "explain": "Confidence without support is anecdote with math. Holdout validation separates patterns from coincidences (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "GenAI summary states a revenue figure not in the analysis output. Fix layer?",
+      "options": ["Better prompt", "Grounded generation contract: numbers only from computed tables with citations; anything else abstains — same grounding discipline as RAG", "Bigger model", "More context"],
+      "answer": 1,
+      "explain": "Generated numbers must trace to computed cells. Scope-to-tables contracts plus abstention paths (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "requirements.txt unpinned, CI installs latest. Risk?",
+      "options": ["None — freshest is best", "Drift breakage: unpinned pandas/sklearn shift APIs quarterly — pin versions, lock files, verify in CI", "Faster installs", "Smaller envs"],
+      "answer": 1,
+      "explain": "Reproducibility demands pins: unpinned data-stack deps break quarterly. Lock + verify (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Duplicate order rows inflate revenue 2x. Prevention order?",
+      "options": ["Fix the report", "Dedupe on declared keys (order_id) with provenance before aggregating — duplicates corrupt every downstream number", "Average it out", "Ignore small dupes"],
+      "answer": 1,
+      "explain": "Key-based dedupe with provenance precedes all aggregation. Doubled inputs double every output silently (Ch.3).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Timezone-naive vs aware timestamps mixed in orders. Rule?",
+      "options": ["Ignore zones", "Normalize to UTC ISO on ingest, reject ambiguous, quarantine unparseable — time math on mixed zones silently shifts", "Local time everywhere", "Strings are fine"],
+      "answer": 1,
+      "explain": "Mixed-zone arithmetic shifts silently across DST/boundaries. Canonical UTC on ingest with quarantine for ambiguity (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Notebook-only analysis handed to production. Gaps?",
+      "options": ["None — notebooks deploy", "Scripts + tests + logging + pinned env + scheduled runs: production needs modules, contracts, and observability, not cells", "More plots", "Bigger notebook"],
+      "answer": 1,
+      "explain": "Notebook-to-production gap: modular code, tested functions, logged runs, pinned envs, scheduled execution. Cells don't operate (Ch.1 + capstone).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Store Analyst Pack",
+    "summary": "Deliver a reproducible Python pack over a real order CSV (1000+ rows, yours or provided): cleaned dataset with quarantine report, sales aggregation notebook-turned-script with reconciled totals, a churn classifier with honest metrics vs dummy baselines, basket rules validated on holdout, and a GenAI summary layer with cited numbers — all pinned, tested, and runnable end to end.",
+    "requirements": [
+      "Reproducible env: venv, pinned requirements, .env config, logging, module layout (no notebook-only)",
+      "Cleaned CSV + quarantine report (per-rule reject counts with reasons)",
+      "Aggregation script: sales by category/country/month with totals reconciled to raw counts",
+      "Churn model: as-of features, train/test split, precision/recall/F1 vs dummy baselines, leakage statement",
+      "Basket rules with support/confidence gates validated on holdout baskets",
+      "GenAI layer: templated answers citing computed cells, abstention paths, evaluation on 10 questions"
+    ],
+    "technical": [
+      "Python 3.10+, pandas 2.x, scikit-learn 1.x pinned; all snippets executed during authoring",
+      "Playground JS twins mirror core logic (groupby/aggregation shapes) for in-platform runs",
+      "Tests for cleaning rules and aggregation reconciliation; logging on every run",
+      "Numbers reproducible: seeds fixed, datasets versioned, parameters committed"
+    ],
+    "architecture": "Five sections: (1) Data dossier — sources, shapes, quality findings; (2) Cleaning — rules, quarantine taxonomy, reject rates; (3) Analysis — aggregations with reconciliations; (4) Modeling — features (as-of!), metrics vs dummies, leakage statement; (5) GenAI layer — contracts, citations, eval scores.",
+    "steps": [
+      "Scaffold env + layout; load and profile the CSV (shapes, dtypes, nulls, dupes)",
+      "Clean with rules + quarantine; reconcile counts at every stage",
+      "Aggregate (category/country/month) with total reconciliation; engineer as-of features",
+      "Train churn model vs dummy baselines; write the leakage statement explicitly",
+      "Mine basket rules with gates; validate on holdout; wrap in GenAI layer with citations",
+      "Assemble the pack with README (run order), tests green, numbers reproducible"
+    ],
+    "evaluation": [
+      "Reconciliation holds at every stage (raw → clean → aggregated → modeled)",
+      "Model beats dummy baselines on precision/recall (not just accuracy); leakage statement present",
+      "Basket rules gated and holdout-validated; GenAI answers cite computed cells or abstain",
+      "Env reproducible from scratch (pinned); tests pass; logs complete"
+    ],
+    "stretch": [
+      "Add a price-elasticity slice (cohort analysis with confidence intervals)",
+      "Schedule weekly runs with drift alerts on schema/shape changes",
+      "Serve one endpoint (FastAPI) exposing the churn score with contract tests"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "Groupby totals don't reconcile with raw counts. Debug order?",
+      "a": "Check join fanout first (merge validate='many_to_one' + pre/post counts), then NaN group keys (dropped silently — decide fill vs drop explicitly), then duplicate keys, then dtype surprises (string prices sorting lexicographically). Reconciliation is staged: raw → clean → joined → aggregated counts must chain consistently, and the break names the culprit."
+    },
+    {
+      "q": "0.97 accuracy on 4% churn — go/no-go?",
+      "a": "No-go on accuracy alone: dummy majority baseline is 0.96. Demand precision/recall/F1 per class plus lift over dummy, then check leakage (as-of features?), then calibration (do 0.8s convert ~80%?). Accuracy on imbalanced data is a vanity metric; decisions need per-class truth plus leakage statements."
+    },
+    {
+      "q": "Feature uses full-history recency including the outcome window. Issue?",
+      "a": "Leakage: training sees post-decision information unavailable at prediction time — scores inflate, live performance collapses. Fix with as-of joins (features computed strictly before each decision point) and state the cutoff rule explicitly. Every feature needs a timestamp discipline, reviewed like code."
+    },
+    {
+      "q": "Mixed timezones and '$1,234.56' vs '1.234,56' in one CSV. Approach?",
+      "a": "Canonicalize on ingest: datetimes to UTC ISO (reject ambiguous, quarantine unparseable), money to Decimal/plain floats with explicit locale policy per column (never blind comma-strip). Parsing rules stated, failures quarantined with reasons, samples verified. Locale ambiguity resolved by documented corpus convention, never guessed per row."
+    },
+    {
+      "q": "Notebook analysis to production — what's missing?",
+      "a": "Modularity (functions/modules, not cells), contracts (typed I/O), tests (cleaning rules, reconciliations), logging (per-run records), pinned envs, scheduling (cron/jobs with drift alerts), and review (versioned code). Notebooks explore; production operates — the gap is engineering discipline around identical logic."
+    },
+    {
+      "q": "GenAI summary of analysis states uncomputed figures. Fix layer?",
+      "a": "Grounding contract: numbers only from computed tables with cell citations; anything else abstains with a stated gap. Same discipline as RAG generation (scope-to-context, per-claim citations, staleness awareness). Fix the contract and add gold questions asserting citation presence — prompt tuning without contracts repeats the failure."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}
