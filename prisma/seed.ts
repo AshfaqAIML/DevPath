@@ -366,6 +366,24 @@ async function main() {
       order: 5,
       items: simulatorItems,
     },
+    {
+      // Virtual collection: fully written courses (real lessons start to
+      // finish). Owns no ResourceItems — hub count and explorer listing are
+      // derived from published lesson content (see getCompletedCourseSlugs).
+      slug: "completed",
+      title: "Completed",
+      tagline: "Fully written courses, start to finish",
+      description:
+        "Courses with complete original content: full lessons, exercises with hints and solutions, quizzes, final assessments and capstone projects. Open any of them and learn the subject end to end — no placeholders.",
+      countLabel: "complete courses",
+      icon: "/icons/completed/icon.jpg",
+      route: "/completed",
+      badge: "New",
+      badgeVariant: "default",
+      accent: "emerald",
+      order: 6,
+      items: [],
+    },
   ];
 
   for (const c of categories) {

@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DevPath — Masterclass, Roadmaps, Courses, Resources & Simulators",
   description:
-    "A learning platform for developers: deep masterclasses, career roadmaps, focused mini courses, practical guides and interactive simulators — five content types, one cohesive system.",
+    "A learning platform for developers: deep masterclasses, career roadmaps, focused mini courses, practical guides and interactive simulators — five content types plus finished courses, one cohesive system.",
   applicationName: "DevPath",
   authors: [{ name: "DevPath" }],
   keywords: [

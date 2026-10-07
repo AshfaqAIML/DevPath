@@ -58,6 +58,23 @@ export type ResourceItemView = {
   lessonCount?: number;
 };
 
+/** Slug of the virtual "completed courses" category (see below). */
+export const COMPLETED_CATEGORY_SLUG = "completed";
+
+/**
+ * Slugs of courses with published lesson content (status published + ≥1
+ * published lesson). Backs the virtual "completed" category in both the
+ * hub count and the explorer listing.
+ */
+export async function getCompletedCourseSlugs(): Promise<string[]> {
+  const rows = await db.lesson.groupBy({
+    by: ["courseSlug"],
+    where: { published: true, course: { contentStatus: "published" } },
+    _count: { _all: true },
+  });
+  return rows.map((r) => r.courseSlug);
+}
+
 const toCategoryView = (
   c: Category,
   count: number,
@@ -97,10 +114,15 @@ export async function getCategoriesWithCounts(): Promise<CategoryView[]> {
   const publishedMap = new Map(
     publishedCounts.map((p) => [p.categoryId, p._count._all])
   );
+  // The "completed" category is virtual: its count is the number of courses
+  // with published lesson content, not ResourceItem rows (it owns none).
+  const completedCount = (await getCompletedCourseSlugs()).length;
   return categories.map((c) =>
     toCategoryView(
       c,
-      publishedMap.get(c.id) ?? 0,
+      c.slug === COMPLETED_CATEGORY_SLUG
+        ? completedCount
+        : (publishedMap.get(c.id) ?? 0),
       (c as Category & { _count?: { items: number } })._count?.items ?? 0
     )
   );
@@ -154,7 +176,11 @@ export async function getItems(opts: {
   limit?: number;
 }): Promise<ResourceItemView[]> {
   const where: Record<string, unknown> = {};
-  if (opts.category) {
+  if (opts.category === COMPLETED_CATEGORY_SLUG) {
+    // Virtual category: courses with published lesson content, wherever
+    // they live. Never duplicates rows — it filters, not copies.
+    where.slug = { in: await getCompletedCourseSlugs() };
+  } else if (opts.category) {
     where.category = { slug: opts.category };
   }
   if (!opts.includeDrafts) {

@@ -11,7 +11,7 @@ type SP = Promise<{ [key: string]: string | string[] | undefined }>;
 
 const SITE_TITLE = "DevPath — Masterclass, Roadmaps, Courses, Resources & Simulators";
 const SITE_DESCRIPTION =
-  "A learning platform for developers: deep masterclasses, career roadmaps, focused mini courses, practical guides and interactive simulators — five content types, one cohesive system.";
+  "A learning platform for developers: deep masterclasses, career roadmaps, focused mini courses, practical guides and interactive simulators — five content types plus finished courses, one cohesive system.";
 
 // SEO: metadata adapts to the selected category (its config lives in the DB)
 export async function generateMetadata({
@@ -195,7 +195,7 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
     explorerItems = await getItems({ category: "courses" });
   }
 
-  // JSON-LD: the five-category information architecture as structured data
+  // JSON-LD: the information architecture as structured data
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
