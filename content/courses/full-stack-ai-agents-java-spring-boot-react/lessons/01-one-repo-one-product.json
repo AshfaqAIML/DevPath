@@ -1,0 +1,121 @@
+{
+  "title": "One Repo, One Product",
+  "slug": "01-one-repo-one-product",
+  "objective": "After this lesson you will be able to lay out a full-stack agent repo (api/web/shared), draw versioned contract boundaries between halves, and decide what lives where with the second-consumer test.",
+  "why": "Full-stack agents die in the seams: frontend/backend drift, unversioned event shapes, auth as an afterthought, threads owned by nobody. One repo with contracted boundaries makes the seams explicit and evolvable — halves deploy independently behind versions instead of coordinating every change in meetings.",
+  "minutes": 14,
+  "xp": 55,
+  "blocks": [
+    {
+      "t": "h",
+      "text": "Layout: api, web, shared contracts"
+    },
+    {
+      "t": "p",
+      "text": "**api/** (Spring Boot: controllers, ChatClient beans, tools, persistence), **web/** (React: chat UI, streaming client, thread views), **shared/** (OpenAPI spec, SSE event shapes, DTO JSON schemas — versioned). Shared owns every cross-half assumption: event names, entity shapes, error envelopes. Halves import shared; never each other's internals."
+    },
+    {
+      "t": "code",
+      "lang": "js",
+      "code": "// Contract registry: halves evolve behind versions (plain JS)\nconst contracts = {\n  events: { \"v1\": [\"token\", \"done\", \"error\"], \"v2\": [\"token\", \"citations\", \"done\", \"error\"] },\n  compatible: (clientV, serverV) => clientV === serverV || clientV === \"v1\",\n};\n// v1 clients tolerate v2 servers (ignore unknown frames); v2 features gate on v2.\n// Additive evolution: new frames allowed, removals versioned with deprecation.",
+      "caption": "Versioned event shapes: additive freely, breaking with deprecation"
+    },
+    {
+      "t": "h",
+      "text": "Second-consumer test for placement"
+    },
+    {
+      "t": "p",
+      "text": "Placement rule: would a *second, different consumer* use this? SSE parsing, auth headers, retry budgets → shared libraries. Store-specific prompts, brand copy → respective halves. Shared code without two consumers is premature abstraction — duplicate twice, extract on the third use with evidence."
+    },
+    {
+      "t": "table",
+      "headers": [
+        "Directory",
+        "Owns",
+        "Consumers"
+      ],
+      "rows": [
+        [
+          "api/",
+          "Controllers, AI services, tools",
+          "Web UI, future clients"
+        ],
+        [
+          "web/",
+          "Chat UI, streaming client",
+          "End users"
+        ],
+        [
+          "shared/",
+          "Contracts, event shapes, DTOs",
+          "Both halves (versioned)"
+        ]
+      ]
+    },
+    {
+      "t": "practice",
+      "sim": "js-playground",
+      "title": "Version the boundary",
+      "query": "function compatible(clientV, serverV) {\n  if (clientV === serverV) return true;\n  if (clientV === 'v1') return true;\n  return false;\n}\nconst pairs = [['v1', 'v1'], ['v1', 'v2'], ['v2', 'v1'], ['v2', 'v2']];\nfor (const [c, s] of pairs) console.log(c + '+' + s + '=' + compatible(c, s));",
+      "note": "Run it: expect true,true,false,true. Old clients tolerate new servers (ignore unknown frames); new clients refuse old servers (missing frames they need). Compatibility is directional — test both directions."
+    },
+    {
+      "t": "keytakeaways",
+      "items": [
+        "api/web/shared layout with versioned contracts (OpenAPI + event shapes) as the only cross-half coupling",
+        "Second-consumer test places shared code; duplicate twice before extracting",
+        "Additive evolution freely; breaking changes versioned with deprecation windows"
+      ]
+    }
+  ],
+  "exercise": {
+    "prompt": "(a) Run the practice compatibility matrix and explain the single false. (b) Place five items (SSE parser, brand copy, auth headers, triage prompt, retry budgets) via the second-consumer test. (c) State the deprecation policy for removing an event frame (notice, window, proof).",
+    "hints": [
+      "False case: v2 client + v1 server (needs frames the server never sends). Directional compatibility proven.",
+      "Shared: SSE parser, auth headers, retry budgets (multi-consumer). Halves: brand copy (web), triage prompt (api domain).",
+      "Deprecation: announce + dual-serve window + zero-usage proof from logs before removal."
+    ],
+    "solution": "// (a) v2+v1 false (client needs unserved frames); rest true (tolerance direction).\n// (b) shared: parser/headers/budgets; halves: copy/prompts (second-consumer rule).\n// (c) announce + dual-serve + zero-use proof → remove (deprecation with evidence).",
+    "why": "Directional compatibility (tolerance one way only), placement by second-consumer evidence, and deprecation with usage proof are the three boundary judgments.",
+    "code": "// Boundary pattern: versioned contracts + tolerance direction + deprecation proof.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Frontend imports backend internals directly. Problem + fix?",
+      "options": [
+        "Faster",
+        "Unversioned coupling: every backend change risks UI — route through shared versioned contracts",
+        "Fine at small scale forever",
+        "More imports"
+      ],
+      "answer": 1,
+      "explain": "Cross-half imports bypass versioning: changes propagate untested. Shared contracts version the seam."
+    },
+    {
+      "q": "v2 client against v1 server. Expected?",
+      "options": [
+        "Works (tolerance both ways)",
+        "Refuses: new clients need frames old servers never send — compatibility is directional",
+        "Auto-upgrades server",
+        "Silent truncation"
+      ],
+      "answer": 1,
+      "explain": "Old-tolerates-new (ignore unknowns); new-requires-new. Directionality tested both ways, never assumed symmetric."
+    },
+    {
+      "q": "Removing an SSE frame next week. Process?",
+      "options": [
+        "Delete Friday",
+        "Announce + dual-serve window + zero-usage log proof → remove (deprecation with evidence)",
+        "Rename instead",
+        "Never remove"
+      ],
+      "answer": 1,
+      "explain": "Removals need notice, overlap, and proof of disuse. Unused-frame claims require log evidence, not belief."
+    }
+  ],
+  "summary": "api/web/shared with versioned contracts; second-consumer placement; additive freely, breaking with deprecation proof. Seams explicit and evolvable.",
+  "next": "Boundaries drawn — now the backend surface: controllers, SSE streaming, and validated tool endpoints. Next: Boot API design."
+}

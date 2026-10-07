@@ -1,0 +1,53 @@
+{
+  "title": "React Streaming UI That Delights",
+  "slug": "04-react-streaming-ui",
+  "objective": "After this lesson you will be able to parse SSE frames into typed UI states, preserve partials across reconnects with Last-Event-ID, render citations from parsed entities, and manage optimistic states with server reconciliation.",
+  "why": "Streaming UX decides whether latency feels instant or broken: token-by-token rendering with citations beats spinners, resume preserves partials across drops, optimistic sends feel instant with server truth reconciling after. UI states are the product truth users see — API correctness without UI correctness ships broken experiences that pass all backend tests.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Frames to states, typed" },
+    { "t": "p", "text": "Parse SSE frames by contract version into **typed UI states**: streaming (partial tokens appending), citations (entities parsed on done-frames), error (envelope with retry action), complete (validated entity committed to state). Untyped string accumulation produces unrenderable blobs — frame contracts from Ch.1-2 make UI states exhaustive and testable." },
+    { "t": "code", "lang": "js", "code": "// SSE frame reducer: versioned frames to typed UI state (plain JS)\nfunction reduceFrame(state, frame) {\n  switch (frame.type) {\n    case \"token\": return { ...state, partial: state.partial + frame.text };\n    case \"citations\": return { ...state, citations: frame.items };\n    case \"done\": return { ...state, phase: \"complete\", entity: frame.entity };\n    case \"error\": return { ...state, phase: \"error\", error: frame };\n    default: return state; // unknown frames ignored (forward tolerance)\n  }\n}\n// Unknown-frame tolerance keeps v1 clients alive on v2 servers (Ch.1 contracts).", "caption": "Exhaustive frame handling with forward tolerance built in" },
+    { "t": "h", "text": "Resume preserves partials" },
+    { "t": "p", "text": "Drops reconnect with **Last-Event-ID**: server replays from the mark, client keeps rendered partials (no flash-of-empty), duplicates deduped by ID. Optimistic sends render instantly with pending flags; server truth reconciles (or rolls back with reason) on response. Restart-from-zero wastes money and patience; resume-everywhere is the discipline." },
+    { "t": "h", "text": "Citations render from entities" },
+    { "t": "p", "text": "Done-frames carry validated entities: citations render as linked spans (source → chunk/page), prices with as-of dates, abstentions as designed empty states (gap + path, never blank). Unparsed-string rendering forfeits all of it — entity validation (Ch.2/4 Spring) pays off in UI trust." },
+    { "t": "practice", "sim": "js-playground", "title": "Reduce the stream", "query": "function reduceFrame(state, frame) {\n  switch (frame.type) {\n    case 'token': return { ...state, partial: state.partial + frame.text };\n    case 'citations': return { ...state, citations: frame.items };\n    case 'done': return { ...state, phase: 'complete', entity: frame.entity };\n    case 'error': return { ...state, phase: 'error', error: frame };\n    default: return state;\n  }\n}\nlet s = { partial: '', phase: 'streaming' };\ns = reduceFrame(s, { type: 'token', text: 'Hello ' });\ns = reduceFrame(s, { type: 'token', text: 'world' });\ns = reduceFrame(s, { type: 'future-frame', text: '?' });\ns = reduceFrame(s, { type: 'done', entity: { answer: 1 } });\nconsole.log(JSON.stringify(s.partial));\nconsole.log(s.phase);\nconsole.log('tolerated-unknown: ' + (s.partial === 'Hello world'));",
+    "note": "Run it: partial accumulates across tokens, unknown future-frames ignored without harm, done commits the entity. Forward tolerance proven: v1 clients survive v2 servers frame by frame." },
+    { "t": "keytakeaways", "items": ["Typed frame states (streaming/citations/error/complete) with unknown-frame tolerance", "Last-Event-ID resume preserves partials; optimistic sends reconcile with server truth", "Citations render from validated entities; abstention states designed, never blank"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice reducer and confirm accumulation + tolerance + commit. (b) Add a citations frame mid-stream and verify attachment without disturbing partials. (c) Write the reconnect test (drop after 2 tokens → resume → identical final state) as assertions.",
+    "hints": [
+      "Baseline: 'Hello world' accumulated, future-frame tolerated, phase complete with entity.",
+      "Citations attach orthogonally (separate state key): partials accumulate, citations attach, neither disturbs the other.",
+      "Reconnect test: frames[0..1] → drop → resume-from-ID → remaining frames → final equals uninterrupted run (resume proof)."
+    ],
+    "solution": "// (a) accumulated/tolerated/committed (in order).\n// (b) citations attach on separate key (orthogonal states).\n// (c) resume-equals-uninterrupted assertion (drop recovery proven).",
+    "why": "Accumulation (streaming), tolerance (versioning), orthogonal attachment (citations), and resume equality (drops) are the four streaming-UI judgments — each asserted, with forward-compat proven.",
+    "code": "// Stream-test pattern: accumulate, tolerate unknowns, resume-equal.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Stream drops mid-reply on mobile. Correct UX?",
+      "options": ["Error screen + restart", "Last-Event-ID resume preserving partials: drops become pauses, duplicates deduped by ID", "Disable mobile", "Longer timeouts only"],
+      "answer": 1,
+      "explain": "Resume-everywhere discipline: reconnect from marks, preserve rendered partials, dedupe by ID. Restart-from-zero wastes and frustrates."
+    },
+    {
+      "q": "Unknown future frame arrives in an old client. Behavior?",
+      "options": ["Crash", "Ignore by default-case tolerance: v1 clients survive v2 servers frame by frame (forward compatibility by contract)", "Parse harder", "Upgrade forced"],
+      "answer": 1,
+      "explain": "Default-case tolerance is version strategy in code: unknown frames skipped, known processing continues. Contracts make it safe."
+    },
+    {
+      "q": "Optimistic send vs server truth conflict. Resolution?",
+      "options": ["Keep optimistic always", "Reconcile: server truth wins with reason shown; optimistic states marked pending until confirmed", "Server always wrong", "Disable optimism"],
+      "answer": 1,
+      "explain": "Optimism is provisional by design: pending flags mark unconfirmed states, server responses confirm or roll back with reasons shown."
+    }
+  ],
+  "summary": "Typed frame states, resume-preserving partials, entity-rendered citations, reconciled optimism. UI states are product truth — tested like backend contracts.",
+  "next": "Face delightful — now persistence: threads, messages, and checkpoints owned per user. Next: memory that survives restarts."
+}

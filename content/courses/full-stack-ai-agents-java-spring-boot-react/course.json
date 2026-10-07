@@ -1,0 +1,159 @@
+{
+  "courseSlug": "full-stack-ai-agents-java-spring-boot-react",
+  "subtitle": "One repo, one agent product: Spring Boot AI services streaming to React, tool endpoints, and auth — ship a full-stack agent from database to UI",
+  "audience": "Developers who finished Spring AI for E-commerce (ChatClient, advisors, tools, RAG) and now own the whole vertical: Java backend, streaming React frontend, per-user threads, and tenant-safe auth. Java/React run in your project (Spring AI 1.1+/2.x verified basis, React 19); protocol machinery (SSE parsing, auth headers, budgets) runs as executable JS in the playground.",
+  "outcomes": [
+    "Lay out one repo (api/web/shared contracts) with versioned boundaries between halves",
+    "Design Boot endpoints: sync JSON, SSE streaming, tool endpoints with validation and audit",
+    "Authenticate per-user threads (JWT sessions, tenant isolation, conversation ownership)",
+    "Stream to React: EventSource parsing, optimistic UI, citations rendering, reconnect discipline",
+    "Persist conversations (threads, messages, checkpoints) in Postgres with ownership checks",
+    "Evaluate full-stack with gold conversations spanning UI states and API contracts",
+    "Guard the vertical: PII redaction end to end, rate limits per tier, CORS/CSRF posture",
+    "Ship with deploy gates: contract tests (OpenAPI), canary, rollback, and the launch bundle"
+  ],
+  "prereqSlugs": ["spring-ai-for-e-commerce", "prompt-engineering-101"],
+  "technologies": ["Spring Boot 3.x + Spring AI 1.1+/2.x", "React 19 + SSE/EventSource", "PostgreSQL (threads/messages)", "JWT sessions", "Zod contract schemas"],
+  "skills": ["full-stack agent architecture", "streaming UIs", "auth + tenant isolation", "tool endpoints", "conversation persistence", "end-to-end eval"],
+  "assessment": [
+    {
+      "q": "One repo, two halves. Boundary rule?",
+      "options": ["Share everything freely", "Versioned contracts (OpenAPI + event shapes) between api/ and web/; halves evolve independently behind the contract", "Monorepo means no boundaries", "Duplicate types manually"],
+      "answer": 1,
+      "explain": "Contracts version UI/API evolution independently: breaking changes migrate with deprecation, not coordination meetings (Ch.1).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Streaming endpoint needs entity records. Pattern (per Spring course)?",
+      "options": ["Wait for native support", "Stream strings (SSE) → collect client-side → validate/convert explicitly; typed UI state from parsed entities", "Block on JSON", "Raw strings in UI state"],
+      "answer": 1,
+      "explain": "Collect-then-convert bridge, now split across the wire: SSE text frames, client assembly, schema validation before render (Ch.2/4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "User B reads user A's thread by guessing IDs. Missing?",
+      "options": ["Longer IDs", "Ownership checks: every thread/message query scoped by authenticated user/tenant — authorization per row, never by obscurity", "Faster queries", "More threads"],
+      "answer": 1,
+      "explain": "Tenant isolation is per-query WHERE clauses on owner, enforced server-side. Obscure IDs are not access control (Ch.3).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Stream drops mid-reply on flaky mobile. UX?",
+      "options": ["Error screen", "Reconnect with Last-Event-ID resume + partial-render preservation: dropped streams resume, never restart from zero", "Disable mobile", "Longer timeouts only"],
+      "answer": 1,
+      "explain": "SSE resume (Last-Event-ID) plus client-side partial state turns drops into pauses. Restart-from-zero wastes money and patience (Ch.4).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Tool endpoint mutates on GET. Violations?",
+      "options": ["None — convenient", "HTTP semantics + safety: mutations via POST with validation, idempotency keys, audit; GET stays side-effect free (and cacheable)", "Faster", "Simpler clients"],
+      "answer": 1,
+      "explain": "Method semantics protect against prefetch/crawl-triggered mutations. Side effects ride POST with keys and audit (Ch.5).",
+      "difficulty": "easy"
+    },
+    {
+      "q": "Conversations table without owner column ships. Consequence?",
+      "options": ["Faster writes", "Unfixable-later cross-tenant reads: ownership must exist from row one — retrofitting isolation rewrites history", "Cheaper storage", "Simpler queries"],
+      "answer": 1,
+      "explain": "Isolation is a day-one schema decision: owner columns + RLS/predicates from the first migration. Retrofits leak during the gap (Ch.6).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Gold covers API JSON but UI shows stale drafts. Missing layer?",
+      "options": ["More API tests", "UI-state gold: streamed frames → rendered states incl. reconnect/resume paths — full-stack eval spans the wire", "Bigger models", "Faster CI"],
+      "answer": 1,
+      "explain": "Full-stack truth lives in rendered states: frames assembled, citations shown, resume paths preserved. API-only gold misses the UI half (Ch.7).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "PII in browser localStorage for 'offline mode'. Verdict?",
+      "options": ["Fine — local", "XSS-readable PII at rest without HttpOnly protection: tokens in memory/HttpOnly, PII server-side, storage audited per key", "Encrypt with base64", "More storage"],
+      "answer": 1,
+      "explain": "Browser storage threat model: XSS reads localStorage. Secrets never persist client-side; PII minimized with per-key justification (Ch.7).",
+      "difficulty": "hard"
+    },
+    {
+      "q": "Contract test fails on new optional field. Response?",
+      "options": ["Revert immediately", "Additive changes pass with tolerance (unknown-field ignoring); breaking changes version + deprecate — contracts evolve, never surprise", "Delete the field", "Freeze the API"],
+      "answer": 1,
+      "explain": "Additive (optional fields) vs breaking (renames/removals): tolerance for the former, versioning for the latter. Contract tests enforce the distinction (Ch.8).",
+      "difficulty": "medium"
+    },
+    {
+      "q": "Launch bundle missing rollback procedure. Verdict?",
+      "options": ["Ship — rarely needed", "Blocked: unrehearsed rollback is hope; previous gold-passing version redeployable in minutes, proven by drill", "Verbal plan suffices", "Rollback never needed"],
+      "answer": 1,
+      "explain": "Reversibility gates launches: drilled rollback paths with version pins. Hope is not a deployment strategy (Ch.8).",
+      "difficulty": "easy"
+    }
+  ],
+  "passScore": 70,
+  "project": {
+    "title": "The Storefront Agent Product",
+    "summary": "Ship one repo containing a Spring Boot AI service layer and a React assistant UI: JWT-secured threads, SSE streaming with resume, tool endpoints with audit, Postgres-persisted conversations, gold-evaluated UI states, and a launch bundle. Database to UI, measured end to end.",
+    "requirements": [
+      "Repo layout api/web/shared with versioned OpenAPI + event-shape contracts",
+      "Auth: JWT sessions, per-user thread ownership enforced per query, tenant-scoped data",
+      "Streaming chat UI: SSE parsing, optimistic states, citation rendering, Last-Event-ID resume",
+      "Tool endpoints: validated POST mutations with idempotency keys + audit; read endpoints cacheable",
+      "Persistence: threads/messages/checkpoints in Postgres with owner columns from migration one",
+      "Evaluation: API contract tests + UI-state gold (frames → rendered, incl. reconnect) + no-regression gates",
+      "Guardrails: PII redaction end to end, rate limits per tier, CORS/CSRF posture documented"
+    ],
+    "technical": [
+      "Version basis pinned (Spring AI 1.1+/2.x, Boot 3.x, Java 17+, React 19); deviations documented",
+      "Protocol machinery (SSE parsing, auth headers, budgets) demonstrated runnable in JS",
+      "Secrets server-side only; browser storage audited per key; PII scrubbed in logs and fixtures",
+      "Numbers reproducible: gold sets, budgets, eval scores committed"
+    ],
+    "architecture": "Five sections: (1) Repo map — halves, contracts, versions; (2) Runs — traced conversations across UI states with per-layer attribution; (3) Evaluation — API + UI gold with diffs and gates; (4) Operations — auth, persistence, budgets, runbooks; (5) Launch evidence — scores, gates, residual risks with owners.",
+    "steps": [
+      "Lay out repo + contracts first (OpenAPI, event shapes); scaffold health endpoints both halves",
+      "Build auth + thread ownership with negative tests (cross-user reads refused)",
+      "Add streaming chat UI with resume; prove reconnect preserves partials",
+      "Add tool endpoints with validation/audit; persist conversations with owner columns",
+      "Write API + UI gold; baseline; iterate once on weakest segment; re-score",
+      "Assemble launch bundle (gates, runbooks, residual risks) and red-team it"
+    ],
+    "evaluation": [
+      "Cross-user thread reads refused (proven, not assumed); tenant isolation per query",
+      "Reconnect preserves partials with Last-Event-ID; citations render from parsed entities",
+      "Tool mutations validated + idempotent + audited; reads cacheable per method semantics",
+      "Gold covers API contracts AND UI states incl. reconnect; no-regression gates hold",
+      "PII absent from logs/fixtures/storage; rate limits tiered with honest statuses"
+    ],
+    "stretch": [
+      "Add a second model route (cost/quality) with per-tier selection and measured savings",
+      "Offline-first queue: outbox pattern for flaky networks with conflict rules",
+      "Voice input path with the same contracts (modality added, architecture unchanged)"
+    ]
+  },
+  "interviewQs": [
+    {
+      "q": "SSE vs WebSocket for agent streaming — decide.",
+      "a": "SSE for server→client token streams (simple, HTTP-native, auto-reconnect with Last-Event-ID, firewall-friendly); WebSockets when clients must also stream up continuously (voice, collaborative editing). Agent chat is overwhelmingly server-push: SSE by default, WebSockets only for bidirectional needs. Decide by directionality, not fashion."
+    },
+    {
+      "q": "How do you keep one user's threads from another?",
+      "a": "Owner columns from migration one, every query scoped by authenticated user/tenant server-side, negative tests proving cross-user reads refuse, JWT sessions with short expiry + refresh rotation, and audit on thread access. Obscurity (unguessable IDs) is not a layer — enforcement is per-query predicates plus tests."
+    },
+    {
+      "q": "Streaming UX on flaky networks — design it.",
+      "a": "EventSource with Last-Event-ID resume, client-side partial state preserved across drops, optimistic send states with server reconciliation, reconnect backoff with visible status, and idempotent sends (client-generated IDs deduped server-side). Drops become pauses: resume, never restart — verified by chaos tests killing mid-stream."
+    },
+    {
+      "q": "Where do entities get validated in a streaming flow?",
+      "a": "Twice: incrementally lenient during streaming (partial renders marked provisional), strictly on completion before state commit and render-finalize. Collect-then-convert bridge with schema validation at assembly; invalid finals route to repair-or-quarantine, never into UI state. Validation placement follows data finality."
+    },
+    {
+      "q": "Contract tests between web/ and api/ — what breaks them legitimately?",
+      "a": "Additive changes (optional fields) pass with tolerance; breaking changes (renames, removals, type changes) fail and force versioning + deprecation. Legitimate breaks carry migration notes and dual-serve windows. Tests enforce the distinction so evolution stays deliberate, and frontend/backend deploy independently behind versions."
+    },
+    {
+      "q": "PII in a full-stack agent product — map every touchpoint.",
+      "a": "Browser storage (minimize, justify per key, never secrets), network (TLS, redacted logs), server logs (scrubbed mappers), eval fixtures (scrubbed identically), database (encrypted at rest, owner-scoped access), caches (tenant-isolated keys), error reports (scrubbed). Each touchpoint has a rule; audit walks the list quarterly."
+    }
+  ],
+  "version": "1.0.0",
+  "contentStatus": "published"
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Auth & Tenant Isolation",
+  "slug": "03-auth-tenant-isolation",
+  "objective": "After this lesson you will be able to issue JWT sessions with rotation, enforce per-query thread ownership, isolate tenants in data and caches, and prove isolation with negative tests.",
+  "why": "User B reading user A's threads by guessing IDs is the full-stack nightmare that unit tests miss and attackers find: authorization must live in every data query, not just login. Sessions, ownership predicates, tenant-scoped caches, and negative tests (forbidden access proven refused) form the isolation system — obscurity is not a layer in it.",
+  "minutes": 15,
+  "xp": 60,
+  "blocks": [
+    { "t": "h", "text": "Sessions: short JWTs, rotating refresh" },
+    { "t": "p", "text": "Access tokens short-lived (minutes), refresh tokens rotating (single-use, theft-detecting via reuse alarms). Secrets server-side only (HttpOnly cookies or memory — never localStorage for tokens). Every authenticated request resolves a principal (user + tenant) that data queries must consume — authentication without per-query authorization is decoration." },
+    { "t": "code", "lang": "js", "code": "// Ownership predicate builder: every thread query scoped (plain JS)\nfunction ownedThreadsQuery(principal) {\n  return { where: { ownerId: principal.userId, tenantId: principal.tenantId } };\n  // No unscoped thread query exists in the codebase: grep proves it in review.\n}\n// Negative test: userB reads userA thread → 403 (asserted, not assumed).", "caption": "Ownership in every query: predicates, not obscurity" },
+    { "t": "h", "text": "Tenant isolation across layers" },
+    { "t": "p", "text": "Isolation spans **queries** (owner/tenant predicates), **caches** (tenant in every key — Production Ch.3), **logs** (tenant-tagged, PII-scrubbed), and **errors** (no cross-tenant details in messages). One unscoped layer leaks despite the rest: audits walk all four, per release." },
+    { "t": "h", "text": "Negative tests prove refusal" },
+    { "t": "p", "text": "For every read/write path, a test asserting **forbidden access refuses**: cross-user thread read → 403, cross-tenant query → empty-with-audit, expired token → 401. Positive tests prove features; negative tests prove isolation. Untested refusal is hoped refusal." },
+    { "t": "practice", "sim": "js-playground", "title": "Enforce ownership", "query": "function ownedQuery(principal) {\n  if (!principal || !principal.userId || !principal.tenantId) return { error: 'unauthenticated' };\n  return { where: { ownerId: principal.userId, tenantId: principal.tenantId } };\n}\nconst alice = { userId: 'u-a', tenantId: 't-1' };\nconsole.log(JSON.stringify(ownedQuery(alice)));\nconsole.log(JSON.stringify(ownedQuery(null)));\nconsole.log(JSON.stringify(ownedQuery({ userId: 'u-b' })));\nconsole.log('cross-read prevented: ' + (ownedQuery(alice).where.ownerId !== 'u-b'));", "note": "Run it: scoped query, then unauthenticated/missing-tenant refusals, then the cross-read proof. Ownership predicates with negative paths — isolation tested, not trusted." },
+    { "t": "keytakeaways", "items": ["Short JWTs + rotating refresh; secrets never in localStorage; principals consumed per query", "Isolation across queries/caches/logs/errors — one unscoped layer leaks despite the rest", "Negative tests (403s) prove refusal; untested isolation is hoped isolation"]} ],
+  "exercise": {
+    "prompt": "(a) Run the practice ownership checks and map all four outputs. (b) Write the negative test for cross-tenant thread list (userB/tenant2 reading tenant1 data) with expected refusal shape. (c) State the cache-key rule for thread lists with the leak it prevents.",
+    "hints": [
+      "Outputs: scoped-where / unauthenticated / unauthenticated(missing tenant) / cross-read-prevented true.",
+      "Negative test: tenant2 principal querying tenant1 thread → 403 + audit entry (refusal with evidence).",
+      "Keys: tenant + user + query-signature (personal never shares); prevents cross-tenant cached reads."
+    ],
+    "solution": "// (a) scoped / unauthenticated ×2 / prevention-proof (in order).\n// (b) cross-tenant negative test → 403 + audit (refusal evidenced).\n// (c) tenant+user+signature keys (personal never shared across tenants).",
+    "why": "Predicate construction (scoped queries), refusal proof (negative tests), and cache isolation (key rules) are the three auth judgments — each verified against attacker-shaped cases.",
+    "code": "// Isolation-audit pattern: queries, caches, logs, errors — all four layers.",
+    "lang": "js"
+  },
+  "quiz": [
+    {
+      "q": "Thread IDs are unguessable UUIDs; queries unscoped. Secure?",
+      "options": ["Yes — obscurity suffices", "No: obscurity is not access control — per-query ownership predicates + negative tests, always", "With longer IDs", "Behind login only"],
+      "answer": 1,
+      "explain": "IDs leak (logs, URLs, referrals). Enforcement lives in query predicates proven by forbidden-access tests."
+    },
+    {
+      "q": "JWT in localStorage for 'offline mode'. Verdict?",
+      "options": ["Fine", "XSS-readable secrets without HttpOnly protection: memory/HttpOnly only, PII server-side, storage audited per key", "Encrypt it client-side", "Longer expiry fixes it"],
+      "answer": 1,
+      "explain": "Browser storage threat model: XSS reads localStorage. Secrets stay out; each stored item justified on record."
+    },
+    {
+      "q": "Shared cache for thread lists across tenants. Risk + fix?",
+      "options": ["Faster shared hits", "Cross-tenant leakage: tenant+user in every personal key; public content shared with versions only", "Bigger cache", "No cache"],
+      "answer": 1,
+      "explain": "Cache keys are access-control rules: personal never shares across tenants. Isolation designed into keys, audited like permissions."
+    }
+  ],
+  "summary": "Short sessions, rotating refresh, per-query ownership, four-layer isolation, negative tests proving refusal. Trust predicates, never IDs.",
+  "next": "Identity secured — now the face: streaming React UI with resume, citations, and optimistic states. Next: the client that delights."
+}
