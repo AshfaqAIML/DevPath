@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Bookmark,
+  CheckCircle2,
   ChevronRight,
   Layers,
   ListFilter,
@@ -83,6 +84,17 @@ export function CategoryExplorer({
   }, [initialItems]);
   const hasTracks = trackCounts.size > 0;
 
+  // Completed facet — courses with published lesson content, derived from the
+  // SSR-fetched unfiltered list (lessonCount is attached server-side), so the
+  // chip shows a stable total regardless of active filters. Hidden on the
+  // Completed collection page itself (that whole page IS the completed list).
+  const completedCount = React.useMemo(
+    () => initialItems.filter((i) => (i.lessonCount ?? 0) > 0).length,
+    [initialItems]
+  );
+  const showCompletedChip = hasTracks && live.slug !== "completed" && completedCount > 0;
+  const completedActive = track === "Completed";
+
   const hydrated = useLibraryHydrated();
   const saved = useLibrary((s) => s.saved);
 
@@ -104,7 +116,16 @@ export function CategoryExplorer({
 
   const { data, isFetching } = useQuery<ItemsPayload>({
     queryKey: ["items", live.slug, debouncedQ, level, sort, track],
-    queryFn: () => fetchItems({ category: live.slug, q: debouncedQ, level, sort, track }),
+    // "Completed" is a client-side facet over lessonCount (server has no such
+    // track), so fetch unfiltered by track and filter below.
+    queryFn: () =>
+      fetchItems({
+        category: live.slug,
+        q: debouncedQ,
+        level,
+        sort,
+        track: completedActive ? "All" : track,
+      }),
     initialData:
       debouncedQ === "" && level === "All" && sort === "featured" && track === "All"
         ? { items: initialItems }
@@ -113,9 +134,10 @@ export function CategoryExplorer({
   });
 
   const items = React.useMemo(() => {
-    const all = data?.items ?? [];
+    let all = data?.items ?? [];
+    if (completedActive) all = all.filter((i) => (i.lessonCount ?? 0) > 0);
     return savedOnly ? all.filter((i) => saved.includes(i.slug)) : all;
-  }, [data, savedOnly, saved]);
+  }, [data, completedActive, savedOnly, saved]);
 
   // Deep-linked item (?item=slug) — open its dialog once after load
   const deepLinkHandled = React.useRef(false);
@@ -303,6 +325,24 @@ export function CategoryExplorer({
               All tracks
               <span className="tabular-nums opacity-60">{initialItems.length}</span>
             </button>
+            {showCompletedChip && (
+              <button
+                type="button"
+                onClick={() => setTrack(completedActive ? "All" : "Completed")}
+                aria-pressed={completedActive}
+                title="Only courses with complete lesson content"
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  completedActive
+                    ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                )}
+              >
+                <CheckCircle2 aria-hidden className="size-3" />
+                Completed
+                <span className="tabular-nums opacity-60">{completedCount}</span>
+              </button>
+            )}
             {TRACKS.filter((t) => trackCounts.has(t)).map((t) => {
               const ts = trackStyles[t];
               const active = track === t;
